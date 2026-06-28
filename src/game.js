@@ -49,9 +49,9 @@
   ];
 
   const ROOM_TYPES = [
-    { key: 'camp', name: '안전 캠프', style: 'good', copy: '조명 +18 · 낮은 보상 · 쉬움', light: 18, danger: -8, lootBias: 'common', dc: -2 },
-    { key: 'lab', name: '폐쇄 연구실', style: '', copy: '희귀 단서 확률↑ · 조명 -6 · 보통', light: -6, danger: 6, lootBias: 'rare', dc: 1 },
-    { key: 'nest', name: '회수자 둥지', style: 'danger', copy: '고가 유물 확률↑ · 추적도 +12 · 어려움', light: -10, danger: 12, lootBias: 'epic', dc: 4 },
+    { key: 'camp', name: '낮은 창고', path: '왼쪽 문', move: '왼쪽 문으로', style: 'good', copy: '금 간 문틈', light: 18, danger: -8, lootBias: 'common', dc: -2 },
+    { key: 'lab', name: '흰 불빛', path: '정면 복도', move: '정면 복도로', style: '', copy: '깜빡이는 불빛', light: -6, danger: 6, lootBias: 'rare', dc: 1 },
+    { key: 'nest', name: '붉은 틈', path: '오른쪽 균열', move: '오른쪽 균열로', style: 'danger', copy: '젖은 발자국', light: -10, danger: 12, lootBias: 'epic', dc: 4 },
   ];
 
   const ROLL_OUTCOMES = {
@@ -220,6 +220,7 @@
       chasing: false,
       currentItem: null, // 현재 층 회수 포인트에 놓인 물건 (집으면 null)
       awaitingRoom: true,
+      moving: false,
       currentRoom: null,
       lastRoll: null,
       maxFloor: 1,
@@ -397,41 +398,55 @@
     else if (total >= dc - 3) outcome = 'mixed';
 
     const result = { roll, mod, dc, total, outcome };
-    const face = ROLL_OUTCOMES[outcome];
     if (outcome === 'critical') {
       run.light = Math.min(maxLight(), run.light + 6);
       run.danger = Math.max(0, run.danger - 6);
-      log(`판정 ${roll}${mod ? signed(mod) : ''} vs ${dc}. ${face.label} — 길을 먼저 잡았다.`, face.cls);
+      result.cue = '문틈 너머가 조용하다.';
+      result.kind = 'win';
     } else if (outcome === 'success') {
-      log(`판정 ${roll}${mod ? signed(mod) : ''} vs ${dc}. ${face.label} — 조용히 들어갔다.`, face.cls);
+      result.cue = '발소리가 먹힌다.';
+      result.kind = 'win';
     } else if (outcome === 'mixed') {
       run.danger = Math.min(100, run.danger + 5);
-      log(`판정 ${roll}${mod ? signed(mod) : ''} vs ${dc}. ${face.label} — 얻지만 소리가 났다.`, face.cls);
+      result.cue = '뒤에서 금속이 긁힌다.';
+      result.kind = 'hot';
     } else {
       run.light = Math.max(0, run.light - 6);
       run.danger = Math.min(100, run.danger + 11);
       if (run.danger > 0) run.chasing = true;
-      log(`판정 ${roll}${mod ? signed(mod) : ''} vs ${dc}. ${face.label} — 회수자가 먼저 들었다.`, face.cls);
+      result.cue = '무언가 먼저 알아챘다.';
+      result.kind = 'hot';
     }
     return result;
   }
 
   function chooseRoom(key) {
-    if (!run || !run.awaitingRoom) return;
+    if (!run || !run.awaitingRoom || run.moving) return;
     const room = ROOM_TYPES.find((r) => r.key === key) || ROOM_TYPES[0];
     run.awaitingRoom = false;
+    run.moving = true;
     run.currentRoom = room;
-    run.light = Math.max(0, Math.min(maxLight(), run.light + room.light));
-    if (room.danger > 0) {
-      run.danger = Math.min(100, run.danger + room.danger);
-      if (room.key === 'nest') run.chasing = true;
-    } else if (room.danger < 0) {
-      run.danger = Math.max(0, run.danger + room.danger);
-    }
-    run.currentItem = pickRoomItem(run.floor, room);
-    run.lastRoll = resolveRoomCheck(room);
-    log(`${room.name}. ${run.currentItem.name} 발견.`, room.key === 'nest' ? 'hot' : undefined);
+    run.currentItem = null;
+    run.lastRoll = null;
+    log(`${room.move} 들어간다.`);
     render();
+
+    window.setTimeout(() => {
+      if (!run || !run.moving || !run.currentRoom || run.currentRoom.key !== room.key) return;
+      run.light = Math.max(0, Math.min(maxLight(), run.light + room.light));
+      if (room.danger > 0) {
+        run.danger = Math.min(100, run.danger + room.danger);
+        if (room.key === 'nest') run.chasing = true;
+      } else if (room.danger < 0) {
+        run.danger = Math.max(0, run.danger + room.danger);
+      }
+      run.currentItem = pickRoomItem(run.floor, room);
+      run.lastRoll = resolveRoomCheck(room);
+      run.moving = false;
+      log(run.lastRoll.cue, run.lastRoll.kind);
+      log(`${run.currentItem.name}.`, room.key === 'nest' ? 'hot' : undefined);
+      render();
+    }, 320);
   }
 
   function grab() {
@@ -461,6 +476,7 @@
     if (run.floor > run.maxFloor) run.maxFloor = run.floor;
     run.currentItem = null;
     run.awaitingRoom = true;
+    run.moving = false;
     run.currentRoom = null;
     run.lastRoll = null;
     const f = FLOORS[run.floor - 1];
@@ -574,11 +590,11 @@
   }
 
   function riskState() {
-    if (!run || !run.chasing) return { key: 'safe', label: '대기', copy: '회수물을 집는 순간 추격이 시작된다.' };
-    if (run.danger >= 85) return { key: 'critical', label: '코앞', copy: '지금 탈출하거나 미끼를 던져야 한다.' };
-    if (run.danger >= 65) return { key: 'danger', label: '위험', copy: '다음 행동 하나가 런을 끝낼 수 있다.' };
-    if (run.danger >= 35) return { key: 'warn', label: '주의', copy: '아직 거리는 있지만 욕심내면 따라잡힌다.' };
-    return { key: 'safe', label: '여유', copy: '한 번 더 챙길지, 안전하게 나갈지 고르자.' };
+    if (!run || !run.chasing) return { key: 'safe', label: '정적', copy: '' };
+    if (run.danger >= 85) return { key: 'critical', label: '코앞', copy: '' };
+    if (run.danger >= 65) return { key: 'danger', label: '가까움', copy: '' };
+    if (run.danger >= 35) return { key: 'warn', label: '소리', copy: '' };
+    return { key: 'safe', label: '멀다', copy: '' };
   }
 
   /* ---------------- 렌더링 ---------------- */
@@ -618,6 +634,7 @@
       el['risk-panel'].className = `risk-panel ${risk.key}`;
       el['risk-chip'].textContent = risk.label;
       el['risk-copy'].textContent = risk.copy;
+      el['risk-panel'].classList.toggle('minimal', true);
     }
 
     // 가방 슬롯
@@ -626,25 +643,31 @@
     renderRollPanel();
 
     // 회수 포인트 / 추격 연출
+    if (el['stage']) {
+      el['stage'].classList.toggle('moving', !!run.moving);
+      el['stage'].classList.toggle('has-loot', !!run.currentItem);
+      el['stage'].classList.toggle('choosing', !!run.awaitingRoom);
+    }
     renderStage();
     renderDepthRail();
 
     // 액션 버튼 활성화
-    if (el['actions']) el['actions'].classList.toggle('hidden', run.awaitingRoom);
+    if (el['actions']) el['actions'].classList.toggle('hidden', run.awaitingRoom || run.moving);
     el['btn-grab'].disabled = !(run.currentItem && roomFor(run.currentItem));
     el['btn-grab'].textContent = run.awaitingRoom
-      ? '방을 먼저 고르자'
+      ? '먼저 길 선택'
       : run.currentItem
-        ? (roomFor(run.currentItem) ? `챙기기 · 위험 +${GRAB_DANGER_BUMP}` : '가방이 꽉 찼다')
+        ? (roomFor(run.currentItem) ? '줍기' : '가방 가득')
         : '남은 게 없다';
     el['btn-deeper'].disabled = run.awaitingRoom || run.floor >= FLOORS.length;
     el['btn-deeper'].textContent = run.floor >= FLOORS.length
-      ? '최심부다'
-      : `더 깊이 · 조명 -${DESCEND_LIGHT_COST}${run.chasing ? ` / 위험 +${DESCEND_DANGER_BUMP}` : ''}`;
+      ? '끝'
+      : '앞으로';
     el['btn-drop'].disabled   = !(run.chasing && run.bag.length > 0);
-    el['btn-drop'].textContent = run.bag.length > 0 ? '미끼 던지기 · 위험↓' : '버릴 짐 없음';
+    el['btn-drop'].textContent = run.bag.length > 0 ? '던지기' : '비어있음';
+    el['btn-drop'].classList.toggle('hidden-action', !(run.chasing && run.bag.length > 0));
     el['btn-return'].disabled = false;
-    el['btn-return'].textContent = run.bag.length > 0 ? `탈출 · ${bagValue()}RP 판매` : '그냥 나가기';
+    el['btn-return'].textContent = run.bag.length > 0 ? '나가기' : '돌아가기';
   }
 
   function renderBag() {
@@ -679,7 +702,7 @@
     }
     el['room-choices'].innerHTML = ROOM_TYPES.map((room) =>
       `<button class="btn room-btn ${room.style}" data-room="${room.key}">` +
-      `<b>${room.name}</b><span>${room.copy}</span></button>`
+      `<b>${room.path}</b><span>${room.copy}</span></button>`
     ).join('');
     el['room-choices'].querySelectorAll('[data-room]').forEach((btn) => {
       btn.addEventListener('click', () => chooseRoom(btn.dataset.room));
@@ -687,14 +710,8 @@
   }
 
   function renderRollPanel() {
-    if (!el['roll-panel'] || !el['roll-face'] || !el['roll-copy']) return;
-    const roll = run.lastRoll;
-    el['roll-panel'].classList.toggle('hidden', !roll || run.awaitingRoom);
-    if (!roll || run.awaitingRoom) return;
-    const face = ROLL_OUTCOMES[roll.outcome];
-    el['roll-panel'].className = `roll-panel ${roll.outcome}`;
-    el['roll-face'].textContent = `d20 ${roll.roll}`;
-    el['roll-copy'].textContent = `${face.label} · 보정 ${signed(roll.mod)} · 난이도 ${roll.dc}`;
+    if (!el['roll-panel']) return;
+    el['roll-panel'].classList.add('hidden');
   }
 
   function renderReturnScreen() {
@@ -724,15 +741,19 @@
 
   function renderStage() {
     const rpEl = el['recovery-point'];
-    if (run.awaitingRoom) {
+    if (run.moving) {
       rpEl.classList.add('empty');
       rpEl.style.borderColor = '';
-      rpEl.innerHTML = '<span class="rp-name">방을 고르자</span>';
+      rpEl.innerHTML = '<span class="rp-name">앞으로 간다</span>';
+    } else if (run.awaitingRoom) {
+      rpEl.classList.add('empty');
+      rpEl.style.borderColor = '';
+      rpEl.innerHTML = '<span class="rp-name">갈림길</span>';
     } else if (run.currentItem) {
       const it = run.currentItem;
       rpEl.classList.remove('empty');
       rpEl.style.borderColor = TIER_COLOR[it.tier];
-      rpEl.innerHTML = `${itemIcon(it.icon)}<span class="rp-name">${it.name}<br>${it.slots}칸 · ${it.value} RP</span>`;
+      rpEl.innerHTML = `${itemIcon(it.icon)}<span class="rp-name">${it.name}</span>`;
     } else {
       rpEl.classList.add('empty');
       rpEl.style.borderColor = '';

@@ -11,14 +11,14 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/pixel/player-delver.png" />
   <title>도심 싱크홀: 들고 나와라</title>
-  <link rel="stylesheet" href="styles.css?v=9" />
+  <link rel="stylesheet" href="styles.css?v=10" />
 </head>
 <body>
   <div id="app" class="phone">
 
     <!-- ===================== 시작 화면 ===================== -->
     <section id="screen-start" class="screen active">
-      <div class="app-chip">APP PROTOTYPE · ONE-HAND PLAY</div>
+      <div class="app-chip">1F</div>
       <div class="start-art pixel-splash" aria-hidden="true">
         <img src="assets/pixel/title-splash.png" alt="" class="title-splash-img" />
         <div class="skyline"></div>
@@ -35,8 +35,8 @@
       </div>
 
       <h1 class="title">도심 싱크홀</h1>
-      <p class="tagline">챙기고 · 도망치고 · 팔고 · 더 깊이</p>
-      <p class="premise">집는 순간, 던전이 되찾으러 온다.</p>
+      <p class="tagline">아래에서 소리가 난다</p>
+      <p class="premise">가방을 열었다. 조명은 켜졌다.</p>
 
       <div class="pixel-preview" aria-label="싱크홀 탐사 장비 미리보기">
         <img src="assets/pixel/player-delver.png" alt="탐사자 도트 캐릭터" />
@@ -44,7 +44,7 @@
         <img src="assets/pixel/loot-icons-strip.png" alt="아이템 도트 아이콘" />
       </div>
 
-      <button id="btn-enter" class="btn btn-primary btn-enter">내려가기</button>
+      <button id="btn-enter" class="btn btn-primary btn-enter">들어가기</button>
 
       <div class="meta-line">
         누적 RP <b id="start-rp">0</b> · 최고 깊이 <b id="start-depth">1</b>층
@@ -59,8 +59,8 @@
     <!-- ===================== 던전 화면 ===================== -->
     <section id="screen-dungeon" class="screen">
       <div class="app-topline">
-        <span class="phase-chip">DIVE MODE</span>
-        <span class="gesture-hint">엄지로 선택</span>
+        <span class="phase-chip">1F</span>
+        <span class="gesture-hint"></span>
       </div>
       <header class="hud">
         <div class="hud-cell"><span class="hud-k">RP</span><span id="hud-rp" class="hud-v">0</span></div>
@@ -86,7 +86,7 @@
 
       <div id="risk-panel" class="risk-panel safe">
         <span id="risk-chip" class="risk-chip">대기</span>
-        <span id="risk-copy" class="risk-copy">회수물을 집는 순간 추격이 시작된다.</span>
+        <span id="risk-copy" class="risk-copy"></span>
       </div>
 
       <div id="roll-panel" class="roll-panel hidden" aria-live="polite">
@@ -95,7 +95,7 @@
       </div>
 
       <div id="room-panel" class="room-panel" aria-label="방 선택">
-        <div class="room-title">어느 쪽으로 갈까? · d20 판정</div>
+        <div class="room-title">어디로 갈까?</div>
         <div id="room-choices" class="room-choices"></div>
       </div>
 
@@ -104,6 +104,15 @@
       </div>
 
       <div class="stage" id="stage">
+        <div class="fp-view" aria-hidden="true">
+          <div class="fp-ceiling"></div>
+          <div class="fp-floor"></div>
+          <div class="fp-left-wall"></div>
+          <div class="fp-right-wall"></div>
+          <div class="fp-door fp-left"></div>
+          <div class="fp-door fp-center"></div>
+          <div class="fp-door fp-right"></div>
+        </div>
         <div class="stage-floor"></div>
         <div id="recovery-point" class="recovery-point">
           <span class="rp-name">회수물</span>
@@ -188,6 +197,6 @@
 
   </div>
 
-  <script src="src/game.js?v=9"></script>
+  <script src="src/game.js?v=10"></script>
 </body>
 </html>

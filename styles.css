@@ -832,12 +832,10 @@ html, body { touch-action: manipulation; }
   padding: 10px;
 }
 .actions.hidden { display: none; }
-#screen-dungeon .btn-act {
-  min-height: 50px;
-  padding: 10px 8px;
-  border-radius: 16px;
-  font-size: 14px;
-}
+#screen-dungeon .btn-act { min-height: 50px; padding: 10px 8px; border-radius: 16px; font-size: 14px; }
+#screen-dungeon .btn-act.hidden-action { display: none; }
+#screen-dungeon .stage { min-height: 152px; }
+#screen-dungeon .log { min-height: 28px; max-height: 36px; }
 #btn-grab,
 #btn-return { font-size: 15px; }
 
@@ -855,4 +853,94 @@ html, body { touch-action: manipulation; }
   .room-btn b { font-size: 12px; }
   .room-btn span { font-size: 10px; }
   #screen-dungeon .btn-act { min-height: 46px; font-size: 13px; }
+}
+
+/* ===================== First-person dungeon pass ===================== */
+.risk-panel.minimal {
+  position: absolute;
+  top: 92px;
+  right: 14px;
+  z-index: 3;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(5,7,12,.52);
+  backdrop-filter: blur(8px);
+}
+.risk-panel.minimal .risk-copy { display: none; }
+#screen-dungeon .room-title { color: #cbd3e4; font-size: 12px; }
+#screen-dungeon .room-btn {
+  min-height: 52px;
+  padding: 10px 12px;
+  text-align: center;
+}
+#screen-dungeon .room-btn b { font-size: 15px; letter-spacing: .2px; }
+#screen-dungeon .room-btn span { opacity: .72; }
+#screen-dungeon .stage { min-height: 150px; }
+#screen-dungeon .log { min-height: 26px; max-height: 34px; }
+
+.fp-view {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 50% 44%, rgba(87,224,200,.16), transparent 18%),
+    linear-gradient(180deg, #121827 0%, #080b12 62%, #05070c 100%);
+  z-index: 0;
+}
+.fp-view::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 32%, rgba(0,0,0,.64) 100%);
+  pointer-events: none;
+}
+.fp-ceiling, .fp-floor, .fp-left-wall, .fp-right-wall, .fp-door { position: absolute; }
+.fp-ceiling {
+  left: 16%; right: 16%; top: 0; height: 42%;
+  clip-path: polygon(0 0, 100% 0, 64% 100%, 36% 100%);
+  background: linear-gradient(180deg, rgba(44,54,77,.75), rgba(9,13,22,.15));
+}
+.fp-floor {
+  left: 8%; right: 8%; bottom: 0; height: 54%;
+  clip-path: polygon(36% 0, 64% 0, 100% 100%, 0 100%);
+  background: repeating-linear-gradient(90deg, rgba(87,224,200,.08) 0 2px, transparent 2px 34px), linear-gradient(180deg, rgba(30,37,54,.42), rgba(0,0,0,.84));
+}
+.fp-left-wall {
+  left: 0; top: 0; bottom: 0; width: 42%;
+  clip-path: polygon(0 0, 100% 42%, 100% 60%, 0 100%);
+  background: linear-gradient(90deg, rgba(6,8,14,.95), rgba(30,39,58,.36));
+}
+.fp-right-wall {
+  right: 0; top: 0; bottom: 0; width: 42%;
+  clip-path: polygon(0 42%, 100% 0, 100% 100%, 0 60%);
+  background: linear-gradient(270deg, rgba(6,8,14,.95), rgba(30,39,58,.36));
+}
+.fp-door {
+  bottom: 20%;
+  width: 30px; height: 52px;
+  border: 1px solid rgba(87,224,200,.28);
+  background: linear-gradient(180deg, rgba(87,224,200,.16), rgba(0,0,0,.62));
+  box-shadow: 0 0 18px rgba(87,224,200,.16);
+}
+.fp-left { left: 14%; transform: skewY(9deg); }
+.fp-center { left: 50%; transform: translateX(-50%); width: 42px; height: 70px; bottom: 18%; }
+.fp-right { right: 14%; transform: skewY(-9deg); }
+.stage.moving .fp-view { animation: pushForward .32s ease both; }
+.stage.moving .recovery-point { opacity: .72; transform: translate(-50%, -50%) scale(.92); }
+.stage.has-loot .fp-center { box-shadow: 0 0 28px rgba(255,209,102,.28); border-color: rgba(255,209,102,.48); }
+.stage-floor { opacity: .28; }
+#player { display: none; }
+#screen-start .contract-card,
+#screen-start .goal-hint,
+#screen-start .codex-line,
+#screen-start .pixel-preview { display: none; }
+.buyer-sub { display: none; }
+.recovery-point { z-index: 2; }
+.actor { z-index: 2; }
+@keyframes pushForward {
+  0% { filter: blur(0); transform: scale(1); }
+  60% { filter: blur(1px); transform: scale(1.08); }
+  100% { filter: blur(0); transform: scale(1.02); }
 }
