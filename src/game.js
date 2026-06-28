@@ -407,7 +407,7 @@
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
     'room-choices', 'dock', 'dock-actions',
-    'bag-slots', 'choice-cue', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log',
+    'bag-slots', 'choice-cue', 'mini-map', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log',
     'btn-grab', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
@@ -851,6 +851,7 @@
     }
     renderStage();
     renderDepthRail();
+    renderMiniMap();
 
     // 액션 버튼: 줍기(스테이지 위), 버리고 도망, 나가기.
     if (el['dock']) el['dock'].classList.toggle('hidden', !!run.moving);
@@ -891,20 +892,41 @@
     });
   }
 
-  function choiceDirectionMeta(target, index, total, isStairs) {
-    if (isStairs) return { cls: 'dir-forward dir-stairs', glyph: '↓', hint: '아래' };
-    if (!target) return { cls: 'dir-forward', glyph: '↑', hint: '앞' };
-    if (target.kind === 'entry') return { cls: 'dir-back', glyph: '↩', hint: '뒤' };
-    if (target.kind === 'door') return { cls: 'dir-left', glyph: '←', hint: '왼쪽' };
-    if (target.kind === 'crack') return { cls: 'dir-right', glyph: '→', hint: '오른쪽' };
-    if (target.kind === 'corridor' || target.kind === 'hall') return { cls: 'dir-forward', glyph: '↑', hint: '앞' };
-    if (target.kind === 'vent') return { cls: 'dir-low', glyph: '↙', hint: '낮게' };
-    const fallback = total <= 2 ? (index === 0 ? ['dir-left', '←', '왼쪽'] : ['dir-right', '→', '오른쪽'])
-      : index === 0 ? ['dir-left', '←', '왼쪽'] : index === total - 1 ? ['dir-right', '→', '오른쪽'] : ['dir-forward', '↑', '앞'];
-    return { cls: fallback[0], glyph: fallback[1], hint: fallback[2] };
+  const DIR_SLOTS = [
+    { key: 'nw', cls: 'dir-nw', glyph: '↖', label: '왼쪽 앞' },
+    { key: 'n',  cls: 'dir-n',  glyph: '↑',  label: '앞' },
+    { key: 'ne', cls: 'dir-ne', glyph: '↗', label: '오른쪽 앞' },
+    { key: 'w',  cls: 'dir-w',  glyph: '←',  label: '왼쪽' },
+    { key: 'e',  cls: 'dir-e',  glyph: '→',  label: '오른쪽' },
+    { key: 'sw', cls: 'dir-sw', glyph: '↙', label: '왼쪽 뒤' },
+    { key: 's',  cls: 'dir-s',  glyph: '↓',  label: '뒤' },
+    { key: 'se', cls: 'dir-se', glyph: '↘', label: '오른쪽 뒤' },
+  ];
+
+  function directionForExit(target, index, total, used) {
+    const preferred = [];
+    if (target.kind === 'stairs') preferred.push('s');
+    else if (target.kind === 'entry') preferred.push('s');
+    else if (target.kind === 'door') preferred.push('w', 'nw');
+    else if (target.kind === 'crack') preferred.push('e', 'ne');
+    else if (target.kind === 'vent') preferred.push('sw', 'w');
+    else if (target.kind === 'corridor' || target.kind === 'hall') preferred.push('n', 'ne', 'nw');
+    const fallback = total <= 2 ? ['w', 'e', 'n', 's', 'nw', 'ne', 'sw', 'se'] : ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
+    for (const key of preferred.concat(fallback.slice(index), fallback)) {
+      if (!used.has(key)) { used.add(key); return DIR_SLOTS.find((d) => d.key === key); }
+    }
+    return DIR_SLOTS[index % DIR_SLOTS.length];
   }
 
-  // 현재 노드의 출구(+상황 선택지)를 동적으로 그린다. 항상 3개 고정이 아니다.
+  function situationCopy(node, cues) {
+    const here = node.kind === 'entry' ? '입구.' : (node.desc ? `${node.desc}.` : '어둠 속 공간.');
+    const item = run.currentItem ? ` 발견: ${run.currentItem.name}.` : '';
+    const event = run.holdEvent ? (run.holdEvent.type === 'ambush' ? ' 옆에서 무언가 멈췄다.' : ' 앞에서 발소리가 스친다.') : '';
+    const exits = cues.length ? ` 이동 가능: ${cues.join('  ')}` : ' 갈 곳을 찾는다.';
+    return `${here}${item}${event}${exits}`;
+  }
+
+  // 현재 노드의 출구(+상황 선택지)를 8방향 패드로 그린다. 장소명은 도착 후 상황 텍스트로만 알려준다.
   function renderChoices() {
     const dock = el['room-choices'];
     if (!dock) return;
@@ -914,37 +936,30 @@
       return;
     }
     const node = currentNode();
-    const out = [];
+    const exitsByDir = new Map();
     const cues = [];
+    const usedDirs = new Set();
+    let waitButton = '';
 
-    // 상황 선택지 '기다리기' — 몬스터 대기 이벤트가 있을 때만.
     if (run.holdEvent) {
       const waitDesc = run.holdEvent.type === 'ambush' ? '숨을 죽이고 보낸다' : '지나갈 때까지 멈춘다';
+      waitButton = `<button class="btn room-btn good dir-wait" data-act="wait"><i class="dir-glyph">•</i><span class="choice-text"><b>멈춤</b></span></button>`;
       cues.push(`• ${waitDesc}`);
-      out.push(`<button class="btn room-btn good dir-wait" data-act="wait"><i class="dir-glyph">•</i><span class="choice-text"><b>기다리기</b></span></button>`);
     }
 
-    // 인접 노드들 = 갈림길.
     node.exits.forEach((nid, index) => {
       const t = nodeById(nid);
       const stairs = t.kind === 'stairs';
-      let label = stairs ? '계단 아래로' : t.label;
-      let desc = stairs ? '더 깊은 층' : t.desc;
-      let style = stairs ? '' : t.style;
-      const dir = choiceDirectionMeta(t, index, node.exits.length, stairs);
-      if (node.dangerExit === nid) { style = 'danger'; desc = '젖은 쇳소리'; }
-      else if (!stairs && t.exits.length === 1) { desc = (desc ? desc + ' · ' : '') + '막다른 곳'; }
-      if (desc) cues.push(`${dir.glyph} ${desc}`);
-      out.push(`<button class="btn room-btn ${style} ${dir.cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${dir.hint} ${label}"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${label}</b></span></button>`);
+      const dir = directionForExit(t, index, node.exits.length, usedDirs);
+      cues.push(`${dir.glyph} ${dir.label}`);
+      exitsByDir.set(dir.key, `<button class="btn room-btn ${dir.cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${dir.label} 방향"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${dir.label}</b></span></button>`);
     });
 
+    const out = DIR_SLOTS.map((dir) => exitsByDir.get(dir.key) || `<div class="room-pad-empty ${dir.cls}" aria-hidden="true"><i class="dir-glyph">${dir.glyph}</i></div>`);
+    out.splice(4, 0, waitButton || '<div class="room-pad-center" aria-hidden="true"></div>');
     dock.innerHTML = out.join('');
-    dock.classList.toggle('multi', out.length >= 3);
     dock.classList.toggle('spatial', true);
-    if (el['choice-cue']) {
-      const nodeName = node.kind === 'entry' ? '입구' : node.label;
-      el['choice-cue'].textContent = cues.length ? `${nodeName} · ${cues.slice(0, 4).join('  ')}` : `${nodeName} · 어디로 갈까.`;
-    }
+    if (el['choice-cue']) el['choice-cue'].textContent = situationCopy(node, cues);
     dock.querySelectorAll('[data-act]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const act = btn.dataset.act;
@@ -952,6 +967,38 @@
         else chooseExit(parseInt(btn.dataset.to, 10));
       });
     });
+  }
+
+  function renderMiniMap() {
+    const svg = el['mini-map'];
+    if (!svg || !run || !run.floorMap) return;
+    const nodes = run.floorMap.nodes;
+    const dist = bfs(nodes, run.floorMap.entryId || 0).map((d) => (d === Infinity ? 0 : d));
+    const lanes = [-28, 0, 28];
+    const coords = nodes.map((n, idx) => {
+      const d = dist[idx] || 0;
+      return { x: 18 + Math.min(3, d) * 28, y: 45 + lanes[idx % lanes.length] };
+    });
+    const seen = (id) => nodes[id] && nodes[id].entered;
+    const edgeSet = new Set();
+    let html = '';
+    nodes.forEach((n) => {
+      n.exits.forEach((to) => {
+        const key = [n.id, to].sort((a, b) => a - b).join('-');
+        if (edgeSet.has(key)) return;
+        edgeSet.add(key);
+        if (!seen(n.id) && !seen(to)) return;
+        const a = coords[n.id], b = coords[to];
+        html += `<line class="${seen(n.id) && seen(to) ? 'seen' : 'hint'}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
+      });
+    });
+    nodes.forEach((n) => {
+      if (!seen(n.id) && n.id !== run.currentNodeId) return;
+      const p = coords[n.id];
+      const cls = n.id === run.currentNodeId ? 'current' : 'seen';
+      html += `<circle class="${cls}" cx="${p.x}" cy="${p.y}" r="${cls === 'current' ? 4.4 : 3}"/>`;
+    });
+    svg.innerHTML = html;
   }
 
   function renderReturnScreen() {
