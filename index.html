@@ -12,7 +12,8 @@
 
     <!-- ===================== 시작 화면 ===================== -->
     <section id="screen-start" class="screen active">
-      <div class="start-art" aria-hidden="true">
+      <div class="start-art pixel-splash" aria-hidden="true">
+        <img src="assets/pixel/title-splash.png" alt="" class="title-splash-img" />
         <div class="skyline"></div>
         <div class="sinkhole">
           <div class="ring r1"></div>
@@ -29,6 +30,12 @@
       <h1 class="title">도심 싱크홀</h1>
       <p class="tagline">챙기고 · 도망치고 · 팔고 · 더 깊이</p>
       <p class="premise">집는 순간, 던전이 되찾으러 온다.</p>
+
+      <div class="pixel-preview" aria-label="싱크홀 탐사 장비 미리보기">
+        <img src="assets/pixel/player-delver.png" alt="탐사자 도트 캐릭터" />
+        <img src="assets/pixel/sinkhole-chaser.png" alt="회수자 몬스터 도트 캐릭터" />
+        <img src="assets/pixel/loot-icons-strip.png" alt="아이템 도트 아이콘" />
+      </div>
 
       <button id="btn-enter" class="btn btn-primary btn-enter">내려가기</button>
 
@@ -70,8 +77,8 @@
         <div id="recovery-point" class="recovery-point">
           <span class="rp-name">회수물</span>
         </div>
-        <div id="player" class="actor player" title="탐사자">🧍</div>
-        <div id="chaser" class="actor chaser" title="회수자">👁️</div>
+        <div id="player" class="actor player actor-sprite" title="탐사자" aria-label="탐사자"></div>
+        <div id="chaser" class="actor chaser actor-sprite" title="회수자" aria-label="회수자"></div>
       </div>
 
       <div id="log" class="log">
@@ -118,6 +125,6 @@
 
   </div>
 
-  <script src="src/game.js?v=2"></script>
+  <script src="src/game.js?v=3"></script>
 </body>
 </html>

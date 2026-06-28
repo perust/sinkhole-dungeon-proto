@@ -24,20 +24,24 @@
   // 회수물 6종 — 층이 깊을수록 무겁고(칸) 비싸다(RP).
   const ITEM_TABLE = {
     1: [
-      { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common' },
-      { name: '배관 부품',     slots: 1, value: 5,  tier: 'common' },
+      { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0 },
+      { name: '배관 부품',     slots: 1, value: 5,  tier: 'common', icon: 1 },
     ],
     2: [
-      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare' },
-      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare' },
+      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2 },
+      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3 },
     ],
     3: [
-      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic' },
-      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic' },
+      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4 },
+      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5 },
     ],
   };
 
   const TIER_COLOR = { common: '#7fb0ff', rare: '#b98bff', epic: '#ffd166' };
+
+  function itemIcon(index) {
+    return `<span class="loot-icon" style="--icon-index:${index}" aria-hidden="true"></span>`;
+  }
 
   // 행동 비용
   const GRAB_LIGHT_COST    = 6;   // 회수물 집기: 공명으로 조명 소모
@@ -300,7 +304,7 @@
     // 각 물건이 차지하는 칸을 색으로 채운다.
     run.bag.forEach((item) => {
       for (let s = 0; s < item.slots; s++) {
-        cells.push({ color: TIER_COLOR[item.tier], label: s === 0 ? item.name : '' });
+        cells.push({ color: TIER_COLOR[item.tier], icon: item.icon, label: s === 0 ? item.name : '' });
       }
     });
     while (cells.length < cap) cells.push(null);
@@ -310,8 +314,8 @@
       const d = document.createElement('div');
       d.className = 'slot' + (c ? ' filled' : '');
       if (c) {
-        d.style.background = c.color;
-        d.textContent = c.label;
+      d.style.setProperty('--tier-color', c.color);
+      d.innerHTML = itemIcon(c.icon) + (c.label ? `<span class="slot-label">${c.label}</span>` : '');
       }
       el['bag-slots'].appendChild(d);
     });
@@ -323,7 +327,7 @@
       const it = run.currentItem;
       rpEl.classList.remove('empty');
       rpEl.style.borderColor = TIER_COLOR[it.tier];
-      rpEl.innerHTML = `<span class="rp-name">✦ ${it.name}<br>${it.slots}칸 · ${it.value} RP</span>`;
+      rpEl.innerHTML = `${itemIcon(it.icon)}<span class="rp-name">${it.name}<br>${it.slots}칸 · ${it.value} RP</span>`;
     } else {
       rpEl.classList.add('empty');
       rpEl.style.borderColor = '';
@@ -354,7 +358,7 @@
         run.lastSale.forEach((it) => {
           const row = document.createElement('div');
           row.className = 'sale-item';
-          row.innerHTML = `<span>${it.name}</span><span class="v">+${it.value}</span>`;
+          row.innerHTML = `<span class="sale-name">${itemIcon(it.icon)}${it.name}</span><span class="v">+${it.value}</span>`;
           list.appendChild(row);
         });
       }
@@ -375,8 +379,9 @@
       const affordable = meta.rp >= cost && !run.bought;
       btn.disabled = !affordable;
       btn.classList.toggle('bought', run.bought);
+      const upgradeIcon = type === 'bag' ? 7 : type === 'light' ? 8 : 9;
       btn.innerHTML =
-        `<span class="up-title">${title}</span>` +
+        `<span class="up-title">${itemIcon(upgradeIcon)}${title}</span>` +
         `<span class="up-sub">${sub} · 현재 Lv.${meta[lvKey]}</span>` +
         `<span class="up-cost">${run.bought ? '오늘은 여기까지' : cost + ' RP'}</span>`;
     });
