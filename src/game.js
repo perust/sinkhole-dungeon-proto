@@ -24,20 +24,22 @@
   // 회수물 6종 — 층이 깊을수록 무겁고(칸) 비싸다(RP).
   const ITEM_TABLE = {
     1: [
-      { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0 },
-      { name: '배관 부품',     slots: 1, value: 5,  tier: 'common', icon: 1 },
+      { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0, truth: '배터리에는 위원회 마크가 지워진 흔적이 있다.' },
+      { name: '배관 부품',     slots: 1, value: 5,  tier: 'common', icon: 1, truth: '도시 배관은 사고 전부터 아래로 이어져 있었다.' },
     ],
     2: [
-      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2 },
-      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3 },
+      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, truth: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
+      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, truth: '연구 노트에는 ‘회수자’가 방범 시스템이라고 적혀 있다.' },
     ],
     3: [
-      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4 },
-      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5 },
+      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4, truth: '코어는 싱크홀을 막는 장치가 아니라 더 깊게 여는 열쇠다.' },
+      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5, truth: '봉인 유물의 문양은 지상 허가증의 직인과 같다.' },
     ],
   };
 
   const TIER_COLOR = { common: '#7fb0ff', rare: '#b98bff', epic: '#ffd166' };
+  const TIER_HEAT = { common: 4, rare: 8, epic: 14 };
+  const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().length;
 
   function itemIcon(index) {
     return `<span class="loot-icon" style="--icon-index:${index}" aria-hidden="true"></span>`;
@@ -69,6 +71,8 @@
     weaponLevel: 1,
     maxDepth: 1,
     totalEarned: 0,
+    suspicion: 0,
+    truths: [],
   };
 
   let run = null;
@@ -92,6 +96,8 @@
       currentItem: null, // 현재 층 회수 포인트에 놓인 물건 (집으면 null)
       bought: false,     // 이번 귀환에서 강화를 샀는가
       lastSale: [],      // 판매 화면용 스냅샷
+      lastBuyer: null,
+      lastTruth: null,
     };
   }
 
@@ -104,16 +110,17 @@
 
   const el = {};
   const IDS = [
-    'screen-start', 'screen-dungeon', 'screen-upgrade', 'screen-fail',
-    'btn-enter', 'start-rp', 'start-depth',
+    'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail',
+    'btn-enter', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex',
     'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'danger-val', 'danger-fill',
     'bag-slots', 'recovery-point', 'chaser', 'log',
     'btn-grab', 'btn-deeper', 'btn-drop', 'btn-return',
-    'sale-list', 'sale-gain', 'sale-balance',
+    'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp',
+    'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news',
     'up-bag', 'up-light', 'up-weapon', 'btn-again',
-    'fail-detail', 'btn-retry',
+    'fail-detail', 'fail-susp', 'btn-retry',
   ];
   function cacheDom() { IDS.forEach((id) => { el[id] = document.getElementById(id); }); }
 
@@ -214,13 +221,50 @@
 
   function returnToSurface() {
     stopTick();
-    const gained = bagValue();
     run.lastSale = run.bag.slice();
-    meta.rp += gained;
-    meta.totalEarned += gained;
     run.chasing = false;
     run.bought = false;
-    renderUpgradeScreen(gained);
+    if (run.lastSale.length === 0) {
+      run.lastBuyer = 'committee';
+      run.lastTruth = null;
+      renderUpgradeScreen(0);
+      show('screen-upgrade');
+      return;
+    }
+    renderReturnScreen();
+    show('screen-return');
+  }
+
+  function saleQuote(buyer) {
+    const raw = bagValue();
+    if (buyer === 'committee') {
+      return { gained: Math.ceil(raw * 0.72), suspDelta: -Math.min(10, 2 + run.bag.length * 2) };
+    }
+    const heat = run.bag.reduce((sum, it) => sum + TIER_HEAT[it.tier], 0);
+    return { gained: Math.ceil(raw * 1.35), suspDelta: heat };
+  }
+
+  function chooseBuyer(buyer) {
+    const quote = saleQuote(buyer);
+    const previousTruthCount = meta.truths.length;
+    meta.rp += quote.gained;
+    meta.totalEarned += quote.gained;
+    meta.suspicion = Math.max(0, Math.min(99, meta.suspicion + quote.suspDelta));
+    run.lastBuyer = buyer;
+    run.lastTruth = null;
+
+    if (buyer === 'black') {
+      const unknown = run.lastSale.find((it) => !meta.truths.includes(it.name));
+      if (unknown) {
+        meta.truths.push(unknown.name);
+        run.lastTruth = unknown.truth;
+      }
+    }
+
+    if (previousTruthCount !== meta.truths.length) {
+      log('암시장 정보상이 진실 조각 하나를 넘겼다.', 'win');
+    }
+    renderUpgradeScreen(quote.gained);
     show('screen-upgrade');
   }
 
@@ -230,10 +274,12 @@
     const consolation = lost > 0 ? Math.max(1, Math.round(lost * FAIL_CONSOLATION)) : 0;
     meta.rp += consolation;
     meta.totalEarned += consolation;
+    meta.suspicion = Math.max(0, meta.suspicion - 3);
     el['fail-detail'].textContent =
       lost > 0
         ? `${lost} RP어치를 되찾겼다. 남은 조각 +${consolation} RP`
         : '빈손이라 잃을 것도 없었다.';
+    el['fail-susp'].textContent = meta.suspicion;
     run.chasing = false;
     render();
     show('screen-fail');
@@ -265,6 +311,9 @@
     el['hud-bag'].textContent = `${usedSlots()}/${bagCap()}`;
     el['start-rp'].textContent = meta.rp;
     el['start-depth'].textContent = meta.maxDepth;
+    el['start-susp'].textContent = meta.suspicion;
+    el['start-truth-count'].textContent = meta.truths.length;
+    el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
 
     // 층 배너
     el['floor-num'].textContent = f.n;
@@ -321,6 +370,30 @@
     });
   }
 
+  function renderReturnScreen() {
+    const list = el['return-list'];
+    list.innerHTML = '';
+    if (run.lastSale.length === 0) {
+      list.innerHTML = '<div class="sale-empty">팔 건 없다. 빈손은 조용하다.</div>';
+    } else {
+      run.lastSale.forEach((it) => {
+        const row = document.createElement('div');
+        row.className = 'sale-item';
+        row.innerHTML = `<span class="sale-name">${itemIcon(it.icon)}${it.name}</span><span class="v">${it.value} RP</span>`;
+        list.appendChild(row);
+      });
+    }
+    const committee = saleQuote('committee');
+    const black = saleQuote('black');
+    el['return-susp'].textContent = meta.suspicion;
+    el['committee-rp'].textContent = '+' + committee.gained;
+    el['committee-susp'].textContent = committee.suspDelta;
+    el['black-rp'].textContent = '+' + black.gained;
+    el['black-susp'].textContent = '+' + black.suspDelta;
+    el['buy-committee'].disabled = run.lastSale.length === 0;
+    el['buy-black'].disabled = run.lastSale.length === 0;
+  }
+
   function renderStage() {
     const rpEl = el['recovery-point'];
     if (run.currentItem) {
@@ -350,6 +423,7 @@
   function renderUpgradeScreen(gained) {
     // 판매 내역
     if (gained !== null) {
+      el['sale-buyer'].textContent = run.lastBuyer === 'black' ? '판매처: 암시장' : '판매처: 위원회';
       const list = el['sale-list'];
       list.innerHTML = '';
       if (run.lastSale.length === 0) {
@@ -365,6 +439,14 @@
       el['sale-gain'].textContent = '+' + gained;
     }
     el['sale-balance'].textContent = meta.rp;
+    el['sale-susp'].textContent = meta.suspicion;
+    if (run.lastTruth) {
+      el['truth-news'].hidden = false;
+      el['truth-news'].textContent = `진실 조각: ${run.lastTruth}`;
+    } else {
+      el['truth-news'].hidden = true;
+      el['truth-news'].textContent = '';
+    }
 
     // 강화 버튼 3종
     const defs = [
@@ -395,6 +477,8 @@
     el['btn-deeper'].addEventListener('click', descend);
     el['btn-drop'].addEventListener('click', dropAndFlee);
     el['btn-return'].addEventListener('click', returnToSurface);
+    el['buy-committee'].addEventListener('click', () => chooseBuyer('committee'));
+    el['buy-black'].addEventListener('click', () => chooseBuyer('black'));
     el['up-bag'].addEventListener('click', () => buyUpgrade('bag'));
     el['up-light'].addEventListener('click', () => buyUpgrade('light'));
     el['up-weapon'].addEventListener('click', () => buyUpgrade('weapon'));
@@ -409,6 +493,9 @@
     bind();
     el['start-rp'].textContent = meta.rp;
     el['start-depth'].textContent = meta.maxDepth;
+    el['start-susp'].textContent = meta.suspicion;
+    el['start-truth-count'].textContent = meta.truths.length;
+    el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
   }
 
   if (document.readyState === 'loading') {

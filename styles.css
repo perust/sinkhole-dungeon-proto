@@ -476,3 +476,85 @@ body {
   .recovery-point .loot-icon { width: 32px; height: 32px; }
   #screen-dungeon .btn-act { padding: 11px 7px; font-size: 15px; }
 }
+
+
+/* ===================== Final gameplay layer: buyers, suspicion, truth ===================== */
+.susp-v { color: var(--warn); }
+.codex-line {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.codex-line b { color: var(--accent); }
+.codex-line.complete { color: var(--gold); }
+
+.buyer-hint {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.meta-clock {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+.buyers {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.buyer-btn {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+  border-radius: 16px;
+}
+.buyer-btn.committee:not(:disabled) {
+  border-color: rgba(90,209,127,.55);
+  background: rgba(90,209,127,.08);
+}
+.buyer-btn.black:not(:disabled) {
+  border-color: rgba(255,161,74,.55);
+  background: rgba(255,161,74,.08);
+}
+.buyer-name { font-size: 17px; font-weight: 900; }
+.buyer-sub { color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.35; }
+.buyer-est { color: var(--gold); font-size: 13px; font-weight: 800; }
+.susp-delta { color: var(--warn); }
+.sale-buyer {
+  margin-bottom: 10px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+.truth-news {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255,209,102,.35);
+  border-radius: 14px;
+  background: rgba(255,209,102,.08);
+  color: var(--gold);
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow: 0 0 18px rgba(255,209,102,.08);
+}
+.fail-meta {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+#screen-return #return-list { margin-bottom: 0; }
+#screen-return .sale-card { margin-top: 10px; }
+#screen-upgrade .sale-card { margin-top: 4px; }
+
+@media (max-height: 760px) {
+  .codex-line { display: none; }
+  .buyers { gap: 8px; }
+  .buyer-btn { padding: 12px 14px; }
+  .truth-news { padding: 9px 11px; }
+}
