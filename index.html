@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0b0d14" />
+  <title>도심 싱크홀 — 회수 잠수</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" class="phone">
+
+    <!-- ===================== 시작 화면 ===================== -->
+    <section id="screen-start" class="screen active">
+      <div class="start-art" aria-hidden="true">
+        <div class="skyline"></div>
+        <div class="sinkhole">
+          <div class="ring r1"></div>
+          <div class="ring r2"></div>
+          <div class="ring r3"></div>
+          <div class="hole-glow"></div>
+        </div>
+        <div class="permit-desk">
+          <span class="permit-stamp">던전관리위원회 · 허가소</span>
+          <div class="queue"><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+
+      <h1 class="title">도심 싱크홀</h1>
+      <p class="tagline">훔치고 · 도망치고 · 팔고 · 더 깊이</p>
+      <p class="premise">던전은 네가 훔친 물건을 다시 가져가려 한다.</p>
+
+      <button id="btn-enter" class="btn btn-primary btn-enter">입장</button>
+
+      <div class="meta-line">
+        누적 RP <b id="start-rp">0</b> · 최고 깊이 <b id="start-depth">1</b>층
+      </div>
+    </section>
+
+    <!-- ===================== 던전 화면 ===================== -->
+    <section id="screen-dungeon" class="screen">
+      <header class="hud">
+        <div class="hud-cell"><span class="hud-k">RP</span><span id="hud-rp" class="hud-v">0</span></div>
+        <div class="hud-cell"><span class="hud-k">최고</span><span id="hud-depth" class="hud-v">1</span><span class="hud-u">층</span></div>
+        <div class="hud-cell"><span class="hud-k">가방</span><span id="hud-bag" class="hud-v">0/3</span></div>
+      </header>
+
+      <div class="floor-banner">
+        <span class="floor-num"><b id="floor-num">1</b>층</span>
+        <span class="floor-name" id="floor-name">무너진 도시 시설</span>
+      </div>
+
+      <div class="gauges">
+        <div class="gauge">
+          <div class="gauge-label"><span>조명</span><span id="light-val">100%</span></div>
+          <div class="gauge-bar"><div id="light-fill" class="gauge-fill light"></div></div>
+        </div>
+        <div class="gauge">
+          <div class="gauge-label"><span>위험</span><span id="danger-val">대기</span></div>
+          <div class="gauge-bar"><div id="danger-fill" class="gauge-fill danger"></div></div>
+        </div>
+      </div>
+
+      <div class="bag-row">
+        <div id="bag-slots" class="bag-slots"></div>
+      </div>
+
+      <div class="stage" id="stage">
+        <div class="stage-floor"></div>
+        <div id="recovery-point" class="recovery-point">
+          <span class="rp-name">회수물</span>
+        </div>
+        <div id="player" class="actor player" title="탐사자">🧍</div>
+        <div id="chaser" class="actor chaser" title="회수자">👁️</div>
+      </div>
+
+      <div id="log" class="log">
+        <div class="log-line">싱크홀 아래로 내려왔다.</div>
+      </div>
+
+      <div class="actions">
+        <button id="btn-grab"   class="btn btn-act primary">회수물 집기</button>
+        <button id="btn-deeper" class="btn btn-act">더 깊이</button>
+        <button id="btn-drop"   class="btn btn-act warn">버리고 도망</button>
+        <button id="btn-return" class="btn btn-act good">들고 귀환</button>
+      </div>
+    </section>
+
+    <!-- ===================== 강화(귀환) 화면 ===================== -->
+    <section id="screen-upgrade" class="screen">
+      <h2 class="result-title good-text">귀환 성공</h2>
+      <div class="sale-card">
+        <div class="sale-list" id="sale-list"></div>
+        <div class="sale-total">판매 <b id="sale-gain">+0</b> RP</div>
+        <div class="sale-balance">보유 RP <b id="sale-balance">0</b></div>
+      </div>
+
+      <p class="shop-hint">강화는 한 번. 하나만 고른다.</p>
+      <div class="upgrades">
+        <button id="up-bag"    class="btn up-btn"></button>
+        <button id="up-light"  class="btn up-btn"></button>
+        <button id="up-weapon" class="btn up-btn"></button>
+      </div>
+
+      <button id="btn-again" class="btn btn-primary">한 번 더 내려가기</button>
+    </section>
+
+    <!-- ===================== 실패 화면 ===================== -->
+    <section id="screen-fail" class="screen">
+      <h2 class="result-title bad-text">빼앗겼다</h2>
+      <div class="fail-card">
+        <p class="fail-line">회수자가 가방을 원래 자리로 끌고 갔다.</p>
+        <div class="fail-detail" id="fail-detail"></div>
+        <p class="fail-keep">강화와 누적 RP는 남는다.</p>
+      </div>
+      <button id="btn-retry" class="btn btn-primary">다시 도전</button>
+    </section>
+
+  </div>
+
+  <script src="src/game.js"></script>
+</body>
+</html>

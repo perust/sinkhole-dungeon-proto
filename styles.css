@@ -1,0 +1,321 @@
+/* ===========================================================
+   도심 싱크홀 — 회수 잠수 (프로토타입)
+   모바일 세로 화면 우선 HUD 스타일
+   =========================================================== */
+
+:root {
+  --bg:        #0b0d14;
+  --panel:     #151926;
+  --panel-2:   #1d2334;
+  --line:      #2a3147;
+  --text:      #e7ecf6;
+  --muted:     #8a93ad;
+  --accent:    #57e0c8;   /* 청록 — 회수물/귀환 */
+  --gold:      #ffd166;   /* RP / 조명 */
+  --danger:    #ff5468;   /* 위험 / 회수자 */
+  --warn:      #ffa14a;
+  --good:      #5ad17f;
+  --shadow:    0 8px 24px rgba(0,0,0,.45);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #05070c;
+  color: var(--text);
+  font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 모바일 세로 프레임 ----------------------------------------- */
+.phone {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  height: 100vh;
+  max-height: 932px;
+  background: radial-gradient(120% 60% at 50% -10%, #1a2236 0%, var(--bg) 55%, #05070c 100%);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+@media (min-width: 460px) {
+  .phone { height: 92vh; border-radius: 28px; box-shadow: var(--shadow); border: 1px solid #20263a; }
+}
+
+/* 화면 전환 ------------------------------------------------- */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  padding: 18px 18px max(28px, env(safe-area-inset-bottom));
+}
+.screen.active { display: flex; }
+
+/* 버튼 공통 ------------------------------------------------- */
+.btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: transform .06s ease, filter .15s ease, opacity .15s ease;
+  user-select: none;
+}
+.btn:active { transform: translateY(1px) scale(.99); }
+.btn:disabled { opacity: .38; cursor: default; }
+.btn-primary {
+  background: linear-gradient(180deg, var(--accent), #38b6a0);
+  color: #062b25;
+  border: none;
+  font-size: 18px;
+  box-shadow: 0 8px 20px rgba(87,224,200,.25);
+}
+
+/* ===================== 시작 화면 ===================== */
+#screen-start { align-items: center; text-align: center; justify-content: flex-start; }
+
+.start-art {
+  position: relative;
+  width: 100%;
+  height: 46%;
+  margin-top: 8px;
+  border-radius: 18px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, #0e1422 0%, #0a0f1a 60%, #070a12 100%);
+  border: 1px solid var(--line);
+}
+.skyline {
+  position: absolute; left: 0; right: 0; top: 18%;
+  height: 30%;
+  background:
+    linear-gradient(90deg,
+      transparent 0 6%, #11182a 6% 14%, transparent 14% 20%,
+      #0e1525 20% 30%, transparent 30% 38%, #131c30 38% 52%,
+      transparent 52% 60%, #0e1525 60% 72%, transparent 72% 80%,
+      #11182a 80% 92%, transparent 92%);
+  opacity: .9;
+  filter: drop-shadow(0 0 1px #1c2640);
+}
+.sinkhole {
+  position: absolute; left: 50%; bottom: 6%;
+  transform: translateX(-50%);
+  width: 220px; height: 150px;
+}
+.ring {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid rgba(120,150,200,.18);
+}
+.ring.r1 { width: 220px; height: 130px; }
+.ring.r2 { width: 150px; height: 86px; border-color: rgba(120,150,200,.28); }
+.ring.r3 { width: 84px;  height: 46px; border-color: rgba(120,150,200,.4); }
+.hole-glow {
+  position: absolute; left: 50%; top: 50%;
+  width: 50px; height: 28px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(87,224,200,.55), rgba(87,224,200,0));
+  animation: pulse 2.4s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:.5; transform:translate(-50%,-50%) scale(1);} 50%{opacity:1; transform:translate(-50%,-50%) scale(1.25);} }
+
+.permit-desk {
+  position: absolute; left: 12px; bottom: 12px;
+  display: flex; flex-direction: column; gap: 6px;
+  align-items: flex-start;
+}
+.permit-stamp {
+  font-size: 11px; letter-spacing: .5px;
+  color: var(--accent);
+  border: 1px dashed rgba(87,224,200,.5);
+  padding: 4px 8px; border-radius: 8px;
+  background: rgba(87,224,200,.06);
+}
+.queue { display: flex; gap: 5px; }
+.queue i { width: 7px; height: 7px; border-radius: 50%; background: #3a445e; }
+
+.title {
+  font-size: 34px; margin: 18px 0 4px; letter-spacing: 1px;
+  text-shadow: 0 0 18px rgba(87,224,200,.25);
+}
+.tagline { margin: 0; color: var(--accent); font-weight: 700; letter-spacing: .5px; }
+.premise { margin: 14px 0 0; color: var(--muted); font-size: 14px; max-width: 280px; }
+
+.btn-enter { margin-top: auto; width: 100%; padding: 18px; font-size: 20px; letter-spacing: 4px; }
+.meta-line { margin-top: 14px; color: var(--muted); font-size: 13px; }
+.meta-line b { color: var(--gold); }
+
+/* ===================== 던전 HUD ===================== */
+.hud {
+  display: flex; gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 8px 6px;
+}
+.hud-cell {
+  flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 4px;
+  border-right: 1px solid var(--line);
+}
+.hud-cell:last-child { border-right: none; }
+.hud-k { font-size: 11px; color: var(--muted); }
+.hud-v { font-size: 18px; font-weight: 800; color: var(--gold); }
+.hud-u { font-size: 11px; color: var(--muted); }
+
+.floor-banner {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 12px;
+}
+.floor-num { font-size: 15px; color: var(--accent); font-weight: 800; }
+.floor-num b { font-size: 22px; }
+.floor-name { font-size: 13px; color: var(--muted); }
+
+/* 게이지 ---------------------------------------------------- */
+.gauges { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.gauge-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.gauge-bar {
+  height: 12px; border-radius: 8px; overflow: hidden;
+  background: #0c1020; border: 1px solid var(--line);
+}
+.gauge-fill { height: 100%; width: 0%; border-radius: 8px; transition: width .15s linear; }
+.gauge-fill.light  { background: linear-gradient(90deg, #8a6b1f, var(--gold)); }
+.gauge-fill.light.low { background: linear-gradient(90deg, #b5502a, #ff7a45); }
+.gauge-fill.danger { background: linear-gradient(90deg, #7a2533, var(--danger)); }
+.gauge-fill.danger.high { animation: dangerPulse .5s ease-in-out infinite; }
+@keyframes dangerPulse { 0%,100%{filter:brightness(1);} 50%{filter:brightness(1.6);} }
+
+/* 가방 슬롯 ------------------------------------------------- */
+.bag-row { margin-top: 12px; }
+.bag-slots { display: flex; gap: 6px; flex-wrap: wrap; }
+.slot {
+  flex: 1 1 0; min-width: 34px; height: 34px;
+  border-radius: 8px; border: 1px solid var(--line);
+  background: #0c1020;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: #0b0d14;
+  overflow: hidden; text-align: center; line-height: 1.05;
+}
+.slot.filled { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+
+/* 무대 (추격 연출) ----------------------------------------- */
+.stage {
+  position: relative;
+  flex: 1;
+  margin-top: 14px;
+  min-height: 120px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(80% 60% at 20% 50%, rgba(87,224,200,.06), transparent 60%),
+    linear-gradient(180deg, #0d1322, #090d18);
+  overflow: hidden;
+}
+.stage-floor {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 38%;
+  background: linear-gradient(180deg, transparent, rgba(40,52,80,.5));
+  border-top: 1px solid rgba(120,150,200,.12);
+}
+.recovery-point {
+  position: absolute; left: 50%; top: 30%;
+  transform: translate(-50%, -50%);
+  display: flex; align-items: center; justify-content: center;
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(87,224,200,.08);
+  border: 1px solid rgba(87,224,200,.4);
+  box-shadow: 0 0 22px rgba(87,224,200,.3);
+  text-align: center; font-size: 12px; font-weight: 700; color: var(--accent);
+  animation: float 2.6s ease-in-out infinite;
+  max-width: 60%;
+}
+.recovery-point.empty { background: rgba(60,70,95,.18); border-color: var(--line); color: var(--muted); box-shadow: none; animation: none; }
+@keyframes float { 0%,100%{ transform: translate(-50%,-50%);} 50%{ transform: translate(-50%,-58%);} }
+
+.actor {
+  position: absolute; bottom: 12%;
+  font-size: 30px; transition: left .15s linear;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,.5));
+}
+.player { left: 10%; }
+.chaser { left: 100%; opacity: 0; transition: left .15s linear, opacity .3s ease; }
+.chaser.active { opacity: 1; }
+.chaser.close { animation: shake .25s linear infinite; }
+@keyframes shake { 0%,100%{ transform: translateX(0) rotate(0);} 25%{transform:translateX(-2px) rotate(-6deg);} 75%{transform:translateX(2px) rotate(6deg);} }
+
+/* 로그 ----------------------------------------------------- */
+.log {
+  margin-top: 12px;
+  min-height: 40px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 13px; color: var(--muted);
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+}
+.log-line { line-height: 1.4; }
+.log-line.hot { color: var(--danger); font-weight: 700; }
+.log-line.win { color: var(--good); font-weight: 700; }
+
+/* 액션 버튼 ------------------------------------------------- */
+.actions {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.btn-act { font-size: 16px; padding: 16px 10px; }
+.btn-act.primary:not(:disabled) { border-color: var(--accent); color: var(--accent); background: rgba(87,224,200,.08); }
+.btn-act.good:not(:disabled)    { border-color: var(--good);   color: var(--good);   background: rgba(90,209,127,.08); }
+.btn-act.warn:not(:disabled)    { border-color: var(--warn);   color: var(--warn);   background: rgba(255,161,74,.08); }
+
+/* ===================== 결과 / 강화 ===================== */
+.result-title { text-align: center; font-size: 28px; margin: 24px 0 16px; }
+.good-text { color: var(--good); }
+.bad-text  { color: var(--danger); }
+
+.sale-card, .fail-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+}
+.sale-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.sale-item { display: flex; justify-content: space-between; font-size: 14px; }
+.sale-item .v { color: var(--gold); font-weight: 700; }
+.sale-empty { color: var(--muted); font-size: 14px; }
+.sale-total { font-size: 16px; border-top: 1px solid var(--line); padding-top: 10px; }
+.sale-total b { color: var(--good); font-size: 20px; }
+.sale-balance { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.sale-balance b { color: var(--gold); }
+
+.shop-hint { text-align: center; color: var(--muted); font-size: 13px; margin: 18px 0 10px; }
+.upgrades { display: flex; flex-direction: column; gap: 10px; }
+.up-btn { text-align: left; display: flex; flex-direction: column; gap: 3px; align-items: stretch; }
+.up-btn .up-title { font-size: 15px; }
+.up-btn .up-sub { font-size: 12px; color: var(--muted); font-weight: 500; }
+.up-btn .up-cost { font-size: 12px; color: var(--gold); font-weight: 700; }
+.up-btn.bought { border-color: var(--good); color: var(--good); }
+
+#btn-again, #btn-retry { margin-top: auto; width: 100%; }
+
+.fail-line { font-size: 15px; margin: 0 0 10px; }
+.fail-detail { color: var(--gold); font-size: 14px; margin-bottom: 10px; }
+.fail-keep { color: var(--muted); font-size: 13px; margin: 0; }
