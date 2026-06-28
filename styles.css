@@ -173,6 +173,25 @@ body {
 }
 .goal-hint b { color: var(--accent); }
 
+/* 기록 초기화 — 작고 보조적인 텍스트 버튼 (시작 화면 하단) */
+.btn-reset {
+  appearance: none;
+  margin-top: 10px;
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: .5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  opacity: .65;
+  cursor: pointer;
+}
+.btn-reset:hover { color: var(--danger); opacity: 1; }
+.btn-reset:active { transform: translateY(1px); }
+
 /* ===================== 던전 HUD ===================== */
 .hud {
   display: flex; gap: 8px;
@@ -595,6 +614,24 @@ body {
   line-height: 1.45;
   box-shadow: 0 0 18px rgba(255,209,102,.08);
 }
+
+.contract-card,
+.street-news {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(87,224,200,.26);
+  border-radius: 14px;
+  background: rgba(87,224,200,.06);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.contract-card b { color: var(--accent); }
+.contract-card span { display: block; margin-top: 3px; color: var(--gold); }
+.contract-card.done { border-color: rgba(90,209,127,.45); background: rgba(90,209,127,.08); }
+.contract-card.done b { color: var(--good); }
+.street-news { border-color: rgba(255,161,74,.28); background: rgba(255,161,74,.06); color: #c4cad8; }
+
 .fail-meta {
   color: var(--muted);
   font-size: 13px;
@@ -609,4 +646,5 @@ body {
   .buyers { gap: 8px; }
   .buyer-btn { padding: 12px 14px; }
   .truth-news { padding: 9px 11px; }
+  .contract-card, .street-news { padding: 8px 10px; margin-top: 8px; }
 }

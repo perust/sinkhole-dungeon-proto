@@ -41,6 +41,13 @@
   const TIER_HEAT = { common: 4, rare: 8, epic: 14 };
   const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().length;
 
+  // 짧은 의뢰는 \"한 번 더 내려가기\"의 명분과 판매처 선택의 압박을 만든다.
+  const CONTRACTS = [
+    { title: '합법 샘플 반납', desc: '위원회에 회수물 2개 이상 넘기기', reward: 6, suspDelta: -3, test: (ctx) => ctx.buyer === 'committee' && ctx.items.length >= 2 },
+    { title: '뜨거운 증거', desc: '희귀 이상을 암시장에 팔기', reward: 9, suspDelta: 2, test: (ctx) => ctx.buyer === 'black' && ctx.items.some((it) => it.tier !== 'common') },
+    { title: '하층 동선 확인', desc: '2층 이상까지 내려갔다가 생환', reward: 7, suspDelta: 0, test: (ctx) => ctx.maxFloor >= 2 },
+  ];
+
   function itemIcon(index) {
     return `<span class="loot-icon" style="--icon-index:${index}" aria-hidden="true"></span>`;
   }
@@ -73,7 +80,106 @@
     totalEarned: 0,
     suspicion: 0,
     truths: [],
+    contractIndex: 0,
   };
+
+  /* ---------------- 저장 / 이어하기 ---------------- */
+  // localStorage에 메타(런을 넘는 영구 자산)만 저장한다. 런 상태는 저장하지 않는다.
+  // SAVE_VERSION을 올리면 이전 구조의 저장값은 무시되고 기본값으로 새로 시작한다.
+
+  const SAVE_KEY = 'sinkhole-dungeon-save';
+  const SAVE_VERSION = 1;
+
+  // 알려진 진실 조각 이름 집합 — 깨진/오래된 truths 값을 거를 때 쓴다.
+  const KNOWN_TRUTHS = new Set(Object.values(ITEM_TABLE).flat().map((it) => it.name));
+
+  function hasStorage() {
+    try {
+      const k = '__sinkhole_test__';
+      window.localStorage.setItem(k, '1');
+      window.localStorage.removeItem(k);
+      return true;
+    } catch (e) {
+      return false; // 사생활 모드 등 localStorage 차단 환경
+    }
+  }
+
+  const storageOk = hasStorage();
+
+  // 0 이상의 정수만 통과시키고, 그 외에는 기본값으로 되돌린다.
+  function safeInt(value, fallback, min, max) {
+    const n = Math.floor(Number(value));
+    if (!Number.isFinite(n) || n < min) return fallback;
+    return max != null ? Math.min(n, max) : n;
+  }
+
+  function saveMeta() {
+    if (!storageOk) return;
+    try {
+      const payload = {
+        version: SAVE_VERSION,
+        rp: meta.rp,
+        bagLevel: meta.bagLevel,
+        lightLevel: meta.lightLevel,
+        weaponLevel: meta.weaponLevel,
+        maxDepth: meta.maxDepth,
+        totalEarned: meta.totalEarned,
+        suspicion: meta.suspicion,
+        truths: meta.truths,
+        contractIndex: meta.contractIndex,
+      };
+      window.localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+    } catch (e) {
+      /* 저장 실패는 조용히 무시한다 — 게임 진행은 막지 않는다. */
+    }
+  }
+
+  // 저장값을 읽어 meta에 병합한다. 버전이 다르거나 깨졌으면 무시하고 기본값을 유지한다.
+  function loadMeta() {
+    if (!storageOk) return;
+    let data;
+    try {
+      const raw = window.localStorage.getItem(SAVE_KEY);
+      if (!raw) return;
+      data = JSON.parse(raw);
+    } catch (e) {
+      return; // JSON 파손 → 기본값으로 시작
+    }
+    if (!data || typeof data !== 'object') return;
+    // 버전 불일치(이전/미래 구조) → 마이그레이션 대신 안전하게 폐기.
+    if (data.version !== SAVE_VERSION) { clearSave(); return; }
+
+    meta.bagLevel    = safeInt(data.bagLevel,    1, 1);
+    meta.lightLevel  = safeInt(data.lightLevel,  1, 1);
+    meta.weaponLevel = safeInt(data.weaponLevel, 1, 1);
+    meta.rp          = safeInt(data.rp,          0, 0);
+    meta.totalEarned = safeInt(data.totalEarned, meta.rp, 0);
+    meta.maxDepth    = safeInt(data.maxDepth,    1, 1, FLOORS.length);
+    meta.suspicion   = safeInt(data.suspicion,   0, 0, 99);
+    meta.contractIndex = safeInt(data.contractIndex, 0, 0);
+    // truths: 배열이면서 현재 회수물에 실제로 존재하는 이름만 남기고 중복 제거.
+    if (Array.isArray(data.truths)) {
+      meta.truths = [...new Set(data.truths.filter((t) => KNOWN_TRUTHS.has(t)))];
+    }
+  }
+
+  function clearSave() {
+    if (!storageOk) return;
+    try { window.localStorage.removeItem(SAVE_KEY); } catch (e) { /* 무시 */ }
+  }
+
+  // '기록 초기화' — 저장값을 지우고 meta를 출고 상태로 되돌린다.
+  function resetProgress() {
+    if (!window.confirm('모든 기록(RP·강화·깊이·의심도·진실 조각)을 지울까요?')) return;
+    clearSave();
+    Object.assign(meta, {
+      rp: 0, bagLevel: 1, lightLevel: 1, weaponLevel: 1,
+      maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0,
+    });
+    renderStartScreen();
+  }
+
+  const activeContract = () => CONTRACTS[meta.contractIndex % CONTRACTS.length];
 
   function nextGoal() {
     if (meta.maxDepth < FLOORS.length) return `${meta.maxDepth + 1}층 도달`;
@@ -100,10 +206,15 @@
       danger: 0,
       chasing: false,
       currentItem: null, // 현재 층 회수 포인트에 놓인 물건 (집으면 null)
+      maxFloor: 1,
+      grabbedCount: 0,
+      droppedCount: 0,
       bought: false,     // 이번 귀환에서 강화를 샀는가
       lastSale: [],      // 판매 화면용 스냅샷
       lastBuyer: null,
       lastTruth: null,
+      contractResult: null,
+      streetNews: '허가소 앞 전광판이 조용하다.',
     };
   }
 
@@ -117,14 +228,14 @@
   const el = {};
   const IDS = [
     'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail',
-    'btn-enter', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-goal',
+    'btn-enter', 'btn-reset', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-contract', 'start-goal',
     'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
-    'light-val', 'light-fill', 'danger-val', 'danger-fill',
+    'light-val', 'light-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
     'bag-slots', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log',
     'btn-grab', 'btn-deeper', 'btn-drop', 'btn-return',
-    'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp',
-    'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'return-goal',
+    'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
+    'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
     'up-bag', 'up-light', 'up-weapon', 'btn-again',
     'fail-detail', 'fail-susp', 'btn-retry',
   ];
@@ -142,6 +253,45 @@
       const cls = f.n === run.floor ? 'current' : f.n < run.floor ? 'passed' : 'locked';
       return `<span class="rail-dot ${cls}">${f.n}</span>`;
     }).join('');
+  }
+
+  function signed(n) { return n > 0 ? `+${n}` : `${n}`; }
+
+  function contractHtml(contract, result) {
+    if (result && result.done) return `<b>의뢰 완료</b> · ${result.title}<span>+${result.reward} RP · 의심도 ${result.suspDelta}</span>`;
+    return `<b>오늘의 의뢰</b> · ${contract.title}<span>${contract.desc} · 보수 +${contract.reward} RP</span>`;
+  }
+
+  function renderContractCards() {
+    const contract = activeContract();
+    const pending = contractHtml(contract, null);
+    if (el['start-contract']) el['start-contract'].innerHTML = pending;
+    if (el['return-contract']) el['return-contract'].innerHTML = pending;
+    if (el['sale-contract']) {
+      el['sale-contract'].innerHTML = run && run.contractResult ? contractHtml(contract, run.contractResult) : pending;
+      el['sale-contract'].classList.toggle('done', !!(run && run.contractResult));
+    }
+  }
+
+  function makeStreetNews(buyer, quote) {
+    const hot = quote.suspDelta > 10 || meta.suspicion >= 55;
+    if (buyer === 'black' && hot) return '뉴스: “싱크홀 밀반출 급증”… 검문 드론이 한 블록 가까워졌다.';
+    if (buyer === 'black') return '소문: 암시장 매입가가 올랐다. 대신 허가소가 이름을 묻기 시작했다.';
+    if (meta.suspicion <= 15) return '공보: 위원회가 “성실 반납자” 명단을 정리 중이다. 아직 조용하다.';
+    return '뉴스: 위원회가 일부 반납품을 은폐했다는 제보가 돈다.';
+  }
+
+  function resolveContract(buyer) {
+    const contract = activeContract();
+    const ctx = { buyer, items: run.lastSale, maxFloor: run.maxFloor };
+    if (!contract.test(ctx)) { run.contractResult = null; return; }
+    meta.rp += contract.reward;
+    meta.totalEarned += contract.reward;
+    meta.suspicion = Math.max(0, Math.min(99, meta.suspicion + contract.suspDelta));
+    run.contractResult = { done: true, title: contract.title, reward: contract.reward, suspDelta: signed(contract.suspDelta) };
+    meta.contractIndex += 1;
+    saveMeta(); // 의뢰 완료 후 자동 저장
+    log(`의뢰 완료: ${contract.title}`, 'win');
   }
 
   function playDescendFx() {
@@ -191,10 +341,15 @@
 
   /* ---------------- 런 진행 액션 ---------------- */
 
+  // 최고 깊이를 갱신하고, 실제로 늘었을 때만 저장한다.
+  function bumpMaxDepth(floor) {
+    if (floor > meta.maxDepth) { meta.maxDepth = floor; saveMeta(); }
+  }
+
   function startNewRun() {
     run = newRun();
     run.currentItem = pickItem(run.floor);
-    if (run.floor > meta.maxDepth) meta.maxDepth = run.floor;
+    bumpMaxDepth(run.floor);
     show('screen-dungeon');
     log('1층. 숨을 낮추고 들어간다.');
     render();
@@ -205,6 +360,7 @@
     if (!run.currentItem || !roomFor(run.currentItem)) return;
     const item = run.currentItem;
     run.bag.push(item);
+    run.grabbedCount += 1;
     run.currentItem = null;
     run.light = Math.max(0, run.light - GRAB_LIGHT_COST);
     if (!run.chasing) {
@@ -223,7 +379,8 @@
     run.floor += 1;
     run.light = Math.max(0, run.light - DESCEND_LIGHT_COST);
     if (run.chasing) run.danger = Math.min(100, run.danger + DESCEND_DANGER_BUMP);
-    if (run.floor > meta.maxDepth) meta.maxDepth = run.floor;
+    bumpMaxDepth(run.floor);
+    if (run.floor > run.maxFloor) run.maxFloor = run.floor;
     run.currentItem = pickItem(run.floor);
     const f = FLOORS[run.floor - 1];
     log(`${f.n}층. 한 칸 더 내려왔다.`);
@@ -237,6 +394,7 @@
     let idx = 0;
     run.bag.forEach((it, i) => { if (it.value > run.bag[idx].value) idx = i; });
     const dropped = run.bag.splice(idx, 1)[0];
+    run.droppedCount += 1;
     run.danger = Math.max(0, run.danger * DROP_DANGER_FACTOR - DROP_DANGER_MINUS);
     if (run.bag.length === 0) {
       run.chasing = false;
@@ -255,6 +413,8 @@
     if (run.lastSale.length === 0) {
       run.lastBuyer = 'committee';
       run.lastTruth = null;
+      resolveContract('committee');
+      run.streetNews = '공보: 빈손 귀환자는 빠르게 검문대를 통과했다.';
       renderUpgradeScreen(0);
       show('screen-upgrade');
       return;
@@ -292,6 +452,9 @@
     if (previousTruthCount !== meta.truths.length) {
       log('암시장 정보상이 진실 조각 하나를 넘겼다.', 'win');
     }
+    resolveContract(buyer);
+    saveMeta(); // 판매처 선택 후 자동 저장 (RP·의심도·진실 조각 반영)
+    run.streetNews = makeStreetNews(buyer, quote);
     renderUpgradeScreen(quote.gained);
     show('screen-upgrade');
   }
@@ -303,6 +466,7 @@
     meta.rp += consolation;
     meta.totalEarned += consolation;
     meta.suspicion = Math.max(0, meta.suspicion - 3);
+    saveMeta(); // 실패 보상 후 자동 저장
     el['fail-detail'].textContent =
       lost > 0
         ? `${lost} RP어치를 되찾겼다. 남은 조각 +${consolation} RP`
@@ -323,8 +487,17 @@
     meta.rp -= cost;
     meta[lvKey] += 1;
     run.bought = true;
+    saveMeta(); // 강화 구매 후 자동 저장
     log(`${UPGRADES[type].label}을 손봤다. 다음엔 더 버틴다.`, 'win');
     renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
+  }
+
+  function riskState() {
+    if (!run || !run.chasing) return { key: 'safe', label: '대기', copy: '회수물을 집는 순간 추격이 시작된다.' };
+    if (run.danger >= 85) return { key: 'critical', label: '코앞', copy: '지금 탈출하거나 미끼를 던져야 한다.' };
+    if (run.danger >= 65) return { key: 'danger', label: '위험', copy: '다음 행동 하나가 런을 끝낼 수 있다.' };
+    if (run.danger >= 35) return { key: 'warn', label: '주의', copy: '아직 거리는 있지만 욕심내면 따라잡힌다.' };
+    return { key: 'safe', label: '여유', copy: '한 번 더 챙길지, 안전하게 나갈지 고르자.' };
   }
 
   /* ---------------- 렌더링 ---------------- */
@@ -343,6 +516,7 @@
     el['start-truth-count'].textContent = meta.truths.length;
     el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
     renderGoals();
+    renderContractCards();
 
     // 층 배너
     el['floor-num'].textContent = f.n;
@@ -357,7 +531,13 @@
     // 위험 게이지
     el['danger-fill'].style.width = run.danger + '%';
     el['danger-fill'].classList.toggle('high', run.danger >= 70);
-    el['danger-val'].textContent = run.chasing ? Math.round(run.danger) + '%' : '대기';
+    const risk = riskState();
+    el['danger-val'].textContent = run.chasing ? `${risk.label} · ${Math.round(run.danger)}%` : '대기';
+    if (el['risk-panel']) {
+      el['risk-panel'].className = `risk-panel ${risk.key}`;
+      el['risk-chip'].textContent = risk.label;
+      el['risk-copy'].textContent = risk.copy;
+    }
 
     // 가방 슬롯
     renderBag();
@@ -369,12 +549,16 @@
     // 액션 버튼 활성화
     el['btn-grab'].disabled = !(run.currentItem && roomFor(run.currentItem));
     el['btn-grab'].textContent = run.currentItem
-      ? (roomFor(run.currentItem) ? '챙기기' : '가방이 꽉 찼다')
+      ? (roomFor(run.currentItem) ? `챙기기 · 위험 +${GRAB_DANGER_BUMP}` : '가방이 꽉 찼다')
       : '남은 게 없다';
     el['btn-deeper'].disabled = run.floor >= FLOORS.length;
+    el['btn-deeper'].textContent = run.floor >= FLOORS.length
+      ? '최심부다'
+      : `더 깊이 · 조명 -${DESCEND_LIGHT_COST}${run.chasing ? ` / 위험 +${DESCEND_DANGER_BUMP}` : ''}`;
     el['btn-drop'].disabled   = !(run.chasing && run.bag.length > 0);
+    el['btn-drop'].textContent = run.bag.length > 0 ? '미끼 던지기 · 위험↓' : '버릴 짐 없음';
     el['btn-return'].disabled = false;
-    el['btn-return'].textContent = run.bag.length > 0 ? '들고 나가기' : '그냥 나가기';
+    el['btn-return'].textContent = run.bag.length > 0 ? `탈출 · ${bagValue()}RP 판매` : '그냥 나가기';
   }
 
   function renderBag() {
@@ -422,6 +606,7 @@
     el['black-susp'].textContent = '+' + black.suspDelta;
     el['buy-committee'].disabled = run.lastSale.length === 0;
     el['buy-black'].disabled = run.lastSale.length === 0;
+    renderContractCards();
   }
 
   function renderStage() {
@@ -471,6 +656,8 @@
     el['sale-balance'].textContent = meta.rp;
     el['sale-susp'].textContent = meta.suspicion;
     renderGoals();
+    renderContractCards();
+    el['street-news'].textContent = run.streetNews;
     if (run.lastTruth) {
       el['truth-news'].hidden = false;
       el['truth-news'].textContent = `진실 조각: ${run.lastTruth}`;
@@ -515,19 +702,27 @@
     el['up-weapon'].addEventListener('click', () => buyUpgrade('weapon'));
     el['btn-again'].addEventListener('click', startNewRun);
     el['btn-retry'].addEventListener('click', startNewRun);
+    if (el['btn-reset']) el['btn-reset'].addEventListener('click', resetProgress);
   }
 
   /* ---------------- 시작 ---------------- */
 
-  function init() {
-    cacheDom();
-    bind();
+  // 시작 화면 메타 표시를 한곳에서 갱신한다(초기 진입 + 기록 초기화 공용).
+  function renderStartScreen() {
     el['start-rp'].textContent = meta.rp;
     el['start-depth'].textContent = meta.maxDepth;
     el['start-susp'].textContent = meta.suspicion;
     el['start-truth-count'].textContent = meta.truths.length;
     el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
     renderGoals();
+    renderContractCards();
+  }
+
+  function init() {
+    cacheDom();
+    bind();
+    loadMeta(); // 저장된 진행도 복원 (없거나 깨졌으면 기본값 유지)
+    renderStartScreen();
   }
 
   if (document.readyState === 'loading') {

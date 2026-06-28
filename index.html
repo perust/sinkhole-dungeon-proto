@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#0b0d14" />
   <title>도심 싱크홀: 들고 나와라</title>
-  <link rel="stylesheet" href="styles.css?v=4" />
+  <link rel="stylesheet" href="styles.css?v=6" />
 </head>
 <body>
   <div id="app" class="phone">
@@ -44,7 +44,9 @@
         · 의심도 <b id="start-susp" class="susp-v">0</b>
       </div>
       <div class="codex-line" id="start-codex">진실 조각 <b id="start-truth-count">0</b>/6 — 아직 아무것도 모른다.</div>
+      <div class="contract-card" id="start-contract"></div>
       <div class="goal-hint">다음 목표 · <b id="start-goal">2층 도달</b></div>
+      <button id="btn-reset" class="btn-reset" type="button">기록 초기화</button>
     </section>
 
     <!-- ===================== 던전 화면 ===================== -->
@@ -69,6 +71,11 @@
           <div class="gauge-label"><span>추적도</span><span id="danger-val">대기</span></div>
           <div class="gauge-bar"><div id="danger-fill" class="gauge-fill danger"></div></div>
         </div>
+      </div>
+
+      <div id="risk-panel" class="risk-panel safe">
+        <span id="risk-chip" class="risk-chip">대기</span>
+        <span id="risk-copy" class="risk-copy">회수물을 집는 순간 추격이 시작된다.</span>
       </div>
 
       <div class="bag-row">
@@ -105,6 +112,7 @@
         <div class="sale-list" id="return-list"></div>
         <div class="meta-clock">현재 의심도 <b id="return-susp" class="susp-v">0</b></div>
       </div>
+      <div class="contract-card" id="return-contract"></div>
 
       <div class="buyers">
         <button id="buy-committee" class="btn buyer-btn committee">
@@ -126,13 +134,15 @@
       <div class="sale-card">
         <div class="sale-buyer" id="sale-buyer"></div>
         <div class="sale-list" id="sale-list"></div>
+        <div class="run-summary" id="run-summary"></div>
         <div class="sale-total">판매 <b id="sale-gain">+0</b> RP</div>
         <div class="sale-balance">보유 RP <b id="sale-balance">0</b> · 의심도 <b id="sale-susp" class="susp-v">0</b></div>
       </div>
 
       <div class="truth-news" id="truth-news" hidden></div>
+      <div class="contract-card" id="sale-contract"></div>
+      <div class="street-news" id="street-news"></div>
       <p class="goal-line">다음 목표 · <b id="return-goal">2층 도달</b></p>
-
       <p class="shop-hint">이번엔 하나만 고르자.</p>
       <div class="upgrades">
         <button id="up-bag"    class="btn up-btn"></button>
@@ -157,6 +167,6 @@
 
   </div>
 
-  <script src="src/game.js?v=5"></script>
+  <script src="src/game.js?v=7"></script>
 </body>
 </html>
