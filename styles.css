@@ -350,6 +350,7 @@ body {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+.actions.hidden { display: none; }
 .btn-act { font-size: 16px; padding: 16px 10px; }
 .btn-act.primary:not(:disabled) { border-color: var(--accent); color: var(--accent); background: rgba(87,224,200,.08); }
 .btn-act.good:not(:disabled)    { border-color: var(--good);   color: var(--good);   background: rgba(90,209,127,.08); }
@@ -640,6 +641,50 @@ body {
 #screen-return #return-list { margin-bottom: 0; }
 #screen-return .sale-card { margin-top: 10px; }
 #screen-upgrade .sale-card { margin-top: 4px; }
+
+.risk-panel {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(87,224,200,.22);
+  border-radius: 12px;
+  background: rgba(87,224,200,.055);
+  color: var(--muted);
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.risk-chip { padding: 3px 7px; border-radius: 999px; background: rgba(87,224,200,.12); color: var(--accent); font-weight: 800; }
+.risk-panel.warn { border-color: rgba(255,161,74,.42); background: rgba(255,161,74,.07); }
+.risk-panel.warn .risk-chip { color: var(--warn); background: rgba(255,161,74,.16); }
+.risk-panel.danger,
+.risk-panel.critical { border-color: rgba(255,82,110,.58); background: rgba(255,82,110,.09); }
+.risk-panel.danger .risk-chip,
+.risk-panel.critical .risk-chip { color: var(--danger); background: rgba(255,82,110,.16); }
+
+.room-panel {
+  margin-top: 10px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(12,16,32,.72);
+}
+.room-panel.hidden { display: none; }
+.room-title { margin-bottom: 7px; color: var(--muted); font-size: 12px; }
+.room-choices { display: grid; grid-template-columns: 1fr; gap: 7px; }
+.room-btn {
+  min-height: 42px;
+  padding: 8px 10px;
+  text-align: left;
+  border-color: rgba(87,224,200,.22);
+  background: rgba(87,224,200,.045);
+}
+.room-btn b { display: block; color: var(--accent); font-size: 13px; }
+.room-btn span { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.25; }
+.room-btn.danger { border-color: rgba(255,82,110,.35); background: rgba(255,82,110,.06); }
+.room-btn.danger b { color: var(--danger); }
+.room-btn.good { border-color: rgba(90,209,127,.35); background: rgba(90,209,127,.06); }
+.room-btn.good b { color: var(--good); }
 
 @media (max-height: 760px) {
   .codex-line { display: none; }

@@ -48,6 +48,12 @@
     { title: '하층 동선 확인', desc: '2층 이상까지 내려갔다가 생환', reward: 7, suspDelta: 0, test: (ctx) => ctx.maxFloor >= 2 },
   ];
 
+  const ROOM_TYPES = [
+    { key: 'camp', name: '안전 캠프', style: 'good', copy: '조명 +18 · 낮은 보상', light: 18, danger: -8, lootBias: 'common' },
+    { key: 'lab', name: '폐쇄 연구실', style: '', copy: '희귀 단서 확률↑ · 조명 -6', light: -6, danger: 6, lootBias: 'rare' },
+    { key: 'nest', name: '회수자 둥지', style: 'danger', copy: '고가 유물 확률↑ · 추적도 +12', light: -10, danger: 12, lootBias: 'epic' },
+  ];
+
   function itemIcon(index) {
     return `<span class="loot-icon" style="--icon-index:${index}" aria-hidden="true"></span>`;
   }
@@ -206,6 +212,8 @@
       danger: 0,
       chasing: false,
       currentItem: null, // 현재 층 회수 포인트에 놓인 물건 (집으면 null)
+      awaitingRoom: true,
+      currentRoom: null,
       maxFloor: 1,
       grabbedCount: 0,
       droppedCount: 0,
@@ -223,6 +231,13 @@
     return { ...table[Math.floor(Math.random() * table.length)] };
   }
 
+  function pickRoomItem(floor, room) {
+    const table = ITEM_TABLE[floor];
+    const biased = table.filter((it) => it.tier === room.lootBias);
+    const source = biased.length && Math.random() < 0.7 ? biased : table;
+    return { ...source[Math.floor(Math.random() * source.length)] };
+  }
+
   /* ---------------- DOM 캐시 ---------------- */
 
   const el = {};
@@ -232,7 +247,8 @@
     'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
-    'bag-slots', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log',
+    'room-panel', 'room-choices',
+    'bag-slots', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log', 'actions',
     'btn-grab', 'btn-deeper', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
@@ -348,12 +364,31 @@
 
   function startNewRun() {
     run = newRun();
-    run.currentItem = pickItem(run.floor);
+    run.currentItem = null;
+    run.awaitingRoom = true;
+    run.currentRoom = null;
     bumpMaxDepth(run.floor);
     show('screen-dungeon');
-    log('1층. 숨을 낮추고 들어간다.');
+    log('1층. 어느 쪽으로 갈까.');
     render();
     startTick();
+  }
+
+  function chooseRoom(key) {
+    if (!run || !run.awaitingRoom) return;
+    const room = ROOM_TYPES.find((r) => r.key === key) || ROOM_TYPES[0];
+    run.awaitingRoom = false;
+    run.currentRoom = room;
+    run.light = Math.max(0, Math.min(maxLight(), run.light + room.light));
+    if (room.danger > 0) {
+      run.danger = Math.min(100, run.danger + room.danger);
+      if (room.key === 'nest') run.chasing = true;
+    } else if (room.danger < 0) {
+      run.danger = Math.max(0, run.danger + room.danger);
+    }
+    run.currentItem = pickRoomItem(run.floor, room);
+    log(`${room.name}. ${run.currentItem.name} 발견.`, room.key === 'nest' ? 'hot' : undefined);
+    render();
   }
 
   function grab() {
@@ -381,9 +416,11 @@
     if (run.chasing) run.danger = Math.min(100, run.danger + DESCEND_DANGER_BUMP);
     bumpMaxDepth(run.floor);
     if (run.floor > run.maxFloor) run.maxFloor = run.floor;
-    run.currentItem = pickItem(run.floor);
+    run.currentItem = null;
+    run.awaitingRoom = true;
+    run.currentRoom = null;
     const f = FLOORS[run.floor - 1];
-    log(`${f.n}층. 한 칸 더 내려왔다.`);
+    log(`${f.n}층. 다음 방을 고르자.`);
     playDescendFx();
     render();
   }
@@ -541,17 +578,21 @@
 
     // 가방 슬롯
     renderBag();
+    renderRoomChoices();
 
     // 회수 포인트 / 추격 연출
     renderStage();
     renderDepthRail();
 
     // 액션 버튼 활성화
+    if (el['actions']) el['actions'].classList.toggle('hidden', run.awaitingRoom);
     el['btn-grab'].disabled = !(run.currentItem && roomFor(run.currentItem));
-    el['btn-grab'].textContent = run.currentItem
-      ? (roomFor(run.currentItem) ? `챙기기 · 위험 +${GRAB_DANGER_BUMP}` : '가방이 꽉 찼다')
-      : '남은 게 없다';
-    el['btn-deeper'].disabled = run.floor >= FLOORS.length;
+    el['btn-grab'].textContent = run.awaitingRoom
+      ? '방을 먼저 고르자'
+      : run.currentItem
+        ? (roomFor(run.currentItem) ? `챙기기 · 위험 +${GRAB_DANGER_BUMP}` : '가방이 꽉 찼다')
+        : '남은 게 없다';
+    el['btn-deeper'].disabled = run.awaitingRoom || run.floor >= FLOORS.length;
     el['btn-deeper'].textContent = run.floor >= FLOORS.length
       ? '최심부다'
       : `더 깊이 · 조명 -${DESCEND_LIGHT_COST}${run.chasing ? ` / 위험 +${DESCEND_DANGER_BUMP}` : ''}`;
@@ -584,6 +625,22 @@
     });
   }
 
+  function renderRoomChoices() {
+    if (!el['room-panel'] || !el['room-choices']) return;
+    el['room-panel'].classList.toggle('hidden', !run.awaitingRoom);
+    if (!run.awaitingRoom) {
+      el['room-choices'].innerHTML = '';
+      return;
+    }
+    el['room-choices'].innerHTML = ROOM_TYPES.map((room) =>
+      `<button class="btn room-btn ${room.style}" data-room="${room.key}">` +
+      `<b>${room.name}</b><span>${room.copy}</span></button>`
+    ).join('');
+    el['room-choices'].querySelectorAll('[data-room]').forEach((btn) => {
+      btn.addEventListener('click', () => chooseRoom(btn.dataset.room));
+    });
+  }
+
   function renderReturnScreen() {
     const list = el['return-list'];
     list.innerHTML = '';
@@ -611,7 +668,11 @@
 
   function renderStage() {
     const rpEl = el['recovery-point'];
-    if (run.currentItem) {
+    if (run.awaitingRoom) {
+      rpEl.classList.add('empty');
+      rpEl.style.borderColor = '';
+      rpEl.innerHTML = '<span class="rp-name">방을 고르자</span>';
+    } else if (run.currentItem) {
       const it = run.currentItem;
       rpEl.classList.remove('empty');
       rpEl.style.borderColor = TIER_COLOR[it.tier];
