@@ -61,6 +61,29 @@
 
 ## 다음 패스 추천
 
+### UI Pass — 모바일 앱 게임 형식
+
+완료됨:
+
+- `manifest.webmanifest` 추가
+- mobile web app / apple mobile web app 메타 추가
+- 시작 화면에 앱 프로토타입 칩 추가
+- 던전 화면에 `DIVE MODE` 상단 상태 라인 추가
+- 방 선택 3개와 액션 버튼을 하단 앱 독 형태로 고정
+- 방 선택 중에는 방 버튼이 주 조작, 방 선택 후에는 액션 버튼이 주 조작
+- 짧은 모바일 viewport에서 시작 화면/던전 방 선택/던전 액션 버튼이 한 화면 안에 들어오는 것 확인
+
+검증됨:
+
+- `node --check src/game.js`
+- `python3 -m json.tool manifest.webmanifest`
+- `git diff --check`
+- 브라우저 로컬 검증:
+  - 시작 화면 `scrollHeight == innerHeight`
+  - 방 선택 3개 모두 보임
+  - 방 선택 후 액션 4개 모두 보임
+  - 브라우저 비전 평가: 모바일 앱 게임 HUD처럼 보이며 하단 액션 독이 한 손 조작 영역에 있음
+
 ### Pass 3 — 아이템 Heat/태그 개별화
 
 권장 범위:

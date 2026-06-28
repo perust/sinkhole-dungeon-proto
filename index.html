@@ -4,14 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#0b0d14" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="도심 싱크홀" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/pixel/player-delver.png" />
   <title>도심 싱크홀: 들고 나와라</title>
-  <link rel="stylesheet" href="styles.css?v=6" />
+  <link rel="stylesheet" href="styles.css?v=8" />
 </head>
 <body>
   <div id="app" class="phone">
 
     <!-- ===================== 시작 화면 ===================== -->
     <section id="screen-start" class="screen active">
+      <div class="app-chip">APP PROTOTYPE · ONE-HAND PLAY</div>
       <div class="start-art pixel-splash" aria-hidden="true">
         <img src="assets/pixel/title-splash.png" alt="" class="title-splash-img" />
         <div class="skyline"></div>
@@ -51,6 +58,10 @@
 
     <!-- ===================== 던전 화면 ===================== -->
     <section id="screen-dungeon" class="screen">
+      <div class="app-topline">
+        <span class="phase-chip">DIVE MODE</span>
+        <span class="gesture-hint">엄지로 선택</span>
+      </div>
       <header class="hud">
         <div class="hud-cell"><span class="hud-k">RP</span><span id="hud-rp" class="hud-v">0</span></div>
         <div class="hud-cell"><span class="hud-k">최고</span><span id="hud-depth" class="hud-v">1</span><span class="hud-u">층</span></div>
@@ -172,6 +183,6 @@
 
   </div>
 
-  <script src="src/game.js?v=7"></script>
+  <script src="src/game.js?v=8"></script>
 </body>
 </html>
