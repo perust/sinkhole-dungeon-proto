@@ -82,5 +82,6 @@
 ## 주의
 
 - `NEXT_STEPS.md`, `README.md`, `GAME_SYSTEM_V2.md`는 Pass 1~2 완료 상태로 갱신되어 있다.
-- Obsidian `# 14` 백로그는 아직 최종 완료 체크 반영 전이다. repo pass가 안정화된 뒤 한 번에 업데이트하는 것이 안전하다.
+- Obsidian `# 14` 백로그도 저장/이어하기와 방 선택 3지선다 완료 상태로 갱신되어 있다.
+- 다음 구현은 `아이템 Heat/태그 개별화`를 우선한다. 엔딩은 그 다음 패스로 둔다.
 - GitHub Pages 배포는 커밋/푸시 후 clean `gh-pages` snapshot으로 진행한다.
