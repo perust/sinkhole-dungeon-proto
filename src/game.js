@@ -2,7 +2,7 @@
    도심 싱크홀 — 회수 잠수 (플레이어블 프로토타입)
 
    핵심 훅: "던전이 내가 훔친 물건을 다시 가져가려 한다."
-   루프:    훔치고 → 도망치고 → 팔고 → 강화 → 더 깊이.
+   루프:    챙기고 → 도망치고 → 팔고 → 강화 → 더 깊이.
 
    - 메타 상태(meta): 런을 넘어 유지되는 영구 자산(RP, 강화 레벨, 최고 깊이).
    - 런 상태(run):    한 번의 잠수 동안만 존재하는 상태(층, 조명, 가방, 위험).
@@ -158,7 +158,7 @@
     run.currentItem = pickItem(run.floor);
     if (run.floor > meta.maxDepth) meta.maxDepth = run.floor;
     show('screen-dungeon');
-    log('싱크홀 아래, 1층으로 내려왔다.');
+    log('1층. 숨을 낮추고 들어간다.');
     render();
     startTick();
   }
@@ -172,10 +172,10 @@
     if (!run.chasing) {
       run.chasing = true;
       run.danger = Math.max(run.danger, GRAB_DANGER_BUMP);
-      log('공명음 — 회수자가 깨어나 가방을 노린다!', 'hot');
+      log('집었다. 회수자가 가방을 노린다!', 'hot');
     } else {
       run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
-      log(`${item.name}을(를) 챙겼다. 추격이 거세진다.`, 'hot');
+      log(`${item.name}까지 챙겼다. 발소리가 가까워진다.`, 'hot');
     }
     render();
   }
@@ -188,7 +188,7 @@
     if (run.floor > meta.maxDepth) meta.maxDepth = run.floor;
     run.currentItem = pickItem(run.floor);
     const f = FLOORS[run.floor - 1];
-    log(`${f.n}층 · ${f.name}으로 내려간다.`);
+    log(`${f.n}층. ${f.name}으로 더 내려간다.`);
     render();
   }
 
@@ -201,9 +201,9 @@
     run.danger = Math.max(0, run.danger * DROP_DANGER_FACTOR - DROP_DANGER_MINUS);
     if (run.bag.length === 0) {
       run.chasing = false;
-      log(`${dropped.name}을(를) 던지고 추격을 따돌렸다.`);
+      log(`${dropped.name}을 던졌다. 겨우 따돌렸다.`);
     } else {
-      log(`${dropped.name}을(를) 미끼로 던졌다. 위험이 가라앉는다.`);
+      log(`${dropped.name}을 미끼로 던졌다. 조금 벌어졌다.`);
     }
     render();
   }
@@ -228,8 +228,8 @@
     meta.totalEarned += consolation;
     el['fail-detail'].textContent =
       lost > 0
-        ? `가방 ${lost} RP어치를 빼앗겼다 · 긁어모은 RP +${consolation}`
-        : '빈손이라 잃은 것은 없다.';
+        ? `${lost} RP어치를 되찾겼다. 남은 조각 +${consolation} RP`
+        : '빈손이라 잃을 것도 없었다.';
     run.chasing = false;
     render();
     show('screen-fail');
@@ -245,7 +245,7 @@
     meta.rp -= cost;
     meta[lvKey] += 1;
     run.bought = true;
-    log(`${UPGRADES[type].label} 강화 완료.`, 'win');
+    log(`${UPGRADES[type].label}을 손봤다. 다음엔 더 버틴다.`, 'win');
     renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
   }
 
@@ -286,12 +286,12 @@
     // 액션 버튼 활성화
     el['btn-grab'].disabled = !(run.currentItem && roomFor(run.currentItem));
     el['btn-grab'].textContent = run.currentItem
-      ? (roomFor(run.currentItem) ? '회수물 집기' : '가방 가득')
-      : '이 층은 비었다';
+      ? (roomFor(run.currentItem) ? '챙기기' : '가방이 꽉 찼다')
+      : '남은 게 없다';
     el['btn-deeper'].disabled = run.floor >= FLOORS.length;
     el['btn-drop'].disabled   = !(run.chasing && run.bag.length > 0);
     el['btn-return'].disabled = false;
-    el['btn-return'].textContent = run.bag.length > 0 ? '들고 귀환' : '빈손 귀환';
+    el['btn-return'].textContent = run.bag.length > 0 ? '들고 나가기' : '그냥 나가기';
   }
 
   function renderBag() {
@@ -327,7 +327,7 @@
     } else {
       rpEl.classList.add('empty');
       rpEl.style.borderColor = '';
-      rpEl.innerHTML = '<span class="rp-name">회수 포인트 비었음</span>';
+      rpEl.innerHTML = '<span class="rp-name">비었다</span>';
     }
 
     // 회수자: 위험이 클수록 플레이어(왼쪽)에 가까워진다.
@@ -349,7 +349,7 @@
       const list = el['sale-list'];
       list.innerHTML = '';
       if (run.lastSale.length === 0) {
-        list.innerHTML = '<div class="sale-empty">판매할 회수물이 없다.</div>';
+        list.innerHTML = '<div class="sale-empty">팔 건 없다.</div>';
       } else {
         run.lastSale.forEach((it) => {
           const row = document.createElement('div');
@@ -364,9 +364,9 @@
 
     // 강화 버튼 3종
     const defs = [
-      ['up-bag',    'bag',    `가방 +2칸`,    `최대 ${bagCap()} → ${bagCap() + 2}칸`],
-      ['up-light',  'light',  `조명 강화`,    `최대 조명 +35`],
-      ['up-weapon', 'weapon', `무기 강화`,    `추격 둔화 +25%`],
+      ['up-bag',    'bag',    `가방 넓히기`,  `${bagCap()}칸 → ${bagCap() + 2}칸`],
+      ['up-light',  'light',  `조명 손보기`,  `최대 조명 +35`],
+      ['up-weapon', 'weapon', `무기 손보기`,  `추격 속도 -25%`],
     ];
     defs.forEach(([id, type, title, sub]) => {
       const lvKey = type + 'Level';
@@ -378,7 +378,7 @@
       btn.innerHTML =
         `<span class="up-title">${title}</span>` +
         `<span class="up-sub">${sub} · 현재 Lv.${meta[lvKey]}</span>` +
-        `<span class="up-cost">${run.bought ? '이번 강화 완료' : cost + ' RP'}</span>`;
+        `<span class="up-cost">${run.bought ? '오늘은 여기까지' : cost + ' RP'}</span>`;
     });
   }
 

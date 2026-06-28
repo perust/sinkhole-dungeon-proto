@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#0b0d14" />
-  <title>도심 싱크홀 — 회수 잠수</title>
+  <title>도심 싱크홀: 들고 나와라</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -27,10 +27,10 @@
       </div>
 
       <h1 class="title">도심 싱크홀</h1>
-      <p class="tagline">훔치고 · 도망치고 · 팔고 · 더 깊이</p>
-      <p class="premise">던전은 네가 훔친 물건을 다시 가져가려 한다.</p>
+      <p class="tagline">챙기고 · 도망치고 · 팔고 · 더 깊이</p>
+      <p class="premise">집는 순간, 던전이 되찾으러 온다.</p>
 
-      <button id="btn-enter" class="btn btn-primary btn-enter">입장</button>
+      <button id="btn-enter" class="btn btn-primary btn-enter">내려가기</button>
 
       <div class="meta-line">
         누적 RP <b id="start-rp">0</b> · 최고 깊이 <b id="start-depth">1</b>층
@@ -75,49 +75,49 @@
       </div>
 
       <div id="log" class="log">
-        <div class="log-line">싱크홀 아래로 내려왔다.</div>
+        <div class="log-line">아래가 열린다.</div>
       </div>
 
       <div class="actions">
-        <button id="btn-grab"   class="btn btn-act primary">회수물 집기</button>
+        <button id="btn-grab"   class="btn btn-act primary">챙기기</button>
         <button id="btn-deeper" class="btn btn-act">더 깊이</button>
         <button id="btn-drop"   class="btn btn-act warn">버리고 도망</button>
-        <button id="btn-return" class="btn btn-act good">들고 귀환</button>
+        <button id="btn-return" class="btn btn-act good">들고 나가기</button>
       </div>
     </section>
 
     <!-- ===================== 강화(귀환) 화면 ===================== -->
     <section id="screen-upgrade" class="screen">
-      <h2 class="result-title good-text">귀환 성공</h2>
+      <h2 class="result-title good-text">살아 나왔다</h2>
       <div class="sale-card">
         <div class="sale-list" id="sale-list"></div>
         <div class="sale-total">판매 <b id="sale-gain">+0</b> RP</div>
         <div class="sale-balance">보유 RP <b id="sale-balance">0</b></div>
       </div>
 
-      <p class="shop-hint">강화는 한 번. 하나만 고른다.</p>
+      <p class="shop-hint">이번엔 하나만 고르자.</p>
       <div class="upgrades">
         <button id="up-bag"    class="btn up-btn"></button>
         <button id="up-light"  class="btn up-btn"></button>
         <button id="up-weapon" class="btn up-btn"></button>
       </div>
 
-      <button id="btn-again" class="btn btn-primary">한 번 더 내려가기</button>
+      <button id="btn-again" class="btn btn-primary">다시 내려가기</button>
     </section>
 
     <!-- ===================== 실패 화면 ===================== -->
     <section id="screen-fail" class="screen">
-      <h2 class="result-title bad-text">빼앗겼다</h2>
+      <h2 class="result-title bad-text">되찾겼다</h2>
       <div class="fail-card">
-        <p class="fail-line">회수자가 가방을 원래 자리로 끌고 갔다.</p>
+        <p class="fail-line">회수자가 가방을 끌고 어둠 속으로 사라졌다.</p>
         <div class="fail-detail" id="fail-detail"></div>
-        <p class="fail-keep">강화와 누적 RP는 남는다.</p>
+        <p class="fail-keep">그래도 강화와 RP는 남는다.</p>
       </div>
-      <button id="btn-retry" class="btn btn-primary">다시 도전</button>
+      <button id="btn-retry" class="btn btn-primary">다시 내려가기</button>
     </section>
 
   </div>
 
-  <script src="src/game.js"></script>
+  <script src="src/game.js?v=2"></script>
 </body>
 </html>
