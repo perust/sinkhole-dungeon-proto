@@ -75,6 +75,15 @@
     return `<span class="loot-icon" style="--icon-index:${index}" aria-hidden="true"></span>`;
   }
 
+  function hasFinalConsonant(text) {
+    const ch = [...String(text)].pop();
+    if (!ch) return false;
+    const code = ch.charCodeAt(0);
+    return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0;
+  }
+  const subjectParticle = (text) => hasFinalConsonant(text) ? '이' : '가';
+  const objectParticle = (text) => hasFinalConsonant(text) ? '을' : '를';
+
   // 행동 비용
   const GRAB_LIGHT_COST    = 6;   // 회수물 집기: 공명으로 조명 소모
   const GRAB_DANGER_BUMP   = 4;   // 집는 순간 위험 점프
@@ -92,7 +101,41 @@
   const TICK_MS            = 150;
   const MOVE_MS            = 360; // 전진 연출 길이
   const DESCEND_MS         = 440; // 강하 연출 길이
-  const FAIL_CONSOLATION   = 0.25;// 실패 시 가방 가치의 25%만 긁어 회수
+
+  const RECOVERY_OUTCOMES = [
+    {
+      elapsed: '1시간 후',
+      title: '다른 조사자에게 발견됐다.',
+      body: '낯선 조사자가 비상등 하나를 흔들며 당신을 끌어냈다.',
+      rpRate: 0.35,
+      suspDelta: 4,
+      loss: '가방은 찢겼지만 작은 조각 몇 개는 건졌다.',
+    },
+    {
+      elapsed: '3시간 후',
+      title: '위원회 드론에 발견되어 구조됐다.',
+      body: '구조 기록이 남았다. 대신 현장 물품은 대부분 압수됐다.',
+      rpRate: 0.15,
+      suspDelta: -6,
+      loss: '위원회가 회수품을 압수하고 구조비 명목으로 정리했다.',
+    },
+    {
+      elapsed: '얼마나 지났는지 모르겠다',
+      title: '깨어났다.',
+      body: '혼자였다. 벽에 기대어 있다가 비틀거리며 지상으로 돌아왔다.',
+      rpRate: 0,
+      suspDelta: -2,
+      loss: '가방은 비어 있었다. 조명도 한동안 켜지지 않았다.',
+    },
+    {
+      elapsed: '2시간 후',
+      title: '암시장 수거꾼에게 끌려 나왔다.',
+      body: '치료비는 말없이 계산됐다. 누가 당신을 맡겼는지는 모른다.',
+      rpRate: 0.25,
+      suspDelta: 7,
+      loss: '쓸 만한 회수품 일부가 치료비로 사라졌다.',
+    },
+  ];
 
   // 강화: 레벨에 비례해 비용 상승
   const UPGRADES = {
@@ -242,6 +285,7 @@
       currentNodeId: 0,    // 현재 위치한 노드 id
       holdEvent: null,     // 활성 몬스터 대기 이벤트({type:'cross'|'ambush', node})
       moving: false,       // 전진/강하 연출 중
+      lastAction: '',      // 상단 상황판에 남길 최근 중요 행동/맥락
       maxFloor: 1,
       grabbedCount: 0,
       droppedCount: 0,
@@ -501,7 +545,7 @@
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
     'up-bag', 'up-light', 'up-weapon', 'btn-again',
-    'fail-detail', 'fail-susp', 'btn-retry',
+    'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
   ];
   function cacheDom() { IDS.forEach((id) => { el[id] = document.getElementById(id); }); }
 
@@ -631,6 +675,7 @@
     entry.entered = true; // 입구 환경 효과는 없음
     run.currentItem = entry.item && !entry.itemTaken ? entry.item : null;
     const f = FLOORS[floor - 1];
+    run.lastAction = `${f.n}층 진입. ${FLOOR_OPEN_CUE[floor - 1] || ''}`.trim();
     log(`${f.n}층. ${FLOOR_OPEN_CUE[floor - 1] || ''}`);
   }
 
@@ -654,6 +699,7 @@
       else if (node.danger < 0) run.danger = Math.max(0, run.danger + node.danger);
     }
     run.currentItem = node.item && !node.itemTaken ? node.item : null;
+    run.lastAction = run.currentItem ? `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 눈에 들어온다.` : '새 구역에 도착했다.';
     if (run.currentItem) log(`${run.currentItem.name}.`, node.style === 'danger' ? 'hot' : undefined);
     triggerMonster(node);
   }
@@ -670,21 +716,70 @@
     if (type === 'sight') {
       node.monsterResolved = true; // 정보성 1회 이벤트
       run.danger = Math.min(100, run.danger + SIGHT_DANGER);
-      log('통로 끝에서 젖은 쇳소리가 멈췄다.', 'hot');
+      const cue = directionCueFromNode(node, node.dangerExit, {
+        known: (dir) => `${dir} 어둠에서 젖은 쇳소리가 멈췄다.`,
+        unknown: '어둠 속에서 젖은 쇳소리가 멈췄다.',
+      });
+      run.lastAction = cue;
+      log(cue, 'hot');
     } else if (type === 'cross') {
       run.holdEvent = { type: 'cross', node: node.id };
       run.danger = Math.min(100, run.danger + CROSS_DANGER);
-      log('앞 갈림길에서 발소리가 스쳐 지나간다. 멈출까, 다른 길로 갈까.', 'hot');
+      run.lastAction = '갈림길 쪽에서 발소리가 스친다. 멈추거나 다른 길을 고를 수 있다.';
+      log('갈림길 쪽에서 발소리가 스쳐 간다. 멈출까, 다른 길로 갈까.', 'hot');
     } else if (type === 'ambush') {
       run.holdEvent = { type: 'ambush', node: node.id };
-      log('바로 옆에서 무언가 멈췄다. 움직이면 들킨다.', 'hot');
+      run.lastAction = '바로 옆 어둠에서 무언가 숨을 멈췄다. 움직이면 들킨다.';
+      log('바로 옆 어둠에서 무언가 숨을 멈췄다. 움직이면 들킨다.', 'hot');
     }
+  }
+
+  function dirLabelForKey(key) {
+    const slot = DIR_SLOTS.find((d) => d.key === key);
+    return slot ? slot.label : '';
+  }
+
+  function directionSourceLabel(label) {
+    return {
+      '앞': '정면',
+      '뒤': '뒤쪽',
+      '왼쪽 앞': '왼쪽 앞쪽',
+      '오른쪽 앞': '오른쪽 앞쪽',
+      '왼쪽 뒤': '왼쪽 뒤쪽',
+      '오른쪽 뒤': '오른쪽 뒤쪽',
+    }[label] || label;
+  }
+
+  function directionCueFromNode(from, toId, copy) {
+    const to = nodeById(toId);
+    const label = dirLabelForKey(directionKeyBetween(from, to));
+    return label ? copy.known(directionSourceLabel(label)) : copy.unknown;
+  }
+
+  function reversePathDirection(node) {
+    if (!node || !run || !run.floorMap) return '';
+    const entered = node.exits
+      .map((id) => nodeById(id))
+      .filter((nb) => nb && nb.entered && nb.id !== node.id);
+    if (!entered.length) return '';
+    entered.sort((a, b) => {
+      const aEdge = run.floorMap.travelledEdges && run.floorMap.travelledEdges.has(edgeKey(node.id, a.id)) ? 0 : 1;
+      const bEdge = run.floorMap.travelledEdges && run.floorMap.travelledEdges.has(edgeKey(node.id, b.id)) ? 0 : 1;
+      return aEdge - bEdge;
+    });
+    return dirLabelForKey(directionKeyBetween(node, entered[0]));
+  }
+
+  function pickupThreatCue(node) {
+    const dir = reversePathDirection(node);
+    return dir ? `${dir}에서 으스스한 한기가 느껴진다.` : '어둠 속에서 으스스한 한기가 번진다.';
   }
 
   // 전진 연출 후 콜백 실행. 연출 중에는 갈림길/액션을 가린다.
   function beginTransition(after, fx, duration) {
     if (run.moving) return;
     run.moving = true;
+    run.lastAction = fx === 'descend' ? '계단 아래로 내려가는 중이다.' : '어둠 속으로 이동하는 중이다.';
     render();
     if (fx === 'descend') playDescendFx();
     window.setTimeout(() => {
@@ -708,10 +803,12 @@
       if (ev.type === 'cross') {
         run.danger = Math.min(100, run.danger + CROSS_MOVE_DANGER);
         run.chasing = true;
+        run.lastAction = '발소리가 방향을 틀었다. 따라온다!';
         log('발소리가 방향을 틀었다. 따라온다!', 'hot');
       } else if (ev.type === 'ambush') {
         run.danger = Math.min(100, run.danger + AMBUSH_MOVE_DANGER);
         run.chasing = true;
+        run.lastAction = '움직였다. 들켰다 — 추격이 시작됐다.';
         log('움직였다. 들켰다 — 추격 시작!', 'hot');
       }
       const evNode = nodeById(ev.node);
@@ -741,9 +838,11 @@
     run.light = Math.max(0, run.light - WAIT_LIGHT_COST);
     if (ev.type === 'cross') {
       run.danger = Math.max(0, run.danger - 6);
+      run.lastAction = '발소리가 갈림길을 지나갔다.';
       log('발소리가 갈림길을 지나갔다.');
     } else {
       run.danger = Math.max(0, run.danger - 3);
+      run.lastAction = '숨을 죽였다. 발소리가 멀어진다.';
       log('숨을 죽였다. 발소리가 멀어진다.');
     }
     const evNode = nodeById(ev.node);
@@ -765,10 +864,15 @@
     if (!run.chasing) {
       run.chasing = true;
       run.danger = Math.max(run.danger, GRAB_DANGER_BUMP);
-      log('집었다. 뒤쪽 공기가 식었다.', 'hot');
+      const cue = pickupThreatCue(node);
+      run.lastAction = `${item.name}${objectParticle(item.name)} 집었다. ${cue}`;
+      log(`집었다. ${cue}`, 'hot');
     } else {
       run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
-      log(`${item.name}까지 챙겼다. 발소리가 가까워진다.`, 'hot');
+      const dir = reversePathDirection(node);
+      const cue = dir ? `${dir}에서 발소리가 가까워진다.` : '젖은 발소리가 가까워진다.';
+      run.lastAction = `${item.name}까지 챙겼다. ${cue}`;
+      log(`${item.name}까지 챙겼다. ${cue}`, 'hot');
     }
     render();
   }
@@ -794,11 +898,14 @@
     const dropped = run.bag.splice(idx, 1)[0];
     run.droppedCount += 1;
     run.danger = Math.max(0, run.danger * DROP_DANGER_FACTOR - DROP_DANGER_MINUS);
+    const droppedObject = `${dropped.name}${objectParticle(dropped.name)}`;
     if (run.bag.length === 0) {
       run.chasing = false;
-      log(`${dropped.name}을 던졌다. 겨우 따돌렸다.`);
+      run.lastAction = `${droppedObject} 던졌다. 발소리가 멀어진다.`;
+      log(`${droppedObject} 던졌다. 발소리가 멀어진다.`);
     } else {
-      log(`${dropped.name}을 미끼로 던졌다. 조금 벌어졌다.`);
+      run.lastAction = `${droppedObject} 미끼로 던졌다. 발소리와 거리가 조금 벌어진다.`;
+      log(`${droppedObject} 미끼로 던졌다. 발소리와 거리가 조금 벌어진다.`);
     }
     render();
   }
@@ -860,15 +967,23 @@
   function failRun() {
     stopTick();
     const lost = bagValue();
-    const consolation = lost > 0 ? Math.max(1, Math.round(lost * FAIL_CONSOLATION)) : 0;
+    const outcome = RECOVERY_OUTCOMES[Math.floor(Math.random() * RECOVERY_OUTCOMES.length)];
+    const consolation = lost > 0 ? Math.max(0, Math.round(lost * outcome.rpRate)) : 0;
+    const previousSuspicion = meta.suspicion;
     meta.rp += consolation;
     meta.totalEarned += consolation;
-    meta.suspicion = Math.max(0, meta.suspicion - 3);
+    meta.suspicion = Math.max(0, Math.min(99, meta.suspicion + outcome.suspDelta));
     saveMeta(); // 실패 보상 후 자동 저장
-    el['fail-detail'].textContent =
+    el['fail-recovery'].innerHTML = `<b>${outcome.elapsed}</b><span>${outcome.title}</span><p>${outcome.body}</p>`;
+    const suspChange = meta.suspicion - previousSuspicion;
+    const suspText = suspChange === 0 ? '변화 없음' : signed(suspChange);
+    el['fail-detail'].innerHTML = [
       lost > 0
-        ? `${lost} RP어치를 되찾겼다. 남은 조각 +${consolation} RP`
-        : '빈손이라 잃을 것도 없었다.';
+        ? `잃은 짐 ${lost} RP · 남은 조각 +${consolation} RP`
+        : '빈손이라 잃은 회수품은 없었다.',
+      outcome.loss,
+      `의심도 ${suspText}`,
+    ].map((line) => `<div>${line}</div>`).join('');
     el['fail-susp'].textContent = meta.suspicion;
     run.chasing = false;
     render();
@@ -1016,12 +1131,14 @@
     return fallback;
   }
 
-  function situationCopy(node, cues) {
+  function situationCopy(node) {
     const here = node.kind === 'entry' ? '입구.' : (node.desc ? `${node.desc}.` : '어둠 속 공간.');
-    const item = run.currentItem ? ` 발견: ${run.currentItem.name}.` : '';
-    const event = run.holdEvent ? (run.holdEvent.type === 'ambush' ? ' 옆에서 무언가 멈췄다.' : ' 앞에서 발소리가 스친다.') : '';
-    const exits = cues.length ? ` 이동 가능: ${cues.join('  ')}` : ' 갈 곳을 찾는다.';
-    return `${here}${item}${event}${exits}`;
+    const item = run.currentItem ? ` 눈앞에 ${run.currentItem.name}${subjectParticle(run.currentItem.name)} 있다. ${run.currentItem.slots}칸, ${run.currentItem.value}RP.` : '';
+    const event = run.holdEvent ? (run.holdEvent.type === 'ambush' ? ' 옆 어둠에서 숨소리가 멎었다.' : ' 갈림길 쪽에서 발소리가 스친다.') : '';
+    const chase = run.chasing && !run.holdEvent ? ' 젖은 발소리가 따라붙는다.' : '';
+    const action = run.lastAction ? ` ${run.lastAction}` : '';
+    const prompt = run.moving ? ' 이동 중에도 현재 상황을 놓치지 않는다.' : ' 아래 방향 패드로 다음 행동을 고른다.';
+    return `${here}${item}${event}${chase}${action}${prompt}`;
   }
 
   // 현재 노드의 출구(+상황 선택지)를 8방향 패드로 그린다. 장소명은 도착 후 상황 텍스트로만 알려준다.
@@ -1030,7 +1147,7 @@
     if (!dock) return;
     if (!run || run.moving || !run.floorMap) {
       dock.innerHTML = '';
-      if (el['choice-cue']) el['choice-cue'].textContent = run && run.moving ? '앞으로 간다.' : '어디로 갈까.';
+      if (el['choice-cue'] && run && run.floorMap) el['choice-cue'].textContent = situationCopy(currentNode());
       return;
     }
     const node = currentNode();
@@ -1057,7 +1174,7 @@
     out.splice(4, 0, waitButton || '<div class="room-pad-center" aria-hidden="true"></div>');
     dock.innerHTML = out.join('');
     dock.classList.toggle('spatial', true);
-    if (el['choice-cue']) el['choice-cue'].textContent = situationCopy(node, cues);
+    if (el['choice-cue']) el['choice-cue'].textContent = situationCopy(node);
     dock.querySelectorAll('[data-act]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const act = btn.dataset.act;

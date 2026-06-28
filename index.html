@@ -73,6 +73,11 @@
         <span class="floor-name" id="floor-name">무너진 도시 시설</span>
       </div>
 
+      <div id="situation-panel" class="situation-panel" aria-live="polite">
+        <span class="situation-label">상황</span>
+        <div id="choice-cue" class="situation-copy">아래가 열린다.</div>
+      </div>
+
       <div class="gauges">
         <div class="gauge">
           <div class="gauge-label"><span>조명</span><span id="light-val">100%</span></div>
@@ -94,7 +99,6 @@
       </div>
 
       <div class="stage" id="stage">
-        <div id="choice-cue" class="choice-cue">어디로 갈까.</div>
         <svg id="mini-map" class="mini-map" viewBox="0 0 120 90" aria-hidden="true"></svg>
         <div class="fp-view" aria-hidden="true">
           <div class="fp-ceiling"></div>
@@ -178,12 +182,13 @@
 
     <!-- ===================== 실패 화면 ===================== -->
     <section id="screen-fail" class="screen">
-      <h2 class="result-title bad-text">되찾겼다</h2>
+      <h2 class="result-title bad-text">기절했다.</h2>
       <div class="fail-card">
-        <p class="fail-line">회수자가 가방을 끌고 어둠 속으로 사라졌다.</p>
+        <p class="fail-line">정신이 끊겼다. 깨어났을 때 런은 끝나 있었다.</p>
+        <div class="fail-recovery" id="fail-recovery"></div>
         <div class="fail-detail" id="fail-detail"></div>
-        <div class="fail-meta">지상 의심도 <b id="fail-susp" class="susp-v">0</b> — 잃은 짐은 던전이 도로 묻었다.</div>
-        <p class="fail-keep">그래도 강화와 RP는 남는다.</p>
+        <div class="fail-meta">지상 의심도 <b id="fail-susp" class="susp-v">0</b></div>
+        <p class="fail-keep">강화와 남은 RP는 유지된다.</p>
       </div>
       <button id="btn-retry" class="btn btn-primary">다시 내려가기</button>
     </section>

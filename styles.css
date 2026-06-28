@@ -389,7 +389,20 @@ body {
 .goal-line b { color: var(--accent); }
 
 .fail-line { font-size: 15px; margin: 0 0 10px; }
-.fail-detail { color: var(--gold); font-size: 14px; margin-bottom: 10px; }
+.fail-recovery {
+  margin: 10px 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(255,161,74,.28);
+  border-radius: 12px;
+  background: rgba(255,161,74,.07);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.fail-recovery b { color: var(--gold); display: block; margin-bottom: 3px; }
+.fail-recovery span { color: #eef3ff; font-weight: 800; display: block; }
+.fail-recovery p { color: var(--muted); margin: 5px 0 0; }
+.fail-detail { color: var(--gold); font-size: 14px; margin-bottom: 10px; line-height: 1.45; }
+.fail-detail div + div { margin-top: 3px; }
 .fail-keep { color: var(--muted); font-size: 13px; margin: 0; }
 
 
@@ -947,31 +960,42 @@ html, body { touch-action: manipulation; }
 /* 중앙 시야창을 키우고, 게이지/가방/로그를 슬림하게 눌러 stage에 공간을 몰아준다. */
 
 #screen-dungeon { padding-bottom: calc(186px + env(safe-area-inset-bottom)); }
-#screen-dungeon .floor-banner { margin-top: 6px; }
+#screen-dungeon .floor-banner { margin-top: 5px; }
 #screen-dungeon .gauges { flex-direction: row; gap: 10px; margin-top: 7px; }
 #screen-dungeon .gauges .gauge { flex: 1 1 0; }
 #screen-dungeon .gauges .gauge-label { margin-bottom: 3px; }
 #screen-dungeon .bag-row { margin-top: 7px; }
-.choice-cue {
-  position: absolute;
-  left: 12px; right: 12px; top: 12px;
-  z-index: 8;
-  min-height: 48px;
-  max-height: 72px;
-  padding: 10px 12px;
+.situation-panel {
+  flex: 0 0 auto;
+  margin-top: 7px;
+  min-height: 84px;
+  padding: 9px 11px 10px;
   border-radius: 16px;
   border: 1px solid rgba(255,209,102,.32);
   background: linear-gradient(180deg, rgba(12,16,28,.9), rgba(5,7,12,.76));
   color: #e6eefc;
+  box-shadow: 0 10px 26px rgba(0,0,0,.28), 0 0 18px rgba(255,209,102,.08);
+  backdrop-filter: blur(8px);
+}
+.situation-label {
+  display: inline-block;
+  margin-bottom: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255,209,102,.13);
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.situation-copy {
   font-size: 13px;
   font-weight: 750;
-  line-height: 1.32;
+  line-height: 1.38;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
-  box-shadow: 0 10px 26px rgba(0,0,0,.38), 0 0 18px rgba(255,209,102,.08);
-  backdrop-filter: blur(8px);
 }
 
 .mini-map {
@@ -1203,9 +1227,10 @@ html, body { touch-action: manipulation; }
 /* 짧은 모바일(≈577px 높이)에서도 핵심 버튼이 보이게 압축 */
 @media (max-height: 680px) {
   #screen-dungeon { padding-bottom: calc(196px + env(safe-area-inset-bottom)); }
-  #screen-dungeon .stage { min-height: 154px; }
-  #screen-dungeon .choice-cue { min-height: 46px; max-height: 82px; padding: 8px 10px; font-size: 12px; line-height: 1.28; }
-  #screen-dungeon .mini-map { top: 76px; width: 94px; height: 64px; }
+  #screen-dungeon .stage { min-height: 144px; }
+  #screen-dungeon .situation-panel { min-height: 70px; padding: 7px 9px; }
+  #screen-dungeon .situation-copy { font-size: 12px; line-height: 1.28; -webkit-line-clamp: 3; }
+  #screen-dungeon .mini-map { top: 10px; width: 94px; height: 64px; }
   #dock { gap: 6px; padding: 8px; }
   #dock #room-choices { gap: 6px; }
   #dock #room-choices.spatial { grid-auto-rows: minmax(36px, auto); }
