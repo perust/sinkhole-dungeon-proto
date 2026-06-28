@@ -273,10 +273,90 @@
     return arr;
   }
 
+  const MAP_DIRECTIONS = [
+    { key: 'n',  dx: 0,  dy: -1 },
+    { key: 'ne', dx: 1,  dy: -1 },
+    { key: 'e',  dx: 1,  dy: 0 },
+    { key: 'se', dx: 1,  dy: 1 },
+    { key: 's',  dx: 0,  dy: 1 },
+    { key: 'sw', dx: -1, dy: 1 },
+    { key: 'w',  dx: -1, dy: 0 },
+    { key: 'nw', dx: -1, dy: -1 },
+  ];
+  const MAP_DIRECTION_BY_KEY = Object.fromEntries(MAP_DIRECTIONS.map((d) => [d.key, d]));
+  const MAP_DIRECTION_ORDER = ['n', 'ne', 'nw', 'e', 'w', 'se', 'sw', 's'];
+
+  const posKey = (pos) => `${pos.x},${pos.y}`;
+  const sign = (n) => (n > 0 ? 1 : n < 0 ? -1 : 0);
+  const edgeKey = (a, b) => [a, b].sort((x, y) => x - y).join('-');
+
   function addEdge(nodes, a, b) {
     if (a === b) return;
     if (!nodes[a].exits.includes(b)) nodes[a].exits.push(b);
     if (!nodes[b].exits.includes(a)) nodes[b].exits.push(a);
+  }
+
+  function usedDirectionKeys(nodes, fromId) {
+    const from = nodes[fromId];
+    const used = new Set();
+    if (!from || !from.pos) return used;
+    from.exits.forEach((toId) => {
+      const to = nodes[toId];
+      const key = directionKeyBetween(from, to);
+      if (key) used.add(key);
+    });
+    return used;
+  }
+
+  function directionKeyBetween(from, to) {
+    if (!from || !to || !from.pos || !to.pos) return null;
+    const dx = sign(to.pos.x - from.pos.x);
+    const dy = sign(to.pos.y - from.pos.y);
+    const dir = MAP_DIRECTIONS.find((d) => d.dx === dx && d.dy === dy);
+    return dir ? dir.key : null;
+  }
+
+  function placeNeighbor(nodes, fromId, toId, preferred = []) {
+    const from = nodes[fromId];
+    const to = nodes[toId];
+    if (!from || !to || !from.pos || to.pos) return;
+    const occupied = new Set(nodes.filter((n) => n.pos).map((n) => posKey(n.pos)));
+    const used = usedDirectionKeys(nodes, fromId);
+    const choices = preferred.concat(MAP_DIRECTION_ORDER).filter((key, index, arr) => arr.indexOf(key) === index);
+    let fallback = null;
+    for (const key of choices) {
+      const dir = MAP_DIRECTION_BY_KEY[key];
+      if (!dir || used.has(key)) continue;
+      for (let radius = 1; radius <= 3; radius++) {
+        const pos = { x: from.pos.x + dir.dx * radius, y: from.pos.y + dir.dy * radius };
+        if (!fallback) fallback = pos;
+        if (!occupied.has(posKey(pos))) { to.pos = pos; return; }
+      }
+    }
+    if (fallback) { to.pos = fallback; return; }
+    // Extremely small maps should not exhaust eight directions, but keep a safe fallback.
+    to.pos = { x: from.pos.x + 1, y: from.pos.y };
+  }
+
+  function addPositionedEdge(nodes, a, b, preferred = []) {
+    if (a === b) return;
+    if (nodes[a].pos && !nodes[b].pos) placeNeighbor(nodes, a, b, preferred);
+    else if (nodes[b].pos && !nodes[a].pos) {
+      const reverse = preferred.map((key) => {
+        const dir = MAP_DIRECTION_BY_KEY[key];
+        const rev = dir && MAP_DIRECTIONS.find((d) => d.dx === -dir.dx && d.dy === -dir.dy);
+        return rev ? rev.key : key;
+      });
+      placeNeighbor(nodes, b, a, reverse);
+    }
+    addEdge(nodes, a, b);
+  }
+
+  function canAddVisibleDirectionEdge(nodes, a, b) {
+    if (a === b || nodes[a].exits.includes(b) || !nodes[a].pos || !nodes[b].pos) return false;
+    const ak = directionKeyBetween(nodes[a], nodes[b]);
+    const bk = directionKeyBetween(nodes[b], nodes[a]);
+    return !!ak && !!bk && !usedDirectionKeys(nodes, a).has(ak) && !usedDirectionKeys(nodes, b).has(bk);
   }
 
   function applyKind(node, kind) {
@@ -311,17 +391,18 @@
     const nodes = [];
     for (let i = 0; i < count; i++) {
       nodes.push({
-        id: i, exits: [], kind: null, label: '', desc: '', style: '',
+        id: i, exits: [], pos: null, kind: null, label: '', desc: '', style: '',
         light: 0, danger: 0, item: null, itemTaken: false,
         monster: null, monsterResolved: false, dangerExit: null, entered: false,
       });
     }
+    nodes[0].pos = { x: 0, y: 0 };
 
     // 1) 깊이가 보장되도록 등뼈(backbone)를 직선으로 잇는다.
     const spine = Math.max(3, Math.ceil(count * 0.6));
-    for (let i = 1; i < spine; i++) addEdge(nodes, i, i - 1);
+    for (let i = 1; i < spine; i++) addPositionedEdge(nodes, i - 1, i, ['n', 'ne', 'nw']);
     // 2) 나머지 노드는 앞쪽 노드 어딘가에 가지로 붙인다.
-    for (let i = spine; i < count; i++) addEdge(nodes, i, Math.floor(Math.random() * i));
+    for (let i = spine; i < count; i++) addPositionedEdge(nodes, Math.floor(Math.random() * i), i, ['e', 'w', 'ne', 'nw', 'se', 'sw']);
 
     // 3) 계단(또는 마지막 층의 가장 깊은 방)은 트리상 가장 먼 잎으로 정한다.
     const treeDist = bfs(nodes, 0);
@@ -333,15 +414,23 @@
     if (nodes[0].exits.length < 2) {
       const cand = [];
       for (let k = 1; k < count; k++) if (k !== stairsId && !nodes[0].exits.includes(k)) cand.push(k);
-      if (cand.length) addEdge(nodes, 0, cand[Math.floor(Math.random() * cand.length)]);
+      if (cand.length) {
+        const free = cand.filter((id) => canAddVisibleDirectionEdge(nodes, 0, id));
+        addEdge(nodes, 0, (free.length ? free : cand)[Math.floor(Math.random() * (free.length ? free.length : cand.length))]);
+      }
     }
 
     // 5) 갈림길을 더 만들기 위해 여분의 연결을 1~2개 추가한다(계단은 잎으로 보존).
     const extra = 1 + Math.floor(Math.random() * 2);
-    for (let e = 0; e < extra; e++) {
-      const a = Math.floor(Math.random() * count);
-      const b = Math.floor(Math.random() * count);
-      if (a !== stairsId && b !== stairsId) addEdge(nodes, a, b);
+    const extraCandidates = [];
+    for (let a = 0; a < count; a++) {
+      for (let b = a + 1; b < count; b++) {
+        if (a !== stairsId && b !== stairsId && canAddVisibleDirectionEdge(nodes, a, b)) extraCandidates.push([a, b]);
+      }
+    }
+    shuffle(extraCandidates);
+    for (let e = 0; e < extra && e < extraCandidates.length; e++) {
+      addEdge(nodes, extraCandidates[e][0], extraCandidates[e][1]);
     }
 
     // 6) 방 유형 배정.
@@ -360,7 +449,7 @@
     // 8) 몬스터 이벤트 배치.
     placeMonsters(nodes, others, stairsId, floor);
 
-    return { nodes, entryId: 0, stairsId, count };
+    return { nodes, entryId: 0, stairsId, count, travelledEdges: new Set() };
   }
 
   // 몬스터 이벤트 3종:
@@ -569,6 +658,12 @@
     triggerMonster(node);
   }
 
+  function markTravelledEdge(fromId, toId) {
+    if (!run || !run.floorMap || fromId === toId) return;
+    if (!run.floorMap.travelledEdges) run.floorMap.travelledEdges = new Set();
+    run.floorMap.travelledEdges.add(edgeKey(fromId, toId));
+  }
+
   function triggerMonster(node) {
     if (!node.monster || node.monsterResolved) return;
     const type = node.monster.type;
@@ -631,7 +726,9 @@
 
     if (target.kind === 'stairs') { descend(); return; }
 
+    const fromId = node.id;
     beginTransition(() => {
+      markTravelledEdge(fromId, targetId);
       run.currentNodeId = targetId;
       arriveAtNode();
     }, 'move', MOVE_MS);
@@ -903,19 +1000,20 @@
     { key: 'se', cls: 'dir-se', glyph: '↘', label: '오른쪽 뒤' },
   ];
 
-  function directionForExit(target, index, total, used) {
-    const preferred = [];
-    if (target.kind === 'stairs') preferred.push('s');
-    else if (target.kind === 'entry') preferred.push('s');
-    else if (target.kind === 'door') preferred.push('w', 'nw');
-    else if (target.kind === 'crack') preferred.push('e', 'ne');
-    else if (target.kind === 'vent') preferred.push('sw', 'w');
-    else if (target.kind === 'corridor' || target.kind === 'hall') preferred.push('n', 'ne', 'nw');
-    const fallback = total <= 2 ? ['w', 'e', 'n', 's', 'nw', 'ne', 'sw', 'se'] : ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
-    for (const key of preferred.concat(fallback.slice(index), fallback)) {
-      if (!used.has(key)) { used.add(key); return DIR_SLOTS.find((d) => d.key === key); }
+  function directionForExit(source, target, index, used) {
+    const key = directionKeyBetween(source, target);
+    if (key && !used.has(key)) {
+      used.add(key);
+      return DIR_SLOTS.find((d) => d.key === key);
     }
-    return DIR_SLOTS[index % DIR_SLOTS.length];
+    // Coordinate placement tries to keep directions unique per node. If a rare
+    // procedural collision still happens, keep every exit usable by placing the
+    // overflow in the first empty pad slot rather than leaking destination names.
+    const fallback = DIR_SLOTS[index % DIR_SLOTS.length];
+    for (const dir of DIR_SLOTS) {
+      if (!used.has(dir.key)) { used.add(dir.key); return dir; }
+    }
+    return fallback;
   }
 
   function situationCopy(node, cues) {
@@ -950,7 +1048,7 @@
     node.exits.forEach((nid, index) => {
       const t = nodeById(nid);
       const stairs = t.kind === 'stairs';
-      const dir = directionForExit(t, index, node.exits.length, usedDirs);
+      const dir = directionForExit(node, t, index, usedDirs);
       cues.push(`${dir.glyph} ${dir.label}`);
       exitsByDir.set(dir.key, `<button class="btn room-btn ${dir.cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${dir.label} 방향"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${dir.label}</b></span></button>`);
     });
@@ -973,27 +1071,36 @@
     const svg = el['mini-map'];
     if (!svg || !run || !run.floorMap) return;
     const nodes = run.floorMap.nodes;
-    const dist = bfs(nodes, run.floorMap.entryId || 0).map((d) => (d === Infinity ? 0 : d));
-    const lanes = [-28, 0, 28];
-    const coords = nodes.map((n, idx) => {
-      const d = dist[idx] || 0;
-      return { x: 18 + Math.min(3, d) * 28, y: 45 + lanes[idx % lanes.length] };
-    });
+    const current = currentNode();
+    if (!current || !current.pos) { svg.innerHTML = ''; return; }
+
+    // Radar behavior: the player is fixed at the center and only already
+    // travelled nodes/edges are drawn. Unknown branches and unvisited exits stay
+    // hidden even when the main direction pad makes those exits selectable.
     const seen = (id) => nodes[id] && nodes[id].entered;
-    const edgeSet = new Set();
-    let html = '';
-    nodes.forEach((n) => {
-      n.exits.forEach((to) => {
-        const key = [n.id, to].sort((a, b) => a - b).join('-');
-        if (edgeSet.has(key)) return;
-        edgeSet.add(key);
-        if (!seen(n.id) && !seen(to)) return;
-        const a = coords[n.id], b = coords[to];
-        html += `<line class="${seen(n.id) && seen(to) ? 'seen' : 'hint'}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
-      });
+    const visibleNodes = nodes.filter((n) => seen(n.id) || n.id === run.currentNodeId);
+    const center = { x: 60, y: 45 };
+    const pad = 14;
+    const maxDx = Math.max(1, ...visibleNodes.map((n) => Math.abs((n.pos || current.pos).x - current.pos.x)));
+    const maxDy = Math.max(1, ...visibleNodes.map((n) => Math.abs((n.pos || current.pos).y - current.pos.y)));
+    const cell = Math.min(22, (center.x - pad) / maxDx, (center.y - pad) / maxDy);
+    const coords = nodes.map((n) => {
+      const p = n.pos || current.pos;
+      return {
+        x: center.x + (p.x - current.pos.x) * cell,
+        y: center.y + (p.y - current.pos.y) * cell,
+      };
     });
-    nodes.forEach((n) => {
-      if (!seen(n.id) && n.id !== run.currentNodeId) return;
+
+    const travelled = run.floorMap.travelledEdges || new Set();
+    let html = '';
+    travelled.forEach((key) => {
+      const [aId, bId] = key.split('-').map((v) => parseInt(v, 10));
+      if (!seen(aId) || !seen(bId)) return;
+      const a = coords[aId], b = coords[bId];
+      html += `<line class="seen" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
+    });
+    visibleNodes.forEach((n) => {
       const p = coords[n.id];
       const cls = n.id === run.currentNodeId ? 'current' : 'seen';
       html += `<circle class="${cls}" cx="${p.x}" cy="${p.y}" r="${cls === 'current' ? 4.4 : 3}"/>`;
