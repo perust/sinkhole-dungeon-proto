@@ -407,7 +407,7 @@
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
     'room-choices', 'dock', 'dock-actions',
-    'bag-slots', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log',
+    'bag-slots', 'choice-cue', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log',
     'btn-grab', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
@@ -899,7 +899,6 @@
     if (target.kind === 'crack') return { cls: 'dir-right', glyph: '→', hint: '오른쪽' };
     if (target.kind === 'corridor' || target.kind === 'hall') return { cls: 'dir-forward', glyph: '↑', hint: '앞' };
     if (target.kind === 'vent') return { cls: 'dir-low', glyph: '↙', hint: '낮게' };
-    if (target.kind === 'storage' || target.kind === 'office') return { cls: 'dir-room', glyph: '▣', hint: '안쪽' };
     const fallback = total <= 2 ? (index === 0 ? ['dir-left', '←', '왼쪽'] : ['dir-right', '→', '오른쪽'])
       : index === 0 ? ['dir-left', '←', '왼쪽'] : index === total - 1 ? ['dir-right', '→', '오른쪽'] : ['dir-forward', '↑', '앞'];
     return { cls: fallback[0], glyph: fallback[1], hint: fallback[2] };
@@ -909,14 +908,20 @@
   function renderChoices() {
     const dock = el['room-choices'];
     if (!dock) return;
-    if (!run || run.moving || !run.floorMap) { dock.innerHTML = ''; return; }
+    if (!run || run.moving || !run.floorMap) {
+      dock.innerHTML = '';
+      if (el['choice-cue']) el['choice-cue'].textContent = run && run.moving ? '앞으로 간다.' : '어디로 갈까.';
+      return;
+    }
     const node = currentNode();
     const out = [];
+    const cues = [];
 
     // 상황 선택지 '기다리기' — 몬스터 대기 이벤트가 있을 때만.
     if (run.holdEvent) {
       const waitDesc = run.holdEvent.type === 'ambush' ? '숨을 죽이고 보낸다' : '지나갈 때까지 멈춘다';
-      out.push(`<button class="btn room-btn good dir-wait" data-act="wait"><i class="dir-glyph">•</i><span class="choice-text"><b>기다리기</b><span>${waitDesc}</span></span></button>`);
+      cues.push(`• ${waitDesc}`);
+      out.push(`<button class="btn room-btn good dir-wait" data-act="wait"><i class="dir-glyph">•</i><span class="choice-text"><b>기다리기</b></span></button>`);
     }
 
     // 인접 노드들 = 갈림길.
@@ -929,11 +934,17 @@
       const dir = choiceDirectionMeta(t, index, node.exits.length, stairs);
       if (node.dangerExit === nid) { style = 'danger'; desc = '젖은 쇳소리'; }
       else if (!stairs && t.exits.length === 1) { desc = (desc ? desc + ' · ' : '') + '막다른 곳'; }
-      out.push(`<button class="btn room-btn ${style} ${dir.cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${dir.hint} ${label}"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${label}</b><span>${desc}</span></span></button>`);
+      if (desc) cues.push(`${dir.glyph} ${desc}`);
+      out.push(`<button class="btn room-btn ${style} ${dir.cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${dir.hint} ${label}"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${label}</b></span></button>`);
     });
 
     dock.innerHTML = out.join('');
     dock.classList.toggle('multi', out.length >= 3);
+    dock.classList.toggle('spatial', true);
+    if (el['choice-cue']) {
+      const nodeName = node.kind === 'entry' ? '입구' : node.label;
+      el['choice-cue'].textContent = cues.length ? `${nodeName} · ${cues.slice(0, 4).join('  ')}` : `${nodeName} · 어디로 갈까.`;
+    }
     dock.querySelectorAll('[data-act]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const act = btn.dataset.act;
