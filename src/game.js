@@ -284,6 +284,7 @@
       floorMap: null,      // 이번 층의 작은 맵
       currentNodeId: 0,    // 현재 위치한 노드 id
       holdEvent: null,     // 활성 몬스터 대기 이벤트({type:'cross'|'ambush', node})
+      pendingEvent: null,  // 방 도착 후 플레이어가 고르는 짧은 환경 이벤트
       moving: false,       // 전진/강하 연출 중
       lastAction: '',      // 상단 상황판에 남길 최근 중요 행동/맥락
       maxFloor: 1,
@@ -437,7 +438,7 @@
       nodes.push({
         id: i, exits: [], pos: null, kind: null, label: '', desc: '', style: '',
         light: 0, danger: 0, item: null, itemTaken: false,
-        monster: null, monsterResolved: false, dangerExit: null, entered: false,
+        monster: null, monsterResolved: false, dangerExit: null, entered: false, roomEventResolved: false,
       });
     }
     nodes[0].pos = { x: 0, y: 0 };
@@ -701,7 +702,122 @@
     run.currentItem = node.item && !node.itemTaken ? node.item : null;
     run.lastAction = run.currentItem ? `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 눈에 들어온다.` : '새 구역에 도착했다.';
     if (run.currentItem) log(`${run.currentItem.name}.`, node.style === 'danger' ? 'hot' : undefined);
+    maybeStartRoomEvent(node);
     triggerMonster(node);
+  }
+
+  function eventChoice(id, label, sub, tone = '') {
+    return { id, label, sub, tone };
+  }
+
+  function maybeStartRoomEvent(node) {
+    if (!node || node.roomEventResolved || node.kind === 'entry' || node.kind === 'stairs') return;
+    let ev = null;
+    if (node.kind === 'office') {
+      ev = {
+        type: 'cabinet',
+        title: '잠긴 캐비닛',
+        cue: '찌그러진 캐비닛 문이 반쯤 벌어져 있다.',
+        choices: [
+          eventChoice('open', '조심히 연다', '회수물 확인', 'good'),
+          eventChoice('skip', '그냥 지나간다', '조용히 무시'),
+          eventChoice('noise', '소리를 내서 확인한다', '기척을 떠본다', 'danger'),
+        ],
+      };
+    } else if (node.kind === 'crack' || node.kind === 'corridor' || node.kind === 'hall') {
+      ev = {
+        type: 'footprints',
+        title: node.kind === 'crack' ? '젖은 발자국' : '짙은 복도',
+        cue: node.kind === 'crack' ? '젖은 발자국이 방금 찍힌 듯 빛난다.' : '앞쪽 어둠이 유난히 낮게 깔려 있다.',
+        choices: [
+          eventChoice('hold', '숨을 죽인다', '기척 낮춤', 'good'),
+          eventChoice('rush', '빠르게 지난다', '조명 절약', 'danger'),
+        ],
+      };
+      if (run.bag.length > 0) ev.choices.push(eventChoice('bait', '미끼를 던진다', '짐 1개 소모', 'good'));
+    } else if (node.kind === 'vent') {
+      ev = {
+        type: 'vent',
+        title: '낮은 환풍구',
+        cue: '사람 하나 겨우 지날 낮은 틈이 열린다.',
+        choices: [
+          eventChoice('crawl', '기어서 통과한다', '작은 단서 탐색', 'good'),
+          eventChoice('turn', '돌아선다', '위험 피함'),
+        ],
+      };
+    }
+    if (!ev) return;
+    node.roomEventResolved = true;
+    run.pendingEvent = { ...ev, node: node.id };
+    run.lastAction = '';
+    log(ev.cue, ev.type === 'footprints' ? 'hot' : undefined);
+  }
+
+  function takeCheapestBagItem() {
+    if (!run.bag.length) return null;
+    let idx = 0;
+    run.bag.forEach((it, i) => { if (it.value < run.bag[idx].value) idx = i; });
+    return run.bag.splice(idx, 1)[0];
+  }
+
+  function resolveRoomEvent(choiceId) {
+    if (!run || run.moving || !run.pendingEvent) return;
+    const ev = run.pendingEvent;
+    const node = nodeById(ev.node) || currentNode();
+    let msg = '';
+    if (ev.type === 'cabinet') {
+      if (choiceId === 'open') {
+        run.light = Math.max(0, run.light - 3);
+        if (!run.currentItem && !node.itemTaken) {
+          node.item = node.item || pickFloorItem(run.floor, node);
+          run.currentItem = node.item;
+          msg = `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 안쪽에서 굴러 나왔다.`;
+        } else {
+          run.danger = Math.max(0, run.danger - 2);
+          msg = '문을 천천히 닫았다. 주변 소리가 가라앉는다.';
+        }
+      } else if (choiceId === 'noise') {
+        run.danger = Math.min(100, run.danger + 7);
+        msg = '금속음이 울렸다. 먼 곳에서 같은 박자가 돌아온다.';
+      } else {
+        run.danger = Math.max(0, run.danger - 1);
+        msg = '캐비닛은 그대로 둔다. 조용히 지나갈 수 있다.';
+      }
+    } else if (ev.type === 'footprints') {
+      if (choiceId === 'hold') {
+        run.light = Math.max(0, run.light - 2);
+        run.danger = Math.max(0, run.danger - 5);
+        msg = '숨을 죽이자 발자국의 물기가 천천히 마른다.';
+      } else if (choiceId === 'bait') {
+        const bait = takeCheapestBagItem();
+        if (bait) {
+          run.droppedCount += 1;
+          run.danger = Math.max(0, run.danger - 12);
+          if (run.bag.length === 0) run.chasing = false;
+          msg = `${bait.name}${objectParticle(bait.name)} 미끼로 던졌다. 젖은 소리가 멀어진다.`;
+        } else {
+          run.danger = Math.min(100, run.danger + 4);
+          msg = '던질 게 없다. 빈손만 어둠 속에서 떨린다.';
+        }
+      } else {
+        run.light = Math.max(0, run.light - 1);
+        run.danger = Math.min(100, run.danger + 5);
+        msg = '빠르게 지나쳤다. 뒤에서 물 밟는 소리가 한 번 늦게 따라온다.';
+      }
+    } else if (ev.type === 'vent') {
+      if (choiceId === 'crawl') {
+        run.light = Math.max(0, run.light - 4);
+        run.danger = Math.max(0, run.danger - 3);
+        msg = '낮게 기어 통과했다. 먼지 속에서 안전한 길의 감이 잡힌다.';
+      } else {
+        run.danger = Math.max(0, run.danger - 1);
+        msg = '좁은 틈은 포기했다. 몸이 걸릴 위험은 없다.';
+      }
+    }
+    run.pendingEvent = null;
+    run.lastAction = msg || '상황을 정리했다.';
+    log(run.lastAction, /울렸다|따라온다|없다/.test(run.lastAction) ? 'hot' : undefined);
+    render();
   }
 
   function markTravelledEdge(fromId, toId) {
@@ -725,7 +841,7 @@
     } else if (type === 'cross') {
       run.holdEvent = { type: 'cross', node: node.id };
       run.danger = Math.min(100, run.danger + CROSS_DANGER);
-      run.lastAction = '갈림길 쪽에서 발소리가 스친다. 멈추거나 다른 길을 고를 수 있다.';
+      run.lastAction = '갈림길 쪽에서 발소리가 스친다.';
       log('갈림길 쪽에서 발소리가 스쳐 간다. 멈출까, 다른 길로 갈까.', 'hot');
     } else if (type === 'ambush') {
       run.holdEvent = { type: 'ambush', node: node.id };
@@ -792,7 +908,7 @@
 
   // 갈림길 선택. 계단이면 강하, 아니면 인접 노드로 이동.
   function chooseExit(targetId) {
-    if (!run || run.moving) return;
+    if (!run || run.moving || run.pendingEvent) return;
     const node = currentNode();
     const target = nodeById(targetId);
     if (!target || !node.exits.includes(targetId)) return;
@@ -833,7 +949,7 @@
 
   // 대기. 지나가는/매복 회수자를 흘려보낸다. 시간이 흘러 조명이 조금 닳는다.
   function chooseWait() {
-    if (!run || !run.holdEvent || run.moving) return;
+    if (!run || !run.holdEvent || run.moving || run.pendingEvent) return;
     const ev = run.holdEvent;
     run.light = Math.max(0, run.light - WAIT_LIGHT_COST);
     if (ev.type === 'cross') {
@@ -852,7 +968,7 @@
   }
 
   function grab() {
-    if (!run.currentItem || !roomFor(run.currentItem)) return;
+    if (run.pendingEvent || !run.currentItem || !roomFor(run.currentItem)) return;
     const node = currentNode();
     const item = run.currentItem;
     run.bag.push(item);
@@ -1067,8 +1183,8 @@
 
     // 액션 버튼: 줍기(스테이지 위), 버리고 도망, 나가기.
     if (el['dock']) el['dock'].classList.toggle('hidden', !!run.moving);
-    const canGrab = !!(run.currentItem && roomFor(run.currentItem));
-    el['btn-grab'].classList.toggle('hidden', !(run.currentItem && !run.moving));
+    const canGrab = !!(run.currentItem && roomFor(run.currentItem) && !run.pendingEvent);
+    el['btn-grab'].classList.toggle('hidden', !(run.currentItem && !run.moving && !run.pendingEvent));
     el['btn-grab'].disabled = !canGrab;
     el['btn-grab'].textContent = run.currentItem ? (canGrab ? '줍기' : '가방 가득') : '';
 
@@ -1131,14 +1247,36 @@
     return fallback;
   }
 
+  function movementChoiceCopy(dir, target) {
+    const stairs = target && target.kind === 'stairs';
+    return {
+      label: stairs ? '계단' : dir.label,
+      aria: stairs ? `${dir.label} 계단 아래로` : `${dir.label} 방향`,
+    };
+  }
+
+  const GENERIC_SITUATION_SENTENCES = new Set([
+    ['멈추거나', '다른 길을 고를 수 있다.'].join(' '),
+  ]);
+
+  function cleanSituationText(text) {
+    const sentences = text.replace(/\s+/g, ' ').trim().match(/[^.!?。！？]+[.!?。！？]?/g) || [];
+    const seen = new Set();
+    return sentences.map((sentence) => sentence.trim()).filter((sentence) => {
+      if (!sentence || GENERIC_SITUATION_SENTENCES.has(sentence) || seen.has(sentence)) return false;
+      seen.add(sentence);
+      return true;
+    }).join(' ');
+  }
+
   function situationCopy(node) {
     const here = node.kind === 'entry' ? '입구.' : (node.desc ? `${node.desc}.` : '어둠 속 공간.');
     const item = run.currentItem ? ` 눈앞에 ${run.currentItem.name}${subjectParticle(run.currentItem.name)} 있다. ${run.currentItem.slots}칸, ${run.currentItem.value}RP.` : '';
+    const pending = run.pendingEvent ? ` ${run.pendingEvent.title}: ${run.pendingEvent.cue}` : '';
     const event = run.holdEvent ? (run.holdEvent.type === 'ambush' ? ' 옆 어둠에서 숨소리가 멎었다.' : ' 갈림길 쪽에서 발소리가 스친다.') : '';
     const chase = run.chasing && !run.holdEvent ? ' 젖은 발소리가 따라붙는다.' : '';
     const action = run.lastAction ? ` ${run.lastAction}` : '';
-    const prompt = run.moving ? ' 이동 중에도 현재 상황을 놓치지 않는다.' : ' 아래 방향 패드로 다음 행동을 고른다.';
-    return `${here}${item}${event}${chase}${action}${prompt}`;
+    return cleanSituationText(`${here}${item}${pending}${event}${chase}${action}`);
   }
 
   // 현재 노드의 출구(+상황 선택지)를 8방향 패드로 그린다. 장소명은 도착 후 상황 텍스트로만 알려준다.
@@ -1146,11 +1284,43 @@
     const dock = el['room-choices'];
     if (!dock) return;
     if (!run || run.moving || !run.floorMap) {
-      dock.innerHTML = '';
+      if (dock.dataset.choiceSig !== 'empty') {
+        dock.innerHTML = '';
+        dock.dataset.choiceSig = 'empty';
+      }
       if (el['choice-cue'] && run && run.floorMap) el['choice-cue'].textContent = situationCopy(currentNode());
       return;
     }
     const node = currentNode();
+    const cue = situationCopy(node);
+
+    if (run.pendingEvent) {
+      const sig = `event:${run.currentNodeId}:${run.pendingEvent.type}:${run.pendingEvent.choices.map((choice) => choice.id).join(',')}`;
+      if (dock.dataset.choiceSig !== sig) {
+        dock.classList.remove('spatial');
+        dock.classList.add('event-choices');
+        dock.innerHTML = run.pendingEvent.choices.map((choice) => {
+          const tone = choice.tone ? ` ${choice.tone}` : '';
+          return `<button class="btn room-btn event-btn${tone}" data-act="event" data-choice="${choice.id}"><i class="dir-glyph">?</i><span class="choice-text"><b>${choice.label}</b><span>${choice.sub}</span></span></button>`;
+        }).join('');
+        dock.dataset.choiceSig = sig;
+        dock.querySelectorAll('[data-act="event"]').forEach((btn) => {
+          btn.addEventListener('click', () => resolveRoomEvent(btn.dataset.choice));
+        });
+      }
+      if (el['choice-cue']) el['choice-cue'].textContent = cue;
+      return;
+    }
+
+    const holdSig = run.holdEvent ? `${run.holdEvent.type}:${run.holdEvent.node}` : 'none';
+    const moveSig = `move:${run.currentNodeId}:${holdSig}:${node.exits.join(',')}`;
+    if (dock.dataset.choiceSig === moveSig) {
+      if (el['choice-cue']) el['choice-cue'].textContent = cue;
+      return;
+    }
+
+    dock.classList.remove('event-choices');
+
     const exitsByDir = new Map();
     const cues = [];
     const usedDirs = new Set();
@@ -1166,15 +1336,17 @@
       const t = nodeById(nid);
       const stairs = t.kind === 'stairs';
       const dir = directionForExit(node, t, index, usedDirs);
-      cues.push(`${dir.glyph} ${dir.label}`);
-      exitsByDir.set(dir.key, `<button class="btn room-btn ${dir.cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${dir.label} 방향"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${dir.label}</b></span></button>`);
+      const copy = movementChoiceCopy(dir, t);
+      cues.push(`${dir.glyph} ${copy.label}`);
+      exitsByDir.set(dir.key, `<button class="btn room-btn ${dir.cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${copy.aria}"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${copy.label}</b></span></button>`);
     });
 
     const out = DIR_SLOTS.map((dir) => exitsByDir.get(dir.key) || `<div class="room-pad-empty ${dir.cls}" aria-hidden="true"><i class="dir-glyph">${dir.glyph}</i></div>`);
     out.splice(4, 0, waitButton || '<div class="room-pad-center" aria-hidden="true"></div>');
     dock.innerHTML = out.join('');
+    dock.dataset.choiceSig = moveSig;
     dock.classList.toggle('spatial', true);
-    if (el['choice-cue']) el['choice-cue'].textContent = situationCopy(node);
+    if (el['choice-cue']) el['choice-cue'].textContent = cue;
     dock.querySelectorAll('[data-act]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const act = btn.dataset.act;
@@ -1193,7 +1365,8 @@
 
     // Radar behavior: the player is fixed at the center and only already
     // travelled nodes/edges are drawn. Unknown branches and unvisited exits stay
-    // hidden even when the main direction pad makes those exits selectable.
+    // hidden; currently active exits may only add tiny center ticks in the same
+    // directions as the movement pad, never target nodes or full path length.
     const seen = (id) => nodes[id] && nodes[id].entered;
     const visibleNodes = nodes.filter((n) => seen(n.id) || n.id === run.currentNodeId);
     const center = { x: 60, y: 45 };
@@ -1217,6 +1390,25 @@
       const a = coords[aId], b = coords[bId];
       html += `<line class="seen" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
     });
+
+    if (!run.moving && !run.pendingEvent) {
+      const usedDirs = new Set();
+      const stubStart = 5.5;
+      const stubEnd = 15;
+      current.exits.forEach((nid, index) => {
+        const target = nodeById(nid);
+        if (!target) return;
+        const slot = directionForExit(current, target, index, usedDirs);
+        if (seen(nid) || travelled.has(edgeKey(current.id, nid))) return;
+        const dir = slot && MAP_DIRECTION_BY_KEY[slot.key];
+        if (!dir) return;
+        const len = Math.hypot(dir.dx, dir.dy) || 1;
+        const ux = dir.dx / len;
+        const uy = dir.dy / len;
+        html += `<line class="exit-hint" x1="${center.x + ux * stubStart}" y1="${center.y + uy * stubStart}" x2="${center.x + ux * stubEnd}" y2="${center.y + uy * stubEnd}"/>`;
+      });
+    }
+
     visibleNodes.forEach((n) => {
       const p = coords[n.id];
       const cls = n.id === run.currentNodeId ? 'current' : 'seen';

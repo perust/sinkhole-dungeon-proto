@@ -1011,6 +1011,7 @@ html, body { touch-action: manipulation; }
 }
 .mini-map line { stroke: rgba(160,176,208,.32); stroke-width: 2; stroke-linecap: round; }
 .mini-map line.seen { stroke: rgba(87,224,200,.58); }
+.mini-map line.exit-hint { stroke: rgba(180,188,204,.34); stroke-width: 1.7; stroke-linecap: round; }
 .mini-map line.hint { stroke-dasharray: 3 4; }
 .mini-map circle { fill: rgba(160,176,208,.72); }
 .mini-map circle.current { fill: var(--gold); filter: drop-shadow(0 0 4px rgba(255,209,102,.55)); }
@@ -1110,7 +1111,9 @@ html, body { touch-action: manipulation; }
   position: absolute;
   left: 12px; right: 12px;
   bottom: max(12px, env(safe-area-inset-bottom));
-  z-index: 4;
+  /* Keep the dock above stage-level action buttons (e.g. 줍기 z-index:5)
+     so visible movement choices receive the click in Chrome/mobile layouts. */
+  z-index: 10;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1171,6 +1174,22 @@ html, body { touch-action: manipulation; }
 #screen-dungeon #dock #room-choices.spatial .room-pad-center { grid-area: wait; }
 #screen-dungeon #dock #room-choices.spatial .room-btn .choice-text b { font-size: 12px; line-height: 1.05; }
 #screen-dungeon #dock #room-choices.spatial .room-btn .choice-text > span { display: none; }
+#screen-dungeon #dock #room-choices.event-choices {
+  grid-template-columns: 1fr;
+  padding: 2px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(87,224,200,.08), rgba(255,255,255,.02));
+}
+#screen-dungeon #dock #room-choices.event-choices .event-btn {
+  min-height: 48px;
+  border-color: rgba(87,224,200,.3);
+}
+#screen-dungeon #dock #room-choices.event-choices .event-btn .dir-glyph {
+  font-size: 20px;
+  color: #ffe39a;
+  background: rgba(255,209,102,.12);
+  border-color: rgba(255,209,102,.32);
+}
 #screen-dungeon #dock .room-pad-empty,
 #screen-dungeon #dock .room-pad-center {
   min-height: 52px;
