@@ -864,7 +864,8 @@
     el['btn-drop'].classList.toggle('hidden-action', !showDrop);
     if (el['dock-actions']) el['dock-actions'].classList.toggle('has-drop', showDrop);
     el['btn-return'].disabled = false;
-    el['btn-return'].textContent = run.bag.length > 0 ? '나가기' : '돌아가기';
+    el['btn-drop'].textContent = '↙ 버리고 도망';
+    el['btn-return'].textContent = run.bag.length > 0 ? '↩ 나가기' : '↩ 돌아가기';
   }
 
   function renderBag() {
@@ -890,6 +891,20 @@
     });
   }
 
+  function choiceDirectionMeta(target, index, total, isStairs) {
+    if (isStairs) return { cls: 'dir-forward dir-stairs', glyph: '↓', hint: '아래' };
+    if (!target) return { cls: 'dir-forward', glyph: '↑', hint: '앞' };
+    if (target.kind === 'entry') return { cls: 'dir-back', glyph: '↩', hint: '뒤' };
+    if (target.kind === 'door') return { cls: 'dir-left', glyph: '←', hint: '왼쪽' };
+    if (target.kind === 'crack') return { cls: 'dir-right', glyph: '→', hint: '오른쪽' };
+    if (target.kind === 'corridor' || target.kind === 'hall') return { cls: 'dir-forward', glyph: '↑', hint: '앞' };
+    if (target.kind === 'vent') return { cls: 'dir-low', glyph: '↙', hint: '낮게' };
+    if (target.kind === 'storage' || target.kind === 'office') return { cls: 'dir-room', glyph: '▣', hint: '안쪽' };
+    const fallback = total <= 2 ? (index === 0 ? ['dir-left', '←', '왼쪽'] : ['dir-right', '→', '오른쪽'])
+      : index === 0 ? ['dir-left', '←', '왼쪽'] : index === total - 1 ? ['dir-right', '→', '오른쪽'] : ['dir-forward', '↑', '앞'];
+    return { cls: fallback[0], glyph: fallback[1], hint: fallback[2] };
+  }
+
   // 현재 노드의 출구(+상황 선택지)를 동적으로 그린다. 항상 3개 고정이 아니다.
   function renderChoices() {
     const dock = el['room-choices'];
@@ -901,19 +916,20 @@
     // 상황 선택지 '기다리기' — 몬스터 대기 이벤트가 있을 때만.
     if (run.holdEvent) {
       const waitDesc = run.holdEvent.type === 'ambush' ? '숨을 죽이고 보낸다' : '지나갈 때까지 멈춘다';
-      out.push(`<button class="btn room-btn good" data-act="wait"><b>기다리기</b><span>${waitDesc}</span></button>`);
+      out.push(`<button class="btn room-btn good dir-wait" data-act="wait"><i class="dir-glyph">•</i><span class="choice-text"><b>기다리기</b><span>${waitDesc}</span></span></button>`);
     }
 
     // 인접 노드들 = 갈림길.
-    node.exits.forEach((nid) => {
+    node.exits.forEach((nid, index) => {
       const t = nodeById(nid);
       const stairs = t.kind === 'stairs';
       let label = stairs ? '계단 아래로' : t.label;
       let desc = stairs ? '더 깊은 층' : t.desc;
       let style = stairs ? '' : t.style;
+      const dir = choiceDirectionMeta(t, index, node.exits.length, stairs);
       if (node.dangerExit === nid) { style = 'danger'; desc = '젖은 쇳소리'; }
       else if (!stairs && t.exits.length === 1) { desc = (desc ? desc + ' · ' : '') + '막다른 곳'; }
-      out.push(`<button class="btn room-btn ${style}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}"><b>${label}</b><span>${desc}</span></button>`);
+      out.push(`<button class="btn room-btn ${style} ${dir.cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${dir.hint} ${label}"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${label}</b><span>${desc}</span></span></button>`);
     });
 
     dock.innerHTML = out.join('');
