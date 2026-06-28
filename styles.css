@@ -162,6 +162,16 @@ body {
 .btn-enter { margin-top: auto; width: 100%; padding: 18px; font-size: 20px; letter-spacing: 4px; }
 .meta-line { margin-top: 14px; color: var(--muted); font-size: 13px; }
 .meta-line b { color: var(--gold); }
+.goal-hint {
+  margin-top: 8px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(87,224,200,.05);
+  color: var(--muted);
+  font-size: 12px;
+}
+.goal-hint b { color: var(--accent); }
 
 /* ===================== 던전 HUD ===================== */
 .hud {
@@ -233,6 +243,46 @@ body {
   background: linear-gradient(180deg, transparent, rgba(40,52,80,.5));
   border-top: 1px solid rgba(120,150,200,.12);
 }
+.stage.descending::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: -35%; height: 55%;
+  background: linear-gradient(180deg, rgba(87,224,200,0), rgba(87,224,200,.18), rgba(87,224,200,0));
+  animation: descendSweep .55s ease-out;
+  pointer-events: none;
+}
+@keyframes descendSweep {
+  0% { transform: translateY(0); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translateY(220%); opacity: 0; }
+}
+.depth-rail {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+.rail-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: rgba(8,12,22,.85);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+}
+.rail-dot.current { background: var(--accent); border-color: var(--accent); color: #062b25; box-shadow: 0 0 12px rgba(87,224,200,.55); }
+.rail-dot.passed { border-color: var(--accent); color: var(--accent); }
+.rail-dot.locked { opacity: .45; }
 .recovery-point {
   position: absolute; left: 50%; top: 30%;
   transform: translate(-50%, -50%);
@@ -315,6 +365,8 @@ body {
 .up-btn.bought { border-color: var(--good); color: var(--good); }
 
 #btn-again, #btn-retry { margin-top: auto; width: 100%; }
+.goal-line { margin: 10px 0 12px; text-align: center; color: var(--muted); font-size: 13px; }
+.goal-line b { color: var(--accent); }
 
 .fail-line { font-size: 15px; margin: 0 0 10px; }
 .fail-detail { color: var(--gold); font-size: 14px; margin-bottom: 10px; }

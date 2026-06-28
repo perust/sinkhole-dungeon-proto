@@ -75,6 +75,12 @@
     truths: [],
   };
 
+  function nextGoal() {
+    if (meta.maxDepth < FLOORS.length) return `${meta.maxDepth + 1}층 도달`;
+    if (meta.truths.length < TRUTH_TOTAL) return '진실 조각 더 찾기';
+    return '3층에서 더 많이 들고 나오기';
+  }
+
   let run = null;
   let timer = null;
 
@@ -111,18 +117,39 @@
   const el = {};
   const IDS = [
     'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail',
-    'btn-enter', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex',
+    'btn-enter', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-goal',
     'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'danger-val', 'danger-fill',
-    'bag-slots', 'recovery-point', 'chaser', 'log',
+    'bag-slots', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log',
     'btn-grab', 'btn-deeper', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp',
-    'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news',
+    'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'return-goal',
     'up-bag', 'up-light', 'up-weapon', 'btn-again',
     'fail-detail', 'fail-susp', 'btn-retry',
   ];
   function cacheDom() { IDS.forEach((id) => { el[id] = document.getElementById(id); }); }
+
+  function renderGoals() {
+    const goal = nextGoal();
+    if (el['start-goal']) el['start-goal'].textContent = goal;
+    if (el['return-goal']) el['return-goal'].textContent = goal;
+  }
+
+  function renderDepthRail() {
+    if (!run || !el['depth-rail']) return;
+    el['depth-rail'].innerHTML = FLOORS.map((f) => {
+      const cls = f.n === run.floor ? 'current' : f.n < run.floor ? 'passed' : 'locked';
+      return `<span class="rail-dot ${cls}">${f.n}</span>`;
+    }).join('');
+  }
+
+  function playDescendFx() {
+    if (!el['stage']) return;
+    el['stage'].classList.remove('descending');
+    void el['stage'].offsetWidth;
+    el['stage'].classList.add('descending');
+  }
 
   function show(screenId) {
     document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
@@ -199,7 +226,8 @@
     if (run.floor > meta.maxDepth) meta.maxDepth = run.floor;
     run.currentItem = pickItem(run.floor);
     const f = FLOORS[run.floor - 1];
-    log(`${f.n}층. ${f.name}으로 더 내려간다.`);
+    log(`${f.n}층. 한 칸 더 내려왔다.`);
+    playDescendFx();
     render();
   }
 
@@ -314,6 +342,7 @@
     el['start-susp'].textContent = meta.suspicion;
     el['start-truth-count'].textContent = meta.truths.length;
     el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
+    renderGoals();
 
     // 층 배너
     el['floor-num'].textContent = f.n;
@@ -335,6 +364,7 @@
 
     // 회수 포인트 / 추격 연출
     renderStage();
+    renderDepthRail();
 
     // 액션 버튼 활성화
     el['btn-grab'].disabled = !(run.currentItem && roomFor(run.currentItem));
@@ -440,6 +470,7 @@
     }
     el['sale-balance'].textContent = meta.rp;
     el['sale-susp'].textContent = meta.suspicion;
+    renderGoals();
     if (run.lastTruth) {
       el['truth-news'].hidden = false;
       el['truth-news'].textContent = `진실 조각: ${run.lastTruth}`;
@@ -496,6 +527,7 @@
     el['start-susp'].textContent = meta.suspicion;
     el['start-truth-count'].textContent = meta.truths.length;
     el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
+    renderGoals();
   }
 
   if (document.readyState === 'loading') {

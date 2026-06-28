@@ -44,6 +44,7 @@
         · 의심도 <b id="start-susp" class="susp-v">0</b>
       </div>
       <div class="codex-line" id="start-codex">진실 조각 <b id="start-truth-count">0</b>/6 — 아직 아무것도 모른다.</div>
+      <div class="goal-hint">다음 목표 · <b id="start-goal">2층 도달</b></div>
     </section>
 
     <!-- ===================== 던전 화면 ===================== -->
@@ -81,6 +82,7 @@
         </div>
         <div id="player" class="actor player actor-sprite" title="탐사자" aria-label="탐사자"></div>
         <div id="chaser" class="actor chaser actor-sprite" title="회수자" aria-label="회수자"></div>
+        <div id="depth-rail" class="depth-rail" aria-hidden="true"></div>
       </div>
 
       <div id="log" class="log">
@@ -129,6 +131,7 @@
       </div>
 
       <div class="truth-news" id="truth-news" hidden></div>
+      <p class="goal-line">다음 목표 · <b id="return-goal">2층 도달</b></p>
 
       <p class="shop-hint">이번엔 하나만 고르자.</p>
       <div class="upgrades">
@@ -154,6 +157,6 @@
 
   </div>
 
-  <script src="src/game.js?v=4"></script>
+  <script src="src/game.js?v=5"></script>
 </body>
 </html>
