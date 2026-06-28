@@ -927,8 +927,6 @@ html, body { touch-action: manipulation; }
 .fp-left { left: 14%; transform: skewY(9deg); }
 .fp-center { left: 50%; transform: translateX(-50%); width: 42px; height: 70px; bottom: 18%; }
 .fp-right { right: 14%; transform: skewY(-9deg); }
-.stage.moving .fp-view { animation: pushForward .32s ease both; }
-.stage.moving .recovery-point { opacity: .72; transform: translate(-50%, -50%) scale(.92); }
 .stage.has-loot .fp-center { box-shadow: 0 0 28px rgba(255,209,102,.28); border-color: rgba(255,209,102,.48); }
 .stage-floor { opacity: .28; }
 #player { display: none; }
@@ -943,4 +941,147 @@ html, body { touch-action: manipulation; }
   0% { filter: blur(0); transform: scale(1); }
   60% { filter: blur(1px); transform: scale(1.08); }
   100% { filter: blur(0); transform: scale(1.02); }
+}
+
+/* ===================== Floor-map exploration pass ===================== */
+/* 중앙 시야창을 키우고, 게이지/가방/로그를 슬림하게 눌러 stage에 공간을 몰아준다. */
+
+#screen-dungeon { padding-bottom: calc(186px + env(safe-area-inset-bottom)); }
+#screen-dungeon .floor-banner { margin-top: 6px; }
+#screen-dungeon .gauges { flex-direction: row; gap: 10px; margin-top: 7px; }
+#screen-dungeon .gauges .gauge { flex: 1 1 0; }
+#screen-dungeon .gauges .gauge-label { margin-bottom: 3px; }
+#screen-dungeon .bag-row { margin-top: 7px; }
+#screen-dungeon .stage {
+  margin-top: 8px;
+  min-height: 200px;
+  flex: 1 1 auto;
+}
+
+/* 로그를 stage 하단 오버레이로 — 별도 높이를 먹지 않게 한다. */
+#screen-dungeon .stage > #log.log {
+  position: absolute;
+  left: 8px; right: 8px; bottom: 8px;
+  z-index: 3;
+  margin: 0;
+  min-height: 0;
+  max-height: none;
+  padding: 6px 10px;
+  background: rgba(5,7,12,.5);
+  border-color: rgba(42,49,71,.55);
+  backdrop-filter: blur(6px);
+}
+/* 회수자가 로그 위로 지나가게 살짝 올린다. */
+#screen-dungeon .chaser,
+#screen-dungeon .player { bottom: 24%; }
+
+/* 발견물 — 시야 중앙에 떠 있게 */
+#screen-dungeon .recovery-point { top: 34%; }
+
+/* 줍기 버튼: 시야 안 회수물 바로 아래에 떠서 '집는' 행동을 직관화 */
+.stage-grab {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  min-width: 104px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--gold);
+  color: #1a1405;
+  background: linear-gradient(180deg, #ffe08a, var(--gold));
+  font-size: 15px; font-weight: 900;
+  box-shadow: 0 6px 18px rgba(255,209,102,.36);
+  animation: grabBob 1.6s ease-in-out infinite;
+}
+.stage-grab:disabled {
+  background: rgba(120,130,150,.4);
+  border-color: var(--line);
+  color: var(--muted);
+  box-shadow: none;
+  animation: none;
+}
+.stage-grab.hidden { display: none; }
+@keyframes grabBob { 0%,100% { transform: translateX(-50%) translateY(0);} 50% { transform: translateX(-50%) translateY(-4px);} }
+
+/* 줍기 후 연출: 회수물이 플레이어 쪽으로 빨려 들어가고 짧게 번쩍 */
+.stage.grabbing .recovery-point { animation: lootGrab .44s ease-in forwards; }
+@keyframes lootGrab {
+  0%   { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
+  55%  { transform: translate(-50%,-22%) scale(.66);  opacity: .9; }
+  100% { transform: translate(-50%, 70%) scale(.18);  opacity: 0; }
+}
+.stage.grabbing::after {
+  content: '';
+  position: absolute; inset: 0; z-index: 4;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 42%, rgba(255,209,102,.5), transparent 38%);
+  animation: grabFlash .44s ease-out;
+}
+@keyframes grabFlash { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+
+/* '앞으로' — 문이 가까워지는 효과 강화: 시야가 더 밀고 들어가고 중앙 문이 다가온다 */
+.stage.moving .fp-view { animation: pushForward2 .42s ease-in both; }
+@keyframes pushForward2 {
+  0%   { transform: scale(1);    filter: brightness(1) blur(0); }
+  60%  { transform: scale(1.24); filter: brightness(1.14) blur(1px); }
+  100% { transform: scale(1.4);  filter: brightness(.86) blur(.6px); }
+}
+.stage.moving .fp-center { animation: doorApproach .42s ease-in both; }
+@keyframes doorApproach {
+  0%   { transform: translateX(-50%) scale(1);   opacity: .85; }
+  70%  { transform: translateX(-50%) scale(2.6);  opacity: 1; }
+  100% { transform: translateX(-50%) scale(3.6);  opacity: 0; }
+}
+.stage.moving .recovery-point { opacity: .65; transform: translate(-50%, -50%) scale(.9); }
+.stage.moving::before {
+  content: '';
+  position: absolute; inset: 0; z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(5,7,12,0), rgba(5,7,12,.55));
+  animation: moveWipe .42s ease-in;
+}
+@keyframes moveWipe { 0% { opacity: 0; } 100% { opacity: 1; } }
+
+/* 하단 dock: 동적 갈림길 + 보조 행동을 한 패널에 모은다 */
+#dock {
+  position: absolute;
+  left: 12px; right: 12px;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+  border-radius: 22px;
+  border: 1px solid rgba(87,224,200,.24);
+  background: linear-gradient(180deg, rgba(24,30,46,.96), rgba(10,14,25,.98));
+  box-shadow: 0 -12px 30px rgba(0,0,0,.38), inset 0 1px rgba(255,255,255,.06);
+  backdrop-filter: blur(10px);
+}
+#dock.hidden { display: none; }
+#dock #room-choices { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0; }
+#dock #room-choices.multi { grid-template-columns: 1fr 1fr; }
+#dock #room-choices:empty { display: none; }
+#dock .dock-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+#dock .dock-actions.has-drop { grid-template-columns: 1fr 1fr; }
+#screen-dungeon #dock .room-btn {
+  min-height: 50px;
+  border-radius: 16px;
+  padding: 9px 12px;
+  text-align: center;
+}
+#screen-dungeon #dock .room-btn b { font-size: 15px; letter-spacing: .2px; }
+#screen-dungeon #dock .room-btn span { opacity: .72; }
+#screen-dungeon #dock .btn-act { min-height: 46px; border-radius: 16px; font-size: 15px; }
+
+/* 짧은 모바일(≈577px 높이)에서도 핵심 버튼이 보이게 압축 */
+@media (max-height: 680px) {
+  #screen-dungeon { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
+  #screen-dungeon .stage { min-height: 140px; }
+  #screen-dungeon #dock .room-btn { min-height: 44px; }
+  #screen-dungeon #dock .btn-act { min-height: 42px; }
+  #screen-dungeon .stage > #log.log { padding: 5px 9px; }
+  .stage-grab { padding: 8px 16px; }
 }

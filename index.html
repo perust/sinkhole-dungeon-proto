@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/pixel/player-delver.png" />
   <title>도심 싱크홀: 들고 나와라</title>
-  <link rel="stylesheet" href="styles.css?v=10" />
+  <link rel="stylesheet" href="styles.css?v=11" />
 </head>
 <body>
   <div id="app" class="phone">
@@ -84,19 +84,9 @@
         </div>
       </div>
 
-      <div id="risk-panel" class="risk-panel safe">
+      <div id="risk-panel" class="risk-panel safe minimal">
         <span id="risk-chip" class="risk-chip">대기</span>
         <span id="risk-copy" class="risk-copy"></span>
-      </div>
-
-      <div id="roll-panel" class="roll-panel hidden" aria-live="polite">
-        <span id="roll-face" class="roll-face">d20</span>
-        <span id="roll-copy" class="roll-copy">판정 대기</span>
-      </div>
-
-      <div id="room-panel" class="room-panel" aria-label="방 선택">
-        <div class="room-title">어디로 갈까?</div>
-        <div id="room-choices" class="room-choices"></div>
       </div>
 
       <div class="bag-row">
@@ -117,20 +107,21 @@
         <div id="recovery-point" class="recovery-point">
           <span class="rp-name">회수물</span>
         </div>
+        <button id="btn-grab" class="btn stage-grab hidden">줍기</button>
         <div id="player" class="actor player actor-sprite" title="탐사자" aria-label="탐사자"></div>
         <div id="chaser" class="actor chaser actor-sprite" title="회수자" aria-label="회수자"></div>
         <div id="depth-rail" class="depth-rail" aria-hidden="true"></div>
+        <div id="log" class="log">
+          <div class="log-line">아래가 열린다.</div>
+        </div>
       </div>
 
-      <div id="log" class="log">
-        <div class="log-line">아래가 열린다.</div>
-      </div>
-
-      <div id="actions" class="actions">
-        <button id="btn-grab"   class="btn btn-act primary">챙기기</button>
-        <button id="btn-deeper" class="btn btn-act">더 깊이</button>
-        <button id="btn-drop"   class="btn btn-act warn">버리고 도망</button>
-        <button id="btn-return" class="btn btn-act good">들고 나가기</button>
+      <div id="dock" class="dock">
+        <div id="room-choices" class="room-choices" aria-label="갈림길"></div>
+        <div id="dock-actions" class="dock-actions">
+          <button id="btn-drop"   class="btn btn-act warn hidden-action">버리고 도망</button>
+          <button id="btn-return" class="btn btn-act good">돌아가기</button>
+        </div>
       </div>
     </section>
 
@@ -197,6 +188,6 @@
 
   </div>
 
-  <script src="src/game.js?v=10"></script>
+  <script src="src/game.js?v=11"></script>
 </body>
 </html>

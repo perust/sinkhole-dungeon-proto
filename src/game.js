@@ -5,7 +5,9 @@
    루프:    챙기고 → 도망치고 → 팔고 → 강화 → 더 깊이.
 
    - 메타 상태(meta): 런을 넘어 유지되는 영구 자산(RP, 강화 레벨, 최고 깊이).
-   - 런 상태(run):    한 번의 잠수 동안만 존재하는 상태(층, 조명, 가방, 위험).
+   - 런 상태(run):    한 번의 잠수 동안만 존재하는 상태(층, 조명, 가방, 위험, 작은 맵).
+   각 층은 5~7개 노드짜리 작은 맵으로 생성된다. 노드에는 출구(exits),
+   방 유형(kind), 선택적 아이템(item), 선택적 몬스터 이벤트(monster)가 있다.
    모든 수치는 조정 가능한 초기값이다.
    ============================================================ */
 (() => {
@@ -41,25 +43,33 @@
   const TIER_HEAT = { common: 4, rare: 8, epic: 14 };
   const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().length;
 
-  // 짧은 의뢰는 \"한 번 더 내려가기\"의 명분과 판매처 선택의 압박을 만든다.
+  // 짧은 의뢰는 "한 번 더 내려가기"의 명분과 판매처 선택의 압박을 만든다.
   const CONTRACTS = [
     { title: '합법 샘플 반납', desc: '위원회에 회수물 2개 이상 넘기기', reward: 6, suspDelta: -3, test: (ctx) => ctx.buyer === 'committee' && ctx.items.length >= 2 },
     { title: '뜨거운 증거', desc: '희귀 이상을 암시장에 팔기', reward: 9, suspDelta: 2, test: (ctx) => ctx.buyer === 'black' && ctx.items.some((it) => it.tier !== 'common') },
     { title: '하층 동선 확인', desc: '2층 이상까지 내려갔다가 생환', reward: 7, suspDelta: 0, test: (ctx) => ctx.maxFloor >= 2 },
   ];
 
-  const ROOM_TYPES = [
-    { key: 'camp', name: '낮은 창고', path: '왼쪽 문', move: '왼쪽 문으로', style: 'good', copy: '금 간 문틈', light: 18, danger: -8, lootBias: 'common', dc: -2 },
-    { key: 'lab', name: '흰 불빛', path: '정면 복도', move: '정면 복도로', style: '', copy: '깜빡이는 불빛', light: -6, danger: 6, lootBias: 'rare', dc: 1 },
-    { key: 'nest', name: '붉은 틈', path: '오른쪽 균열', move: '오른쪽 균열로', style: 'danger', copy: '젖은 발자국', light: -10, danger: 12, lootBias: 'epic', dc: 4 },
+  /* ---------------- 작은 맵 노드 유형 ---------------- */
+  // label: 갈림길 버튼에 뜨는 장소 이름. desc: 짧은 감각 단서.
+  // style: 버튼 색조('' | 'good' | 'danger'). light/danger: 도착 시 1회 적용.
+  const NODE_KINDS = [
+    { key: 'corridor', label: '정면 복도',   desc: '곧게 뻗은 어둠',     style: '',       light: -4, danger: 3 },
+    { key: 'door',     label: '왼쪽 문',     desc: '금 간 문틈',         style: 'good',   light: 10, danger: -4 },
+    { key: 'storage',  label: '낮은 창고',   desc: '먼지 쌓인 선반',     style: 'good',   light: 6,  danger: -2 },
+    { key: 'office',   label: '관리실',      desc: '잠긴 캐비닛',        style: '',       light: 0,  danger: 1 },
+    { key: 'vent',     label: '환풍구',      desc: '좁고 찬 바람',       style: '',       light: -2, danger: -1 },
+    { key: 'hall',     label: '무너진 통로', desc: '머리 위가 삐걱인다', style: '',       light: -6, danger: 5 },
+    { key: 'crack',    label: '오른쪽 균열', desc: '젖은 발자국',        style: 'danger', light: -8, danger: 9 },
   ];
+  const ENTRY_KIND  = { key: 'entry',  label: '입구',       desc: '',            style: '', light: 0, danger: 0 };
+  const STAIRS_KIND = { key: 'stairs', label: '계단 아래로', desc: '더 깊은 냉기', style: '', light: 0, danger: 0 };
 
-  const ROLL_OUTCOMES = {
-    critical: { label: '대성공', cls: 'win' },
-    success: { label: '성공', cls: 'win' },
-    mixed: { label: '대가 있는 성공', cls: 'hot' },
-    fail: { label: '실패', cls: 'hot' },
-  };
+  const FLOOR_OPEN_CUE = [
+    '아래에서 찬바람이 올라온다.',
+    '벽이 미세하게 떨린다.',
+    '공간이 접힌 듯 어긋나 있다.',
+  ];
 
   function itemIcon(index) {
     return `<span class="loot-icon" style="--icon-index:${index}" aria-hidden="true"></span>`;
@@ -72,7 +82,16 @@
   const DESCEND_DANGER_BUMP= 8;   // 추격 중 강하 시 위험 점프
   const DROP_DANGER_FACTOR = 0.45;// 버리고 도망: 위험 ×0.45
   const DROP_DANGER_MINUS  = 6;
+  const WAIT_LIGHT_COST     = 4;  // 기다리기: 시간이 흘러 조명 소모
+  // 몬스터 이벤트 위험 수치
+  const SIGHT_DANGER        = 8;  // 직선 끝에 회수자가 보임
+  const SIGHT_MOVE_DANGER   = 6;  // 회수자 보이는 쪽으로 전진할 때 추가
+  const CROSS_DANGER        = 4;  // 갈림길을 회수자가 지나감(도착)
+  const CROSS_MOVE_DANGER   = 14; // 지나가는 중에 움직이면 들킴
+  const AMBUSH_MOVE_DANGER  = 20; // '움직이면 들킴' 상태에서 이동
   const TICK_MS            = 150;
+  const MOVE_MS            = 360; // 전진 연출 길이
+  const DESCEND_MS         = 440; // 강하 연출 길이
   const FAIL_CONSOLATION   = 0.25;// 실패 시 가방 가치의 25%만 긁어 회수
 
   // 강화: 레벨에 비례해 비용 상승
@@ -117,7 +136,7 @@
     }
   }
 
-  const storageOk = hasStorage();
+  const storageOk = typeof window !== 'undefined' && hasStorage();
 
   // 0 이상의 정수만 통과시키고, 그 외에는 기본값으로 되돌린다.
   function safeInt(value, fallback, min, max) {
@@ -218,11 +237,11 @@
       bag: [],
       danger: 0,
       chasing: false,
-      currentItem: null, // 현재 층 회수 포인트에 놓인 물건 (집으면 null)
-      awaitingRoom: true,
-      moving: false,
-      currentRoom: null,
-      lastRoll: null,
+      currentItem: null,   // 현재 노드에 놓인, 아직 안 집은 물건
+      floorMap: null,      // 이번 층의 작은 맵
+      currentNodeId: 0,    // 현재 위치한 노드 id
+      holdEvent: null,     // 활성 몬스터 대기 이벤트({type:'cross'|'ambush', node})
+      moving: false,       // 전진/강하 연출 중
       maxFloor: 1,
       grabbedCount: 0,
       droppedCount: 0,
@@ -235,16 +254,147 @@
     };
   }
 
-  function pickItem(floor) {
+  function pickFloorItem(floor, node) {
     const table = ITEM_TABLE[floor];
+    // 위험한 방일수록 비싼 물건이 놓일 확률을 높인다.
+    if (node && node.style === 'danger' && table.length > 1 && Math.random() < 0.7) {
+      return { ...table[table.length - 1] };
+    }
     return { ...table[Math.floor(Math.random() * table.length)] };
   }
 
-  function pickRoomItem(floor, room) {
-    const table = ITEM_TABLE[floor];
-    const biased = table.filter((it) => it.tier === room.lootBias);
-    const source = biased.length && Math.random() < 0.7 ? biased : table;
-    return { ...source[Math.floor(Math.random() * source.length)] };
+  /* ---------------- 작은 맵 생성 ---------------- */
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+
+  function addEdge(nodes, a, b) {
+    if (a === b) return;
+    if (!nodes[a].exits.includes(b)) nodes[a].exits.push(b);
+    if (!nodes[b].exits.includes(a)) nodes[b].exits.push(a);
+  }
+
+  function applyKind(node, kind) {
+    node.kind = kind.key;
+    node.label = kind.label;
+    node.desc = kind.desc;
+    node.style = kind.style;
+    node.light = kind.light;
+    node.danger = kind.danger;
+  }
+
+  // 무방향 그래프에서 start로부터의 거리(없는 노드는 Infinity).
+  function bfs(nodes, start) {
+    const dist = nodes.map(() => Infinity);
+    dist[start] = 0;
+    const queue = [start];
+    while (queue.length) {
+      const cur = queue.shift();
+      nodes[cur].exits.forEach((nb) => {
+        if (dist[nb] === Infinity) { dist[nb] = dist[cur] + 1; queue.push(nb); }
+      });
+    }
+    return dist;
+  }
+
+  // 각 층 진입 시 5~7개 노드짜리 작은 맵을 만든다.
+  // - 0번은 입구. 가장 깊은 잎 노드는 계단(다음 층 입구)으로 둔다(마지막 층 제외).
+  // - 계단은 항상 차수 1(잎)이라, 계단 직전 노드를 반드시 지나가야 한다.
+  function generateFloorMap(floor) {
+    const isLast = floor >= FLOORS.length;
+    const count = 5 + Math.floor(Math.random() * 3); // 5..7
+    const nodes = [];
+    for (let i = 0; i < count; i++) {
+      nodes.push({
+        id: i, exits: [], kind: null, label: '', desc: '', style: '',
+        light: 0, danger: 0, item: null, itemTaken: false,
+        monster: null, monsterResolved: false, dangerExit: null, entered: false,
+      });
+    }
+
+    // 1) 깊이가 보장되도록 등뼈(backbone)를 직선으로 잇는다.
+    const spine = Math.max(3, Math.ceil(count * 0.6));
+    for (let i = 1; i < spine; i++) addEdge(nodes, i, i - 1);
+    // 2) 나머지 노드는 앞쪽 노드 어딘가에 가지로 붙인다.
+    for (let i = spine; i < count; i++) addEdge(nodes, i, Math.floor(Math.random() * i));
+
+    // 3) 계단(또는 마지막 층의 가장 깊은 방)은 트리상 가장 먼 잎으로 정한다.
+    const treeDist = bfs(nodes, 0);
+    let deepestId = 1;
+    for (let i = 1; i < count; i++) if (treeDist[i] > treeDist[deepestId]) deepestId = i;
+    const stairsId = isLast ? -1 : deepestId;
+
+    // 4) 입구에 갈림길 느낌을 주기 위해 차수를 최소 2로 보장한다.
+    if (nodes[0].exits.length < 2) {
+      const cand = [];
+      for (let k = 1; k < count; k++) if (k !== stairsId && !nodes[0].exits.includes(k)) cand.push(k);
+      if (cand.length) addEdge(nodes, 0, cand[Math.floor(Math.random() * cand.length)]);
+    }
+
+    // 5) 갈림길을 더 만들기 위해 여분의 연결을 1~2개 추가한다(계단은 잎으로 보존).
+    const extra = 1 + Math.floor(Math.random() * 2);
+    for (let e = 0; e < extra; e++) {
+      const a = Math.floor(Math.random() * count);
+      const b = Math.floor(Math.random() * count);
+      if (a !== stairsId && b !== stairsId) addEdge(nodes, a, b);
+    }
+
+    // 6) 방 유형 배정.
+    applyKind(nodes[0], ENTRY_KIND);
+    if (stairsId >= 0) applyKind(nodes[stairsId], STAIRS_KIND);
+    const others = [];
+    for (let i = 0; i < count; i++) if (i !== 0 && i !== stairsId) others.push(i);
+    const pool = shuffle(NODE_KINDS.slice());
+    others.forEach((id, idx) => applyKind(nodes[id], pool[idx % pool.length]));
+
+    // 7) 아이템 배치: 입구/계단을 제외한 노드 중 2~3개.
+    const itemSlots = shuffle(others.slice());
+    const itemCount = Math.min(itemSlots.length, 2 + (Math.random() < 0.5 ? 1 : 0));
+    for (let i = 0; i < itemCount; i++) nodes[itemSlots[i]].item = pickFloorItem(floor, nodes[itemSlots[i]]);
+
+    // 8) 몬스터 이벤트 배치.
+    placeMonsters(nodes, others, stairsId, floor);
+
+    return { nodes, entryId: 0, stairsId, count };
+  }
+
+  // 몬스터 이벤트 3종:
+  //  - sight : 직선 끝에 회수자가 보임(위험 상승, 선택은 가능, 그쪽으로 가면 위험 추가)
+  //  - cross : 앞 갈림길을 회수자가 지나감(기다리거나 다른 길; 지나가는 중 움직이면 들킴)
+  //  - ambush: '움직이면 들킴' 상태(다음 이동 시 위험 급증/추격; 기다리면 완화)
+  function placeMonsters(nodes, others, stairsId, floor) {
+    if (!others.length) return;
+    // 계단 직전 노드(잎인 계단의 유일한 이웃)는 반드시 지나가므로 첫 이벤트를 여기 둔다.
+    let gateway = -1;
+    if (stairsId >= 0 && nodes[stairsId].exits.length) {
+      gateway = nodes[stairsId].exits.find((id) => id !== 0);
+      if (gateway === undefined) gateway = nodes[stairsId].exits[0];
+    }
+    const pool = shuffle(others.slice());
+    // 층별 이벤트 구성. 1층은 부드럽게 'sight'만.
+    let plan;
+    if (floor <= 1) plan = ['sight'];
+    else if (floor === 2) plan = Math.random() < 0.7 ? ['sight', 'cross'] : ['sight'];
+    else plan = ['cross', 'ambush'];
+
+    const targets = [];
+    if (gateway >= 0 && gateway !== 0) targets.push(gateway);
+    pool.forEach((id) => { if (!targets.includes(id)) targets.push(id); });
+
+    plan.forEach((type, i) => {
+      const id = targets[i % targets.length];
+      if (id == null || nodes[id].monster) return;
+      nodes[id].monster = { type };
+      if (type === 'sight') {
+        const nb = nodes[id].exits;
+        nodes[id].dangerExit = nb.length ? nb[Math.floor(Math.random() * nb.length)] : null;
+      }
+    });
   }
 
   /* ---------------- DOM 캐시 ---------------- */
@@ -256,16 +406,18 @@
     'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
-    'roll-panel', 'roll-face', 'roll-copy',
-    'room-panel', 'room-choices',
-    'bag-slots', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log', 'actions',
-    'btn-grab', 'btn-deeper', 'btn-drop', 'btn-return',
+    'room-choices', 'dock', 'dock-actions',
+    'bag-slots', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log',
+    'btn-grab', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
     'up-bag', 'up-light', 'up-weapon', 'btn-again',
     'fail-detail', 'fail-susp', 'btn-retry',
   ];
   function cacheDom() { IDS.forEach((id) => { el[id] = document.getElementById(id); }); }
+
+  const currentNode = () => run && run.floorMap ? run.floorMap.nodes[run.currentNodeId] : null;
+  const nodeById = (id) => run && run.floorMap ? run.floorMap.nodes[id] : null;
 
   function renderGoals() {
     const goal = nextGoal();
@@ -327,6 +479,15 @@
     el['stage'].classList.add('descending');
   }
 
+  // 줍기 후 연출: 회수물이 플레이어 쪽으로 빨려 들어가는 짧은 애니메이션.
+  function playGrabFx() {
+    if (!el['stage']) return;
+    el['stage'].classList.remove('grabbing');
+    void el['stage'].offsetWidth;
+    el['stage'].classList.add('grabbing');
+    window.setTimeout(() => { if (el['stage']) el['stage'].classList.remove('grabbing'); }, 460);
+  }
+
   function show(screenId) {
     document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
     el[screenId].classList.add('active');
@@ -372,90 +533,138 @@
     if (floor > meta.maxDepth) { meta.maxDepth = floor; saveMeta(); }
   }
 
+  // 새 층의 맵을 만들고 입구에 선다.
+  function enterFloor(floor) {
+    run.floorMap = generateFloorMap(floor);
+    run.currentNodeId = run.floorMap.entryId;
+    run.holdEvent = null;
+    const entry = currentNode();
+    entry.entered = true; // 입구 환경 효과는 없음
+    run.currentItem = entry.item && !entry.itemTaken ? entry.item : null;
+    const f = FLOORS[floor - 1];
+    log(`${f.n}층. ${FLOOR_OPEN_CUE[floor - 1] || ''}`);
+  }
+
   function startNewRun() {
+    if (el['log']) el['log'].innerHTML = '<div class="log-line">아래가 열린다.</div>';
     run = newRun();
-    run.currentItem = null;
-    run.awaitingRoom = true;
-    run.currentRoom = null;
     bumpMaxDepth(run.floor);
+    enterFloor(1);
     show('screen-dungeon');
-    log('1층. 어느 쪽으로 갈까.');
     render();
     startTick();
   }
 
-  function resolveRoomCheck(room) {
-    const roll = Math.floor(Math.random() * 20) + 1;
-    const lightPct = Math.round((run.light / maxLight()) * 100);
-    const lightMod = lightPct >= 70 ? 2 : lightPct <= 25 ? -2 : 0;
-    const bagMod = usedSlots() === 0 ? 1 : usedSlots() >= bagCap() - 1 ? -1 : 0;
-    const mod = lightMod + bagMod + (room.key === 'camp' ? 2 : room.key === 'nest' ? -1 : 0);
-    const dc = 10 + run.floor * 2 + room.dc;
-    const total = roll + mod;
-    let outcome = 'fail';
-    if (roll === 20 || total >= dc + 5) outcome = 'critical';
-    else if (total >= dc) outcome = 'success';
-    else if (total >= dc - 3) outcome = 'mixed';
-
-    const result = { roll, mod, dc, total, outcome };
-    if (outcome === 'critical') {
-      run.light = Math.min(maxLight(), run.light + 6);
-      run.danger = Math.max(0, run.danger - 6);
-      result.cue = '문틈 너머가 조용하다.';
-      result.kind = 'win';
-    } else if (outcome === 'success') {
-      result.cue = '발소리가 먹힌다.';
-      result.kind = 'win';
-    } else if (outcome === 'mixed') {
-      run.danger = Math.min(100, run.danger + 5);
-      result.cue = '뒤에서 금속이 긁힌다.';
-      result.kind = 'hot';
-    } else {
-      run.light = Math.max(0, run.light - 6);
-      run.danger = Math.min(100, run.danger + 11);
-      if (run.danger > 0) run.chasing = true;
-      result.cue = '무언가 먼저 알아챘다.';
-      result.kind = 'hot';
+  // 노드 도착: 환경 효과 1회 적용 → 아이템 노출 → 몬스터 이벤트 발동.
+  function arriveAtNode() {
+    const node = currentNode();
+    if (!node.entered) {
+      node.entered = true;
+      if (node.light) run.light = Math.max(0, Math.min(maxLight(), run.light + node.light));
+      if (node.danger > 0) run.danger = Math.min(100, run.danger + node.danger);
+      else if (node.danger < 0) run.danger = Math.max(0, run.danger + node.danger);
     }
-    return result;
+    run.currentItem = node.item && !node.itemTaken ? node.item : null;
+    if (run.currentItem) log(`${run.currentItem.name}.`, node.style === 'danger' ? 'hot' : undefined);
+    triggerMonster(node);
   }
 
-  function chooseRoom(key) {
-    if (!run || !run.awaitingRoom || run.moving) return;
-    const room = ROOM_TYPES.find((r) => r.key === key) || ROOM_TYPES[0];
-    run.awaitingRoom = false;
-    run.moving = true;
-    run.currentRoom = room;
-    run.currentItem = null;
-    run.lastRoll = null;
-    log(`${room.move} 들어간다.`);
-    render();
+  function triggerMonster(node) {
+    if (!node.monster || node.monsterResolved) return;
+    const type = node.monster.type;
+    if (type === 'sight') {
+      node.monsterResolved = true; // 정보성 1회 이벤트
+      run.danger = Math.min(100, run.danger + SIGHT_DANGER);
+      log('통로 끝에서 회수자가 어른거린다. 이쪽을 본 걸까.', 'hot');
+    } else if (type === 'cross') {
+      run.holdEvent = { type: 'cross', node: node.id };
+      run.danger = Math.min(100, run.danger + CROSS_DANGER);
+      log('앞 갈림길로 회수자가 천천히 지나간다. 멈출까, 다른 길로 갈까.', 'hot');
+    } else if (type === 'ambush') {
+      run.holdEvent = { type: 'ambush', node: node.id };
+      log('바로 옆에서 회수자가 멈췄다. 움직이면 들킨다.', 'hot');
+    }
+  }
 
+  // 전진 연출 후 콜백 실행. 연출 중에는 갈림길/액션을 가린다.
+  function beginTransition(after, fx, duration) {
+    if (run.moving) return;
+    run.moving = true;
+    render();
+    if (fx === 'descend') playDescendFx();
     window.setTimeout(() => {
-      if (!run || !run.moving || !run.currentRoom || run.currentRoom.key !== room.key) return;
-      run.light = Math.max(0, Math.min(maxLight(), run.light + room.light));
-      if (room.danger > 0) {
-        run.danger = Math.min(100, run.danger + room.danger);
-        if (room.key === 'nest') run.chasing = true;
-      } else if (room.danger < 0) {
-        run.danger = Math.max(0, run.danger + room.danger);
-      }
-      run.currentItem = pickRoomItem(run.floor, room);
-      run.lastRoll = resolveRoomCheck(room);
+      if (!run) return;
+      after();
       run.moving = false;
-      log(run.lastRoll.cue, run.lastRoll.kind);
-      log(`${run.currentItem.name}.`, room.key === 'nest' ? 'hot' : undefined);
       render();
-    }, 320);
+    }, duration);
+  }
+
+  // 갈림길 선택. 계단이면 강하, 아니면 인접 노드로 이동.
+  function chooseExit(targetId) {
+    if (!run || run.moving) return;
+    const node = currentNode();
+    const target = nodeById(targetId);
+    if (!target || !node.exits.includes(targetId)) return;
+
+    // 대기 이벤트를 무시하고 움직이면 들킨다.
+    if (run.holdEvent) {
+      const ev = run.holdEvent;
+      if (ev.type === 'cross') {
+        run.danger = Math.min(100, run.danger + CROSS_MOVE_DANGER);
+        run.chasing = true;
+        log('지나가던 회수자가 움직임을 느꼈다. 따라온다!', 'hot');
+      } else if (ev.type === 'ambush') {
+        run.danger = Math.min(100, run.danger + AMBUSH_MOVE_DANGER);
+        run.chasing = true;
+        log('움직였다. 들켰다 — 추격 시작!', 'hot');
+      }
+      const evNode = nodeById(ev.node);
+      if (evNode) evNode.monsterResolved = true;
+      run.holdEvent = null;
+    }
+
+    // 회수자가 보이는 방향으로 전진하면 위험이 더 오른다.
+    if (node.dangerExit === targetId) {
+      run.danger = Math.min(100, run.danger + SIGHT_MOVE_DANGER);
+    }
+
+    if (target.kind === 'stairs') { descend(); return; }
+
+    beginTransition(() => {
+      run.currentNodeId = targetId;
+      arriveAtNode();
+    }, 'move', MOVE_MS);
+  }
+
+  // 대기. 지나가는/매복 회수자를 흘려보낸다. 시간이 흘러 조명이 조금 닳는다.
+  function chooseWait() {
+    if (!run || !run.holdEvent || run.moving) return;
+    const ev = run.holdEvent;
+    run.light = Math.max(0, run.light - WAIT_LIGHT_COST);
+    if (ev.type === 'cross') {
+      run.danger = Math.max(0, run.danger - 6);
+      log('회수자가 갈림길을 지나갔다.');
+    } else {
+      run.danger = Math.max(0, run.danger - 3);
+      log('숨을 죽였다. 발소리가 멀어진다.');
+    }
+    const evNode = nodeById(ev.node);
+    if (evNode) evNode.monsterResolved = true;
+    run.holdEvent = null;
+    render();
   }
 
   function grab() {
     if (!run.currentItem || !roomFor(run.currentItem)) return;
+    const node = currentNode();
     const item = run.currentItem;
     run.bag.push(item);
+    node.itemTaken = true;
     run.grabbedCount += 1;
     run.currentItem = null;
     run.light = Math.max(0, run.light - GRAB_LIGHT_COST);
+    playGrabFx();
     if (!run.chasing) {
       run.chasing = true;
       run.danger = Math.max(run.danger, GRAB_DANGER_BUMP);
@@ -467,22 +676,17 @@
     render();
   }
 
+  // 계단 아래로: 다음 층의 새 맵을 생성한다.
   function descend() {
     if (run.floor >= FLOORS.length) return;
-    run.floor += 1;
-    run.light = Math.max(0, run.light - DESCEND_LIGHT_COST);
-    if (run.chasing) run.danger = Math.min(100, run.danger + DESCEND_DANGER_BUMP);
-    bumpMaxDepth(run.floor);
-    if (run.floor > run.maxFloor) run.maxFloor = run.floor;
-    run.currentItem = null;
-    run.awaitingRoom = true;
-    run.moving = false;
-    run.currentRoom = null;
-    run.lastRoll = null;
-    const f = FLOORS[run.floor - 1];
-    log(`${f.n}층. 다음 방을 고르자.`);
-    playDescendFx();
-    render();
+    beginTransition(() => {
+      run.floor += 1;
+      run.light = Math.max(0, run.light - DESCEND_LIGHT_COST);
+      if (run.chasing) run.danger = Math.min(100, run.danger + DESCEND_DANGER_BUMP);
+      bumpMaxDepth(run.floor);
+      if (run.floor > run.maxFloor) run.maxFloor = run.floor;
+      enterFloor(run.floor);
+    }, 'descend', DESCEND_MS);
   }
 
   function dropAndFlee() {
@@ -631,41 +835,34 @@
     const risk = riskState();
     el['danger-val'].textContent = run.chasing ? `${risk.label} · ${Math.round(run.danger)}%` : '대기';
     if (el['risk-panel']) {
-      el['risk-panel'].className = `risk-panel ${risk.key}`;
+      el['risk-panel'].className = `risk-panel ${risk.key} minimal`;
       el['risk-chip'].textContent = risk.label;
       el['risk-copy'].textContent = risk.copy;
-      el['risk-panel'].classList.toggle('minimal', true);
     }
 
     // 가방 슬롯
     renderBag();
-    renderRoomChoices();
-    renderRollPanel();
 
-    // 회수 포인트 / 추격 연출
+    // 갈림길 / 스테이지 / 깊이 레일
+    renderChoices();
     if (el['stage']) {
       el['stage'].classList.toggle('moving', !!run.moving);
       el['stage'].classList.toggle('has-loot', !!run.currentItem);
-      el['stage'].classList.toggle('choosing', !!run.awaitingRoom);
     }
     renderStage();
     renderDepthRail();
 
-    // 액션 버튼 활성화
-    if (el['actions']) el['actions'].classList.toggle('hidden', run.awaitingRoom || run.moving);
-    el['btn-grab'].disabled = !(run.currentItem && roomFor(run.currentItem));
-    el['btn-grab'].textContent = run.awaitingRoom
-      ? '먼저 길 선택'
-      : run.currentItem
-        ? (roomFor(run.currentItem) ? '줍기' : '가방 가득')
-        : '남은 게 없다';
-    el['btn-deeper'].disabled = run.awaitingRoom || run.floor >= FLOORS.length;
-    el['btn-deeper'].textContent = run.floor >= FLOORS.length
-      ? '끝'
-      : '앞으로';
-    el['btn-drop'].disabled   = !(run.chasing && run.bag.length > 0);
-    el['btn-drop'].textContent = run.bag.length > 0 ? '던지기' : '비어있음';
-    el['btn-drop'].classList.toggle('hidden-action', !(run.chasing && run.bag.length > 0));
+    // 액션 버튼: 줍기(스테이지 위), 버리고 도망, 나가기.
+    if (el['dock']) el['dock'].classList.toggle('hidden', !!run.moving);
+    const canGrab = !!(run.currentItem && roomFor(run.currentItem));
+    el['btn-grab'].classList.toggle('hidden', !(run.currentItem && !run.moving));
+    el['btn-grab'].disabled = !canGrab;
+    el['btn-grab'].textContent = run.currentItem ? (canGrab ? '줍기' : '가방 가득') : '';
+
+    const showDrop = run.chasing && run.bag.length > 0;
+    el['btn-drop'].disabled = !showDrop;
+    el['btn-drop'].classList.toggle('hidden-action', !showDrop);
+    if (el['dock-actions']) el['dock-actions'].classList.toggle('has-drop', showDrop);
     el['btn-return'].disabled = false;
     el['btn-return'].textContent = run.bag.length > 0 ? '나가기' : '돌아가기';
   }
@@ -693,25 +890,41 @@
     });
   }
 
-  function renderRoomChoices() {
-    if (!el['room-panel'] || !el['room-choices']) return;
-    el['room-panel'].classList.toggle('hidden', !run.awaitingRoom);
-    if (!run.awaitingRoom) {
-      el['room-choices'].innerHTML = '';
-      return;
-    }
-    el['room-choices'].innerHTML = ROOM_TYPES.map((room) =>
-      `<button class="btn room-btn ${room.style}" data-room="${room.key}">` +
-      `<b>${room.path}</b><span>${room.copy}</span></button>`
-    ).join('');
-    el['room-choices'].querySelectorAll('[data-room]').forEach((btn) => {
-      btn.addEventListener('click', () => chooseRoom(btn.dataset.room));
-    });
-  }
+  // 현재 노드의 출구(+상황 선택지)를 동적으로 그린다. 항상 3개 고정이 아니다.
+  function renderChoices() {
+    const dock = el['room-choices'];
+    if (!dock) return;
+    if (!run || run.moving || !run.floorMap) { dock.innerHTML = ''; return; }
+    const node = currentNode();
+    const out = [];
 
-  function renderRollPanel() {
-    if (!el['roll-panel']) return;
-    el['roll-panel'].classList.add('hidden');
+    // 상황 선택지 '기다리기' — 몬스터 대기 이벤트가 있을 때만.
+    if (run.holdEvent) {
+      const waitDesc = run.holdEvent.type === 'ambush' ? '숨을 죽이고 보낸다' : '지나갈 때까지 멈춘다';
+      out.push(`<button class="btn room-btn good" data-act="wait"><b>기다리기</b><span>${waitDesc}</span></button>`);
+    }
+
+    // 인접 노드들 = 갈림길.
+    node.exits.forEach((nid) => {
+      const t = nodeById(nid);
+      const stairs = t.kind === 'stairs';
+      let label = stairs ? '계단 아래로' : t.label;
+      let desc = stairs ? '더 깊은 층' : t.desc;
+      let style = stairs ? '' : t.style;
+      if (node.dangerExit === nid) { style = 'danger'; desc = '회수자가 보인다'; }
+      else if (!stairs && t.exits.length === 1) { desc = (desc ? desc + ' · ' : '') + '막다른 곳'; }
+      out.push(`<button class="btn room-btn ${style}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}"><b>${label}</b><span>${desc}</span></button>`);
+    });
+
+    dock.innerHTML = out.join('');
+    dock.classList.toggle('multi', out.length >= 3);
+    dock.querySelectorAll('[data-act]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const act = btn.dataset.act;
+        if (act === 'wait') chooseWait();
+        else chooseExit(parseInt(btn.dataset.to, 10));
+      });
+    });
   }
 
   function renderReturnScreen() {
@@ -741,23 +954,21 @@
 
   function renderStage() {
     const rpEl = el['recovery-point'];
+    const node = currentNode();
     if (run.moving) {
-      rpEl.classList.add('empty');
+      rpEl.className = 'recovery-point empty';
       rpEl.style.borderColor = '';
-      rpEl.innerHTML = '<span class="rp-name">앞으로 간다</span>';
-    } else if (run.awaitingRoom) {
-      rpEl.classList.add('empty');
-      rpEl.style.borderColor = '';
-      rpEl.innerHTML = '<span class="rp-name">갈림길</span>';
+      rpEl.innerHTML = '<span class="rp-name">앞으로…</span>';
     } else if (run.currentItem) {
       const it = run.currentItem;
-      rpEl.classList.remove('empty');
+      rpEl.className = 'recovery-point';
       rpEl.style.borderColor = TIER_COLOR[it.tier];
       rpEl.innerHTML = `${itemIcon(it.icon)}<span class="rp-name">${it.name}</span>`;
     } else {
-      rpEl.classList.add('empty');
+      rpEl.className = 'recovery-point empty';
       rpEl.style.borderColor = '';
-      rpEl.innerHTML = '<span class="rp-name">비었다</span>';
+      const hint = node && node.kind === 'entry' ? '입구' : node ? node.label : '…';
+      rpEl.innerHTML = `<span class="rp-name">${hint}</span>`;
     }
 
     // 회수자: 위험이 클수록 플레이어(왼쪽)에 가까워진다.
@@ -830,7 +1041,6 @@
   function bind() {
     el['btn-enter'].addEventListener('click', startNewRun);
     el['btn-grab'].addEventListener('click', grab);
-    el['btn-deeper'].addEventListener('click', descend);
     el['btn-drop'].addEventListener('click', dropAndFlee);
     el['btn-return'].addEventListener('click', returnToSurface);
     el['buy-committee'].addEventListener('click', () => chooseBuyer('committee'));
@@ -863,9 +1073,16 @@
     renderStartScreen();
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  }
+
+  // 헤드리스(Node) 검증용: 순수 맵 생성 로직만 노출한다. 브라우저에는 영향 없음.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { generateFloorMap, bfs, FLOORS, ITEM_TABLE, NODE_KINDS };
   }
 })();
