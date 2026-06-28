@@ -1085,3 +1085,146 @@ html, body { touch-action: manipulation; }
   #screen-dungeon .stage > #log.log { padding: 5px 9px; }
   .stage-grab { padding: 8px 16px; }
 }
+
+/* ===================== Invisible threat pass ===================== */
+/* 회수자는 내부적으로만 다가온다. 화면에는 수치/스프라이트 대신 기척만 남긴다. */
+.stealth-gauge .gauge-bar { display: none; }
+.stealth-gauge .gauge-label {
+  min-height: 18px;
+  padding: 5px 8px;
+  border: 1px solid rgba(87,224,200,.18);
+  border-radius: 999px;
+  background: rgba(5,7,12,.34);
+}
+.stealth-gauge #danger-val {
+  color: var(--muted);
+  letter-spacing: .3px;
+}
+#chaser,
+#screen-dungeon .chaser {
+  display: none !important;
+}
+#screen-dungeon .risk-panel.minimal {
+  display: none;
+}
+#screen-dungeon .risk-panel.warn,
+#screen-dungeon .risk-panel.danger,
+#screen-dungeon .risk-panel.critical {
+  box-shadow: 0 0 18px rgba(255,82,110,.08);
+}
+
+/* ===================== Fixed upgrade screen pass ===================== */
+/* 판매/강화 정보가 길어져도 하단 CTA가 밀려 사라지지 않게 한다. */
+#screen-upgrade {
+  overflow: hidden;
+  padding: max(12px, env(safe-area-inset-top)) 14px calc(78px + env(safe-area-inset-bottom));
+}
+#screen-upgrade .result-title {
+  flex: 0 0 auto;
+  margin: 2px 0 8px;
+  font-size: clamp(21px, 6vw, 26px);
+}
+#screen-upgrade .sale-card {
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+#screen-upgrade .sale-list {
+  max-height: 46px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+#screen-upgrade .sale-item,
+#screen-upgrade .sale-balance,
+#screen-upgrade .sale-total,
+#screen-upgrade .sale-buyer {
+  font-size: 12px;
+}
+#screen-upgrade .sale-total {
+  padding-top: 6px;
+}
+#screen-upgrade .sale-total b {
+  font-size: 16px;
+}
+#screen-upgrade .truth-news,
+#screen-upgrade .contract-card,
+#screen-upgrade .street-news,
+#screen-upgrade .goal-line,
+#screen-upgrade .shop-hint {
+  flex: 0 0 auto;
+}
+#screen-upgrade .truth-news,
+#screen-upgrade .contract-card,
+#screen-upgrade .street-news {
+  margin-top: 7px;
+  padding: 7px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  line-height: 1.25;
+  max-height: 48px;
+  overflow: hidden;
+}
+#screen-upgrade .goal-line {
+  margin: 7px 0 4px;
+  font-size: 11px;
+}
+#screen-upgrade .shop-hint {
+  margin: 2px 0 6px;
+  font-size: 11px;
+}
+#screen-upgrade .upgrades {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: repeat(3, minmax(54px, 1fr));
+  gap: 7px;
+  overflow: hidden;
+}
+#screen-upgrade .up-btn {
+  min-height: 0;
+  padding: 8px 10px;
+  border-radius: 14px;
+  gap: 2px;
+  justify-content: center;
+}
+#screen-upgrade .up-btn .up-title {
+  font-size: 13px;
+  gap: 6px;
+}
+#screen-upgrade .up-btn .up-sub,
+#screen-upgrade .up-btn .up-cost {
+  font-size: 10px;
+  line-height: 1.15;
+}
+#screen-upgrade .up-btn .loot-icon {
+  width: 24px;
+  height: 24px;
+}
+#screen-upgrade #btn-again {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 8;
+  width: auto;
+  min-height: 52px;
+  margin: 0;
+  border-radius: 18px;
+}
+@media (max-height: 680px) {
+  #screen-upgrade {
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-bottom: calc(68px + env(safe-area-inset-bottom));
+  }
+  #screen-upgrade .result-title { margin-bottom: 6px; font-size: 20px; }
+  #screen-upgrade .sale-card { padding: 8px 10px; }
+  #screen-upgrade .truth-news,
+  #screen-upgrade .contract-card,
+  #screen-upgrade .street-news { max-height: 38px; padding: 6px 8px; margin-top: 5px; }
+  #screen-upgrade .goal-line { margin: 5px 0 2px; }
+  #screen-upgrade .shop-hint { display: none; }
+  #screen-upgrade .upgrades { grid-template-rows: repeat(3, minmax(48px, 1fr)); gap: 6px; }
+  #screen-upgrade .up-btn { padding: 7px 9px; }
+  #screen-upgrade #btn-again { min-height: 48px; }
+}

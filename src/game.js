@@ -84,8 +84,8 @@
   const DROP_DANGER_MINUS  = 6;
   const WAIT_LIGHT_COST     = 4;  // 기다리기: 시간이 흘러 조명 소모
   // 몬스터 이벤트 위험 수치
-  const SIGHT_DANGER        = 8;  // 직선 끝에 회수자가 보임
-  const SIGHT_MOVE_DANGER   = 6;  // 회수자 보이는 쪽으로 전진할 때 추가
+  const SIGHT_DANGER        = 8;  // 직선 끝에서 이상한 기척
+  const SIGHT_MOVE_DANGER   = 6;  // 그쪽으로 전진할 때 추가 위험
   const CROSS_DANGER        = 4;  // 갈림길을 회수자가 지나감(도착)
   const CROSS_MOVE_DANGER   = 14; // 지나가는 중에 움직이면 들킴
   const AMBUSH_MOVE_DANGER  = 20; // '움직이면 들킴' 상태에서 이동
@@ -364,7 +364,7 @@
   }
 
   // 몬스터 이벤트 3종:
-  //  - sight : 직선 끝에 회수자가 보임(위험 상승, 선택은 가능, 그쪽으로 가면 위험 추가)
+  //  - sight : 직선 끝에서 이상한 기척(위험 상승, 선택은 가능, 그쪽으로 가면 위험 추가)
   //  - cross : 앞 갈림길을 회수자가 지나감(기다리거나 다른 길; 지나가는 중 움직이면 들킴)
   //  - ambush: '움직이면 들킴' 상태(다음 이동 시 위험 급증/추격; 기다리면 완화)
   function placeMonsters(nodes, others, stairsId, floor) {
@@ -575,14 +575,14 @@
     if (type === 'sight') {
       node.monsterResolved = true; // 정보성 1회 이벤트
       run.danger = Math.min(100, run.danger + SIGHT_DANGER);
-      log('통로 끝에서 회수자가 어른거린다. 이쪽을 본 걸까.', 'hot');
+      log('통로 끝에서 젖은 쇳소리가 멈췄다.', 'hot');
     } else if (type === 'cross') {
       run.holdEvent = { type: 'cross', node: node.id };
       run.danger = Math.min(100, run.danger + CROSS_DANGER);
-      log('앞 갈림길로 회수자가 천천히 지나간다. 멈출까, 다른 길로 갈까.', 'hot');
+      log('앞 갈림길에서 발소리가 스쳐 지나간다. 멈출까, 다른 길로 갈까.', 'hot');
     } else if (type === 'ambush') {
       run.holdEvent = { type: 'ambush', node: node.id };
-      log('바로 옆에서 회수자가 멈췄다. 움직이면 들킨다.', 'hot');
+      log('바로 옆에서 무언가 멈췄다. 움직이면 들킨다.', 'hot');
     }
   }
 
@@ -613,7 +613,7 @@
       if (ev.type === 'cross') {
         run.danger = Math.min(100, run.danger + CROSS_MOVE_DANGER);
         run.chasing = true;
-        log('지나가던 회수자가 움직임을 느꼈다. 따라온다!', 'hot');
+        log('발소리가 방향을 틀었다. 따라온다!', 'hot');
       } else if (ev.type === 'ambush') {
         run.danger = Math.min(100, run.danger + AMBUSH_MOVE_DANGER);
         run.chasing = true;
@@ -644,7 +644,7 @@
     run.light = Math.max(0, run.light - WAIT_LIGHT_COST);
     if (ev.type === 'cross') {
       run.danger = Math.max(0, run.danger - 6);
-      log('회수자가 갈림길을 지나갔다.');
+      log('발소리가 갈림길을 지나갔다.');
     } else {
       run.danger = Math.max(0, run.danger - 3);
       log('숨을 죽였다. 발소리가 멀어진다.');
@@ -668,7 +668,7 @@
     if (!run.chasing) {
       run.chasing = true;
       run.danger = Math.max(run.danger, GRAB_DANGER_BUMP);
-      log('집었다. 회수자가 가방을 노린다!', 'hot');
+      log('집었다. 뒤쪽 공기가 식었다.', 'hot');
     } else {
       run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
       log(`${item.name}까지 챙겼다. 발소리가 가까워진다.`, 'hot');
@@ -795,10 +795,10 @@
 
   function riskState() {
     if (!run || !run.chasing) return { key: 'safe', label: '정적', copy: '' };
-    if (run.danger >= 85) return { key: 'critical', label: '코앞', copy: '' };
-    if (run.danger >= 65) return { key: 'danger', label: '가까움', copy: '' };
-    if (run.danger >= 35) return { key: 'warn', label: '소리', copy: '' };
-    return { key: 'safe', label: '멀다', copy: '' };
+    if (run.danger >= 85) return { key: 'critical', label: '숨소리', copy: '' };
+    if (run.danger >= 65) return { key: 'danger', label: '금속음', copy: '' };
+    if (run.danger >= 35) return { key: 'warn', label: '잡음', copy: '' };
+    return { key: 'safe', label: '먼 소리', copy: '' };
   }
 
   /* ---------------- 렌더링 ---------------- */
@@ -833,7 +833,7 @@
     el['danger-fill'].style.width = run.danger + '%';
     el['danger-fill'].classList.toggle('high', run.danger >= 70);
     const risk = riskState();
-    el['danger-val'].textContent = run.chasing ? `${risk.label} · ${Math.round(run.danger)}%` : '대기';
+    el['danger-val'].textContent = risk.label;
     if (el['risk-panel']) {
       el['risk-panel'].className = `risk-panel ${risk.key} minimal`;
       el['risk-chip'].textContent = risk.label;
@@ -911,7 +911,7 @@
       let label = stairs ? '계단 아래로' : t.label;
       let desc = stairs ? '더 깊은 층' : t.desc;
       let style = stairs ? '' : t.style;
-      if (node.dangerExit === nid) { style = 'danger'; desc = '회수자가 보인다'; }
+      if (node.dangerExit === nid) { style = 'danger'; desc = '젖은 쇳소리'; }
       else if (!stairs && t.exits.length === 1) { desc = (desc ? desc + ' · ' : '') + '막다른 곳'; }
       out.push(`<button class="btn room-btn ${style}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}"><b>${label}</b><span>${desc}</span></button>`);
     });
