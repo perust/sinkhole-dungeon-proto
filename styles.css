@@ -662,6 +662,38 @@ body {
 .risk-panel.danger .risk-chip,
 .risk-panel.critical .risk-chip { color: var(--danger); background: rgba(255,82,110,.16); }
 
+.roll-panel {
+  margin-top: 7px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255,209,102,.32);
+  border-radius: 12px;
+  background: rgba(255,209,102,.07);
+  color: var(--muted);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.roll-panel.hidden { display: none; }
+.roll-face {
+  flex: 0 0 auto;
+  min-width: 50px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255,209,102,.14);
+  color: var(--gold);
+  font-weight: 900;
+  text-align: center;
+}
+.roll-copy { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roll-panel.critical,
+.roll-panel.success { border-color: rgba(90,209,127,.36); background: rgba(90,209,127,.07); }
+.roll-panel.critical .roll-face,
+.roll-panel.success .roll-face { color: var(--good); background: rgba(90,209,127,.14); }
+.roll-panel.mixed,
+.roll-panel.fail { border-color: rgba(255,161,74,.42); background: rgba(255,161,74,.08); }
+.roll-panel.fail .roll-face { color: var(--danger); background: rgba(255,82,110,.15); }
+
 .room-panel {
   margin-top: 10px;
   padding: 9px;

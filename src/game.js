@@ -49,10 +49,17 @@
   ];
 
   const ROOM_TYPES = [
-    { key: 'camp', name: '안전 캠프', style: 'good', copy: '조명 +18 · 낮은 보상', light: 18, danger: -8, lootBias: 'common' },
-    { key: 'lab', name: '폐쇄 연구실', style: '', copy: '희귀 단서 확률↑ · 조명 -6', light: -6, danger: 6, lootBias: 'rare' },
-    { key: 'nest', name: '회수자 둥지', style: 'danger', copy: '고가 유물 확률↑ · 추적도 +12', light: -10, danger: 12, lootBias: 'epic' },
+    { key: 'camp', name: '안전 캠프', style: 'good', copy: '조명 +18 · 낮은 보상 · 쉬움', light: 18, danger: -8, lootBias: 'common', dc: -2 },
+    { key: 'lab', name: '폐쇄 연구실', style: '', copy: '희귀 단서 확률↑ · 조명 -6 · 보통', light: -6, danger: 6, lootBias: 'rare', dc: 1 },
+    { key: 'nest', name: '회수자 둥지', style: 'danger', copy: '고가 유물 확률↑ · 추적도 +12 · 어려움', light: -10, danger: 12, lootBias: 'epic', dc: 4 },
   ];
+
+  const ROLL_OUTCOMES = {
+    critical: { label: '대성공', cls: 'win' },
+    success: { label: '성공', cls: 'win' },
+    mixed: { label: '대가 있는 성공', cls: 'hot' },
+    fail: { label: '실패', cls: 'hot' },
+  };
 
   function itemIcon(index) {
     return `<span class="loot-icon" style="--icon-index:${index}" aria-hidden="true"></span>`;
@@ -214,6 +221,7 @@
       currentItem: null, // 현재 층 회수 포인트에 놓인 물건 (집으면 null)
       awaitingRoom: true,
       currentRoom: null,
+      lastRoll: null,
       maxFloor: 1,
       grabbedCount: 0,
       droppedCount: 0,
@@ -247,6 +255,7 @@
     'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
+    'roll-panel', 'roll-face', 'roll-copy',
     'room-panel', 'room-choices',
     'bag-slots', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log', 'actions',
     'btn-grab', 'btn-deeper', 'btn-drop', 'btn-return',
@@ -374,6 +383,39 @@
     startTick();
   }
 
+  function resolveRoomCheck(room) {
+    const roll = Math.floor(Math.random() * 20) + 1;
+    const lightPct = Math.round((run.light / maxLight()) * 100);
+    const lightMod = lightPct >= 70 ? 2 : lightPct <= 25 ? -2 : 0;
+    const bagMod = usedSlots() === 0 ? 1 : usedSlots() >= bagCap() - 1 ? -1 : 0;
+    const mod = lightMod + bagMod + (room.key === 'camp' ? 2 : room.key === 'nest' ? -1 : 0);
+    const dc = 10 + run.floor * 2 + room.dc;
+    const total = roll + mod;
+    let outcome = 'fail';
+    if (roll === 20 || total >= dc + 5) outcome = 'critical';
+    else if (total >= dc) outcome = 'success';
+    else if (total >= dc - 3) outcome = 'mixed';
+
+    const result = { roll, mod, dc, total, outcome };
+    const face = ROLL_OUTCOMES[outcome];
+    if (outcome === 'critical') {
+      run.light = Math.min(maxLight(), run.light + 6);
+      run.danger = Math.max(0, run.danger - 6);
+      log(`판정 ${roll}${mod ? signed(mod) : ''} vs ${dc}. ${face.label} — 길을 먼저 잡았다.`, face.cls);
+    } else if (outcome === 'success') {
+      log(`판정 ${roll}${mod ? signed(mod) : ''} vs ${dc}. ${face.label} — 조용히 들어갔다.`, face.cls);
+    } else if (outcome === 'mixed') {
+      run.danger = Math.min(100, run.danger + 5);
+      log(`판정 ${roll}${mod ? signed(mod) : ''} vs ${dc}. ${face.label} — 얻지만 소리가 났다.`, face.cls);
+    } else {
+      run.light = Math.max(0, run.light - 6);
+      run.danger = Math.min(100, run.danger + 11);
+      if (run.danger > 0) run.chasing = true;
+      log(`판정 ${roll}${mod ? signed(mod) : ''} vs ${dc}. ${face.label} — 회수자가 먼저 들었다.`, face.cls);
+    }
+    return result;
+  }
+
   function chooseRoom(key) {
     if (!run || !run.awaitingRoom) return;
     const room = ROOM_TYPES.find((r) => r.key === key) || ROOM_TYPES[0];
@@ -387,6 +429,7 @@
       run.danger = Math.max(0, run.danger + room.danger);
     }
     run.currentItem = pickRoomItem(run.floor, room);
+    run.lastRoll = resolveRoomCheck(room);
     log(`${room.name}. ${run.currentItem.name} 발견.`, room.key === 'nest' ? 'hot' : undefined);
     render();
   }
@@ -419,6 +462,7 @@
     run.currentItem = null;
     run.awaitingRoom = true;
     run.currentRoom = null;
+    run.lastRoll = null;
     const f = FLOORS[run.floor - 1];
     log(`${f.n}층. 다음 방을 고르자.`);
     playDescendFx();
@@ -579,6 +623,7 @@
     // 가방 슬롯
     renderBag();
     renderRoomChoices();
+    renderRollPanel();
 
     // 회수 포인트 / 추격 연출
     renderStage();
@@ -639,6 +684,17 @@
     el['room-choices'].querySelectorAll('[data-room]').forEach((btn) => {
       btn.addEventListener('click', () => chooseRoom(btn.dataset.room));
     });
+  }
+
+  function renderRollPanel() {
+    if (!el['roll-panel'] || !el['roll-face'] || !el['roll-copy']) return;
+    const roll = run.lastRoll;
+    el['roll-panel'].classList.toggle('hidden', !roll || run.awaitingRoom);
+    if (!roll || run.awaitingRoom) return;
+    const face = ROLL_OUTCOMES[roll.outcome];
+    el['roll-panel'].className = `roll-panel ${roll.outcome}`;
+    el['roll-face'].textContent = `d20 ${roll.roll}`;
+    el['roll-copy'].textContent = `${face.label} · 보정 ${signed(roll.mod)} · 난이도 ${roll.dc}`;
   }
 
   function renderReturnScreen() {

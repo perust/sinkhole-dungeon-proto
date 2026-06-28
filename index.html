@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/pixel/player-delver.png" />
   <title>도심 싱크홀: 들고 나와라</title>
-  <link rel="stylesheet" href="styles.css?v=8" />
+  <link rel="stylesheet" href="styles.css?v=9" />
 </head>
 <body>
   <div id="app" class="phone">
@@ -89,8 +89,13 @@
         <span id="risk-copy" class="risk-copy">회수물을 집는 순간 추격이 시작된다.</span>
       </div>
 
+      <div id="roll-panel" class="roll-panel hidden" aria-live="polite">
+        <span id="roll-face" class="roll-face">d20</span>
+        <span id="roll-copy" class="roll-copy">판정 대기</span>
+      </div>
+
       <div id="room-panel" class="room-panel" aria-label="방 선택">
-        <div class="room-title">어느 쪽으로 갈까?</div>
+        <div class="room-title">어느 쪽으로 갈까? · d20 판정</div>
         <div id="room-choices" class="room-choices"></div>
       </div>
 
@@ -183,6 +188,6 @@
 
   </div>
 
-  <script src="src/game.js?v=8"></script>
+  <script src="src/game.js?v=9"></script>
 </body>
 </html>
