@@ -607,7 +607,7 @@
   const IDS = [
     'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail',
     'btn-enter', 'btn-reset', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-contract', 'start-goal',
-    'hud-rp', 'hud-depth', 'hud-bag',
+    'btn-meta', 'meta-panel', 'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
     'room-choices', 'dock', 'dock-actions',
@@ -796,6 +796,7 @@
     run = newRun();
     bumpMaxDepth(run.floor);
     enterFloor(1);
+    setMetaPanel(false);
     show('screen-dungeon');
     render();
     startTick();
@@ -2010,8 +2011,20 @@
 
   /* ---------------- 이벤트 배선 ---------------- */
 
+  function setMetaPanel(open) {
+    if (!el['meta-panel'] || !el['btn-meta']) return;
+    el['meta-panel'].hidden = !open;
+    el['btn-meta'].setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  function toggleMetaPanel() {
+    if (!el['meta-panel']) return;
+    setMetaPanel(el['meta-panel'].hidden);
+  }
+
   function bind() {
     el['btn-enter'].addEventListener('click', startNewRun);
+    if (el['btn-meta']) el['btn-meta'].addEventListener('click', toggleMetaPanel);
     el['btn-grab'].addEventListener('click', grab);
     el['btn-drop'].addEventListener('click', dropAndFlee);
     el['btn-return'].addEventListener('click', attemptReturnToSurface);

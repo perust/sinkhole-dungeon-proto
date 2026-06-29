@@ -68,10 +68,13 @@
         <span class="phase-chip">1F</span>
         <span class="gesture-hint"></span>
       </div>
-      <header class="hud">
-        <div class="hud-cell"><span class="hud-k">RP</span><span id="hud-rp" class="hud-v">0</span></div>
-        <div class="hud-cell"><span class="hud-k">최고</span><span id="hud-depth" class="hud-v">1</span><span class="hud-u">층</span></div>
-        <div class="hud-cell"><span class="hud-k">가방</span><span id="hud-bag" class="hud-v">0/3</span></div>
+      <header class="hud hud-compact">
+        <button id="btn-meta" class="meta-toggle" type="button" aria-expanded="false" aria-controls="meta-panel">정보</button>
+        <div id="meta-panel" class="hud-meta-panel" hidden>
+          <div class="hud-cell"><span class="hud-k">RP</span><span id="hud-rp" class="hud-v">0</span></div>
+          <div class="hud-cell"><span class="hud-k">최고</span><span id="hud-depth" class="hud-v">1</span><span class="hud-u">층</span></div>
+          <div class="hud-cell"><span class="hud-k">가방</span><span id="hud-bag" class="hud-v">0/3</span></div>
+        </div>
       </header>
 
       <div class="floor-banner">

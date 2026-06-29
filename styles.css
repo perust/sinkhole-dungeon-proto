@@ -220,6 +220,56 @@ body {
 .hud-v { font-size: 18px; font-weight: 800; color: var(--gold); }
 .hud-u { font-size: 11px; color: var(--muted); }
 
+.hud-compact {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: 12px;
+  width: auto;
+  margin: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+  z-index: 12;
+}
+.meta-toggle {
+  appearance: none;
+  min-width: 44px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid rgba(138,147,173,.35);
+  border-radius: 999px;
+  background: rgba(21,25,38,.72);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.meta-toggle[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: rgba(87,224,200,.5);
+  background: rgba(21,25,38,.94);
+}
+.hud-meta-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  gap: 0;
+  min-width: 248px;
+  padding: 8px 6px;
+  border: 1px solid rgba(87,224,200,.25);
+  border-radius: 14px;
+  background: rgba(13,17,29,.96);
+  box-shadow: 0 12px 26px rgba(0,0,0,.4);
+}
+.hud-meta-panel[hidden] { display: none; }
+.hud-meta-panel .hud-cell { padding: 0 8px; }
+.hud-meta-panel .hud-v { font-size: 16px; }
+
 .floor-banner {
   display: flex; align-items: center; gap: 8px;
   margin-top: 12px;
@@ -849,6 +899,13 @@ html, body { touch-action: manipulation; }
   border-radius: 18px;
   padding: 7px 5px;
   box-shadow: 0 8px 20px rgba(0,0,0,.24);
+}
+#screen-dungeon .hud-compact {
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 #screen-dungeon .floor-banner { margin-top: 8px; }
 #screen-dungeon .gauges { margin-top: 8px; gap: 7px; }
