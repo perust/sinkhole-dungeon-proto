@@ -1,6 +1,6 @@
 {
-  "name": "도심 싱크홀: 들고 나와라",
-  "short_name": "도심 싱크홀",
+  "name": "Unlit Halls",
+  "short_name": "Unlit Halls",
   "description": "챙기고, 도망치고, 팔고, 더 깊이 내려가는 모바일 extraction prototype.",
   "start_url": "./?source=pwa",
   "scope": "./",
