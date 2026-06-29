@@ -99,8 +99,8 @@
   const CROSS_MOVE_DANGER   = 14; // 지나가는 중에 움직이면 들킴
   const AMBUSH_MOVE_DANGER  = 20; // '움직이면 들킴' 상태에서 이동
   const TICK_MS            = 150;
-  const MOVE_MS            = 360; // 전진 연출 길이
-  const DESCEND_MS         = 440; // 강하 연출 길이
+  const MOVE_MS            = 420; // 전진 연출은 짧게, 상황 문구는 상단 패널에 지속
+  const DESCEND_MS         = 560; // 층 이동 연출도 조작감을 해치지 않게 짧게 유지
 
   const RECOVERY_OUTCOMES = [
     {
@@ -286,7 +286,7 @@
       holdEvent: null,     // 활성 몬스터 대기 이벤트({type:'cross'|'ambush', node})
       pendingEvent: null,  // 방 도착 후 플레이어가 고르는 짧은 환경 이벤트
       moving: false,       // 전진/강하 연출 중
-      lastAction: '',      // 상단 상황판에 남길 최근 중요 행동/맥락
+      lastAction: '',      // 다음 의미 있는 행동/상태 갱신 전까지 상단 상황판에 남길 최근 맥락
       maxFloor: 1,
       grabbedCount: 0,
       droppedCount: 0,
@@ -749,7 +749,7 @@
     if (!ev) return;
     node.roomEventResolved = true;
     run.pendingEvent = { ...ev, node: node.id };
-    run.lastAction = '';
+    run.lastAction = ev.cue;
     log(ev.cue, ev.type === 'footprints' ? 'hot' : undefined);
   }
 
@@ -1255,9 +1255,7 @@
     };
   }
 
-  const GENERIC_SITUATION_SENTENCES = new Set([
-    ['멈추거나', '다른 길을 고를 수 있다.'].join(' '),
-  ]);
+  const GENERIC_SITUATION_SENTENCES = new Set();
 
   function cleanSituationText(text) {
     const sentences = text.replace(/\s+/g, ' ').trim().match(/[^.!?。！？]+[.!?。！？]?/g) || [];
@@ -1275,7 +1273,7 @@
     const pending = run.pendingEvent ? ` ${run.pendingEvent.title}: ${run.pendingEvent.cue}` : '';
     const event = run.holdEvent ? (run.holdEvent.type === 'ambush' ? ' 옆 어둠에서 숨소리가 멎었다.' : ' 갈림길 쪽에서 발소리가 스친다.') : '';
     const chase = run.chasing && !run.holdEvent ? ' 젖은 발소리가 따라붙는다.' : '';
-    const action = run.lastAction ? ` ${run.lastAction}` : '';
+    const action = run.lastAction && (!run.pendingEvent || run.lastAction !== run.pendingEvent.cue) ? ` ${run.lastAction}` : '';
     return cleanSituationText(`${here}${item}${pending}${event}${chase}${action}`);
   }
 
