@@ -1492,6 +1492,83 @@ html, body { touch-action: manipulation; }
   box-shadow: 0 0 18px rgba(255,82,110,.08);
 }
 
+/* ===================== Narrative hierarchy cleanup pass ===================== */
+/*
+  One readable narrative surface only: the bag-row dialogue gate.
+  The old top situation box plus stage/log overlays kept duplicating the same
+  room/event sentence and were especially unreadable under the choice dock.
+*/
+#screen-dungeon .situation-panel,
+#screen-dungeon .stage-situation,
+#screen-dungeon .stage > #log.log {
+  display: none !important;
+}
+
+#screen-dungeon .dialogue-card {
+  width: 100%;
+  margin: 10px 0 0;
+  min-height: 104px;
+  padding: 15px 16px 12px;
+  border-radius: 18px;
+}
+#screen-dungeon .dialogue-copy {
+  max-width: none;
+  font-size: 15px;
+  line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* Monster encounters should read as a dark presence in the room, not a card/icon. */
+#screen-dungeon .stage.monster-encounter {
+  background:
+    radial-gradient(ellipse at 50% 44%, rgba(20,0,4,.62), transparent 46%),
+    linear-gradient(180deg, #080910 0%, #030407 76%, #010102 100%);
+}
+#screen-dungeon .stage.monster-encounter::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 48%, rgba(0,0,0,.12) 0 18%, rgba(255,82,110,.08) 30%, transparent 54%),
+    radial-gradient(ellipse at 50% 56%, transparent 18%, rgba(0,0,0,.82) 74%),
+    linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.76));
+}
+#screen-dungeon .stage.monster-encounter::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  width: min(72%, 280px);
+  height: 92%;
+  transform: translate(-50%, -50%) scale(1.08);
+  z-index: 2;
+  pointer-events: none;
+  background: var(--pixel-chaser) center/contain no-repeat;
+  image-rendering: pixelated;
+  opacity: .54;
+  filter: brightness(0) saturate(0) contrast(1.8) blur(1.1px) drop-shadow(0 0 28px rgba(0,0,0,.95));
+  mix-blend-mode: multiply;
+}
+#screen-dungeon .stage.monster-encounter .fp-view {
+  filter: brightness(.35) saturate(.55) blur(.4px);
+}
+#screen-dungeon .stage.monster-encounter .recovery-point {
+  opacity: .16;
+  filter: grayscale(1) brightness(.35) blur(.5px);
+}
+#screen-dungeon .stage.monster-encounter .mini-map {
+  filter: brightness(.7) saturate(.7);
+  opacity: .66;
+}
+
+@media (max-height: 680px) {
+  #screen-dungeon .dialogue-card { min-height: 84px; padding: 11px 12px 9px; }
+  #screen-dungeon .dialogue-copy { font-size: 13px; line-height: 1.42; }
+}
+
 /* ===================== Fixed upgrade screen pass ===================== */
 /* 판매/강화 정보가 길어져도 하단 CTA가 밀려 사라지지 않게 한다. */
 #screen-upgrade {
