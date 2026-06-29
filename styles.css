@@ -157,7 +157,18 @@ body {
   text-shadow: 0 0 18px rgba(87,224,200,.25);
 }
 .tagline { margin: 0; color: var(--accent); font-weight: 700; letter-spacing: .5px; }
-.premise { margin: 14px 0 0; color: var(--muted); font-size: 14px; max-width: 280px; }
+.prologue {
+  margin: 11px 0 0;
+  width: min(100%, 332px);
+  color: #c4ccdc;
+  font-size: 13px;
+  line-height: 1.42;
+  letter-spacing: -.1px;
+}
+.prologue p { margin: 0; }
+.prologue p + p { margin-top: 2px; }
+.prologue p:last-child { color: var(--text); font-weight: 700; }
+.premise { margin: 8px 0 0; color: var(--muted); font-size: 14px; max-width: 280px; }
 
 .btn-enter { margin-top: auto; width: 100%; padding: 18px; font-size: 20px; letter-spacing: 4px; }
 .meta-line { margin-top: 14px; color: var(--muted); font-size: 13px; }
@@ -327,8 +338,44 @@ body {
 .player { left: 10%; }
 .chaser { left: 100%; opacity: 0; transition: left .15s linear, opacity .3s ease; }
 .chaser.active { opacity: 1; }
+.chaser.encounter {
+  bottom: 19%;
+  transform: translateX(-50%) scale(1.35);
+  z-index: 7;
+  box-shadow: 0 0 28px rgba(255,82,110,.45), 0 0 70px rgba(0,0,0,.8);
+}
+.stage.monster-encounter::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255,82,110,.24), transparent 24%),
+    radial-gradient(circle at 50% 52%, rgba(0,0,0,.0), rgba(0,0,0,.72) 70%);
+  z-index: 6;
+  pointer-events: none;
+}
+.stage.monster-encounter::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 112px;
+  height: 112px;
+  transform: translate(-50%, -50%);
+  background: var(--pixel-chaser) center/cover no-repeat;
+  image-rendering: pixelated;
+  border-radius: 22px;
+  filter: drop-shadow(0 0 18px rgba(255,82,110,.75)) drop-shadow(0 18px 26px rgba(0,0,0,.85));
+  z-index: 8;
+  pointer-events: none;
+}
+.stage.monster-encounter .fp-view,
+.stage.monster-encounter .recovery-point,
+.stage.monster-encounter .mini-map { filter: brightness(.45) saturate(.7); }
+.chaser.encounter.close { animation: encounterShake .25s linear infinite; }
 .chaser.close { animation: shake .25s linear infinite; }
 @keyframes shake { 0%,100%{ transform: translateX(0) rotate(0);} 25%{transform:translateX(-2px) rotate(-6deg);} 75%{transform:translateX(2px) rotate(6deg);} }
+@keyframes encounterShake { 0%,100%{ transform: translateX(-50%) scale(1.35) rotate(0);} 25%{transform:translateX(calc(-50% - 2px)) scale(1.35) rotate(-4deg);} 75%{transform:translateX(calc(-50% + 2px)) scale(1.35) rotate(4deg);} }
 
 /* 로그 ----------------------------------------------------- */
 .log {
@@ -784,8 +831,9 @@ html, body { touch-action: manipulation; }
   height: clamp(188px, 34dvh, 300px);
   margin-top: 8px;
 }
-#screen-start .title { margin-top: 14px; font-size: clamp(28px, 8vw, 34px); }
-#screen-start .premise { margin-top: 10px; font-size: 13px; }
+#screen-start .title { margin-top: 12px; font-size: clamp(27px, 7.6vw, 34px); }
+#screen-start .prologue { font-size: clamp(12px, 3.35vw, 13px); }
+#screen-start .premise { margin-top: 8px; font-size: 13px; }
 #screen-start .pixel-preview { margin-top: 10px; }
 #screen-start .contract-card { max-width: 100%; }
 #screen-start .btn-enter {
@@ -861,6 +909,9 @@ html, body { touch-action: manipulation; }
   .truth-news { padding: 9px 11px; }
   .contract-card, .street-news { padding: 8px 10px; margin-top: 8px; }
   #screen-start .start-art { height: clamp(160px, 30dvh, 230px); }
+  #screen-start .title { margin-top: 10px; }
+  #screen-start .prologue { margin-top: 8px; line-height: 1.34; }
+  #screen-start .premise { margin-top: 6px; }
   #screen-start .pixel-preview { display: none; }
   #screen-dungeon { padding-bottom: calc(142px + env(safe-area-inset-bottom)); }
   #screen-dungeon .stage { min-height: 96px; }

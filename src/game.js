@@ -102,6 +102,7 @@
   const CROSS_DANGER        = 4;  // 갈림길을 회수자가 지나감(도착)
   const CROSS_MOVE_DANGER   = 14; // 지나가는 중에 움직이면 들킴
   const AMBUSH_MOVE_DANGER  = 20; // '움직이면 들킴' 상태에서 이동
+  const MONSTER_GRACE_DANGER = 86; // 위기 선택 성공 후 즉시 재기절하지 않게 낮출 기준
   const TICK_MS            = 150;
   const MOVE_MS            = 420; // 전진 연출은 짧게, 상황 문구는 상단 패널에 지속
   const DESCEND_MS         = 560; // 층 이동 연출도 조작감을 해치지 않게 짧게 유지
@@ -348,6 +349,9 @@
       currentNodeId: 0,    // 현재 위치한 노드 id
       holdEvent: null,     // 활성 몬스터 대기 이벤트({type:'cross'|'ambush', node})
       pendingEvent: null,  // 방 도착 후 플레이어가 고르는 짧은 환경 이벤트
+      monsterCrisisCount: 0,
+      previousNodeId: null,
+      failContext: '',
       mentalEventCount: 0,
       mentalGraceTicks: 0,
       lastMentalLoss: null,
@@ -719,13 +723,19 @@
     if (run.mentalGraceTicks > 0) run.mentalGraceTicks -= 1;
     if (maybeTriggerMentalBreak()) return;
 
-    // 추격 중에만 위험이 오른다.
-    if (run.chasing) {
+    // 추격 중에만 위험이 오른다. 회수자를 정면으로 마주친 위기 선택 중에는
+    // 먼저 한 번 대응하게 두고, 선택 없이 틱으로 바로 실패시키지 않는다.
+    const monsterCrisisOpen = run.pendingEvent && run.pendingEvent.type === 'monster-encounter';
+    if (run.chasing && !monsterCrisisOpen) {
       let rate = FLOORS[run.floor - 1].dangerBase / weaponFactor();
       if (run.light <= 0) rate *= 2.2; // 조명 0 → 회수자 광폭화
       run.danger = Math.min(100, run.danger + rate);
 
-      if (run.danger >= 100) { failRun(); return; }
+      if (run.danger >= 100) {
+        if (startMonsterEncounter('critical', currentNode())) return;
+        failRun();
+        return;
+      }
     }
     render();
   }
@@ -804,7 +814,7 @@
     run.lastAction = run.currentItem ? `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 눈에 들어온다.` : '새 구역에 도착했다.';
     if (run.currentItem) log(`${run.currentItem.name}.`, node.style === 'danger' ? 'hot' : undefined);
     maybeStartRoomEvent(node);
-    triggerMonster(node);
+    if (!run.pendingEvent) triggerMonster(node);
   }
 
   function eventChoice(id, label, sub, tone = '') {
@@ -950,10 +960,71 @@
       } else {
         msg = '불안정한 전원은 건드리지 않는다.';
       }
+    } else if (ev.type === 'monster-encounter') {
+      let knockedOut = false;
+      if (choiceId === 'shine') {
+        const enoughLight = run.light >= 12;
+        run.light = Math.max(0, run.light - 12);
+        if (enoughLight) {
+          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 28);
+          run.mental = clamp(run.mental + 2, 0, 100);
+          msg = '빛이 얼굴 없는 윤곽을 갈랐다. 벽 틈 하나가 보이고, 발소리가 반 박자 늦어진다.';
+        } else {
+          run.danger = Math.min(100, run.danger + 12);
+          msg = '꺼져가는 빛이 한 번 튀었다. 회수자가 빛을 따라 손을 뻗는다.';
+          knockedOut = run.danger >= 100;
+        }
+      } else if (choiceId === 'bait') {
+        const bait = takeCheapestBagItem();
+        if (bait) {
+          run.droppedCount += 1;
+          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 36);
+          msg = `${bait.name}${objectParticle(bait.name)} 어둠 속으로 밀어 던졌다. 회수자의 고개가 그쪽으로 꺾인다.`;
+          if (run.bag.length === 0 && run.danger < 35) run.chasing = false;
+        } else {
+          run.danger = Math.min(100, run.danger + 10);
+          msg = '던질 게 없다. 빈 가방 끈만 젖은 손에 걸린다.';
+          knockedOut = run.danger >= 100;
+        }
+      } else if (choiceId === 'retreat') {
+        run.light = Math.max(0, run.light - 4);
+        run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 12);
+        if (run.previousNodeId !== null && nodeById(run.previousNodeId)) {
+          const fromId = run.currentNodeId;
+          run.currentNodeId = run.previousNodeId;
+          run.previousNodeId = fromId;
+          run.currentItem = currentNode().item && !currentNode().itemTaken ? currentNode().item : null;
+        }
+        msg = '한 발 물러나 벽을 등졌다. 회수자의 손끝이 허공을 긁고 지나간다.';
+      } else {
+        const steady = run.mental >= 18;
+        run.mental = Math.max(0, run.mental - 14);
+        if (steady) {
+          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 18);
+          msg = '숨을 목 안쪽에 묶었다. 젖은 발소리가 당신을 지나쳐 한 걸음 늦게 멈춘다.';
+        } else {
+          run.danger = Math.min(100, run.danger + 14);
+          msg = '숨이 새어 나왔다. 회수자의 얼굴이 바로 앞에서 멈춘다.';
+          knockedOut = run.danger >= 100 || run.mental <= 0;
+        }
+      }
+      if (knockedOut) run.failContext = msg;
+      if (!knockedOut && run.danger >= 100) run.danger = MONSTER_GRACE_DANGER;
+      if (knockedOut) {
+        run.pendingEvent = null;
+        run.lastAction = msg;
+        log(msg, 'hot');
+        failRun();
+        return;
+      }
     }
     run.pendingEvent = null;
     run.lastAction = msg || '상황을 정리했다.';
-    log(run.lastAction, /울렸다|따라온다|없다/.test(run.lastAction) ? 'hot' : undefined);
+    log(run.lastAction, /울렸다|따라온다|없다|회수자|얼굴/.test(run.lastAction) ? 'hot' : undefined);
+    if (ev.type !== 'monster-encounter' && ev.type !== 'mental-break' && node && node.monster && !node.monsterResolved) {
+      triggerMonster(node);
+      if (run.pendingEvent) return;
+    }
     if (maybeTriggerMentalBreak()) return;
     render();
   }
@@ -964,27 +1035,59 @@
     run.floorMap.travelledEdges.add(edgeKey(fromId, toId));
   }
 
-  function triggerMonster(node) {
-    if (!node.monster || node.monsterResolved) return;
-    const type = node.monster.type;
-    if (type === 'sight') {
-      node.monsterResolved = true; // 정보성 1회 이벤트
-      run.danger = Math.min(100, run.danger + SIGHT_DANGER);
-      const cue = directionCueFromNode(node, node.dangerExit, {
-        known: (dir) => `${dir} 어둠에서 젖은 쇳소리가 멈췄다.`,
-        unknown: '어둠 속에서 젖은 쇳소리가 멈췄다.',
+  function monsterEncounterCue(reason, node) {
+    if (reason === 'sight') {
+      return directionCueFromNode(node, node && node.dangerExit, {
+        known: (dir) => `${dir} 어둠에서 젖은 쇳소리가 멈추고, 긴 얼굴이 조명 끝에 걸린다.`,
+        unknown: '어둠 속 젖은 쇳소리가 멈추고, 긴 얼굴이 조명 끝에 걸린다.',
       });
-      run.lastAction = cue;
-      log(cue, 'hot');
+    }
+    if (reason === 'cross') return '갈림길을 가로지르던 회수자가 멈춰 서서, 고개만 이쪽으로 꺾는다.';
+    if (reason === 'ambush') return '바로 옆 어둠에서 숨소리가 끊긴다. 회수자의 손끝이 조명 원 안으로 들어온다.';
+    return '젖은 발소리가 등 뒤에서 끊긴다. 회수자가 바로 앞까지 붙었다.';
+  }
+
+  function startMonsterEncounter(reason, node) {
+    if (!run || run.pendingEvent) return false;
+    if (reason === 'critical' && run.monsterCrisisCount > 0 && run.light <= 0 && run.mental <= 0) return false;
+
+    const choices = [];
+    if (run.light >= 6) choices.push(eventChoice('shine', '조명을 비춘다', '조명 소모 · 틈 찾기', 'good'));
+    choices.push(eventChoice('hold', '숨을 죽인다', '멘탈 소모 · 기척 낮춤', run.mental >= 12 ? 'good' : 'danger'));
+    if (run.bag.length > 0) choices.push(eventChoice('bait', '가방을 던진다', '회수물 1개 소모', 'good'));
+    if (run.previousNodeId !== null && nodeById(run.previousNodeId)) choices.push(eventChoice('retreat', '뒤로 물러난다', '이전 구역으로 후퇴'));
+    if (!choices.length) choices.push(eventChoice('hold', '숨을 죽인다', '마지막으로 버틴다', 'danger'));
+
+    run.holdEvent = null;
+    run.chasing = true;
+    run.monsterCrisisCount += 1;
+    run.pendingEvent = {
+      type: 'monster-encounter',
+      title: '회수자와 마주침',
+      cue: monsterEncounterCue(reason, node),
+      reason,
+      node: node ? node.id : run.currentNodeId,
+      choices,
+    };
+    run.lastAction = run.pendingEvent.cue;
+    log(run.pendingEvent.cue, 'hot');
+    render();
+    return true;
+  }
+
+  function triggerMonster(node) {
+    if (!node || !node.monster || node.monsterResolved) return;
+    const type = node.monster.type;
+    node.monsterResolved = true;
+    if (type === 'sight') {
+      run.danger = Math.min(100, run.danger + SIGHT_DANGER);
+      startMonsterEncounter('sight', node);
     } else if (type === 'cross') {
-      run.holdEvent = { type: 'cross', node: node.id };
       run.danger = Math.min(100, run.danger + CROSS_DANGER);
-      run.lastAction = '갈림길 쪽에서 발소리가 스친다.';
-      log('갈림길 쪽에서 발소리가 스쳐 간다. 멈출까, 다른 길로 갈까.', 'hot');
+      startMonsterEncounter('cross', node);
     } else if (type === 'ambush') {
-      run.holdEvent = { type: 'ambush', node: node.id };
-      run.lastAction = '바로 옆 어둠에서 무언가 숨을 멈췄다. 움직이면 들킨다.';
-      log('바로 옆 어둠에서 무언가 숨을 멈췄다. 움직이면 들킨다.', 'hot');
+      run.danger = Math.min(100, run.danger + 6);
+      startMonsterEncounter('ambush', node);
     }
   }
 
@@ -1080,6 +1183,7 @@
     const fromId = node.id;
     beginTransition(() => {
       markTravelledEdge(fromId, targetId);
+      run.previousNodeId = fromId;
       run.currentNodeId = targetId;
       arriveAtNode();
     }, 'move', MOVE_MS);
@@ -1232,12 +1336,13 @@
     const suspChange = meta.suspicion - previousSuspicion;
     const suspText = suspChange === 0 ? '변화 없음' : signed(suspChange);
     el['fail-detail'].innerHTML = [
+      run.failContext ? `마지막 순간: ${run.failContext}` : '',
       lost > 0
         ? `잃은 짐 ${lost} RP · 남은 조각 +${consolation} RP`
         : '빈손이라 잃은 회수품은 없었다.',
       outcome.loss,
       `의심도 ${suspText}`,
-    ].map((line) => `<div>${line}</div>`).join('');
+    ].filter(Boolean).map((line) => `<div>${line}</div>`).join('');
     el['fail-susp'].textContent = meta.suspicion;
     run.chasing = false;
     render();
@@ -1321,8 +1426,10 @@
     // 갈림길 / 스테이지 / 깊이 레일
     renderChoices();
     if (el['stage']) {
+      const monsterCrisisOpen = !!(run.pendingEvent && run.pendingEvent.type === 'monster-encounter');
       el['stage'].classList.toggle('moving', !!run.moving);
       el['stage'].classList.toggle('has-loot', !!run.currentItem);
+      el['stage'].classList.toggle('monster-encounter', monsterCrisisOpen);
     }
     renderStage();
     renderDepthRail();
@@ -1623,10 +1730,16 @@
       rpEl.innerHTML = `<span class="rp-name">${hint}</span>`;
     }
 
-    // 회수자: 위험이 클수록 플레이어(왼쪽)에 가까워진다.
+    // 회수자: 위험이 클수록 플레이어(왼쪽)에 가까워진다. 조우 위기 중에는
+    // 중앙 시야에 고정해 '무엇을 만났는지'를 먼저 보여준다.
     const chaser = el['chaser'];
-    chaser.classList.toggle('active', run.chasing);
-    if (run.chasing) {
+    const monsterCrisisOpen = !!(run.pendingEvent && run.pendingEvent.type === 'monster-encounter');
+    chaser.classList.toggle('active', run.chasing || monsterCrisisOpen);
+    chaser.classList.toggle('encounter', monsterCrisisOpen);
+    if (monsterCrisisOpen) {
+      chaser.style.left = '50%';
+      chaser.classList.toggle('close', true);
+    } else if (run.chasing) {
       const left = 88 - (run.danger / 100) * 70; // 88% → 18%
       chaser.style.left = left + '%';
       chaser.classList.toggle('close', run.danger >= 80);
