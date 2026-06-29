@@ -215,7 +215,7 @@
         run.light = clamp(run.light - 8, 0, maxLight());
         run.danger = clamp(run.danger + 6, 0, 100);
       },
-      after: '천천히 숨을 골랐다. 빛은 흔들리지만 다시 앞으로 볼 수 있다.',
+      after: '괜찮다, 괜찮아. 후우... 하나, 둘. 천천히 숨을 골랐다. 빛은 흔들리지만 다시 앞으로 볼 수 있다.',
     },
     {
       key: 'voices',
@@ -419,6 +419,7 @@
       lastMentalLoss: null,
       moving: false,       // 전진/강하 연출 중
       lastAction: '',      // 다음 의미 있는 행동/상태 갱신 전까지 상단 상황판에 남길 최근 맥락
+      dialogue: null,      // 선택/이동 결과를 stage 중앙에서 탭해 닫는 짧은 상황 카드
       maxFloor: 1,
       grabbedCount: 0,
       droppedCount: 0,
@@ -682,7 +683,7 @@
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
     'room-choices', 'dock', 'dock-actions',
-    'bag-slots', 'choice-cue', 'mini-map', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log',
+    'bag-slots', 'choice-cue', 'mini-map', 'recovery-point', 'chaser', 'stage', 'stage-situation', 'dialogue-card', 'dialogue-copy', 'depth-rail', 'log',
     'btn-grab', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
@@ -779,6 +780,23 @@
     el['log'].appendChild(div);
   }
 
+  function showDialogue(text, tone = '') {
+    if (!run || !text) return;
+    const copy = cleanSituationText(String(text));
+    if (!copy) return;
+    run.dialogue = { text: copy, tone };
+  }
+
+  function clearDialogue() {
+    if (run) run.dialogue = null;
+  }
+
+  function dismissDialogue() {
+    if (!run || !run.dialogue) return;
+    run.dialogue = null;
+    render();
+  }
+
   /* ---------------- 틱 루프 ---------------- */
 
   function startTick() { stopTick(); timer = setInterval(tick, TICK_MS); }
@@ -860,6 +878,7 @@
     const f = FLOORS[floor - 1];
     run.lastAction = `${f.n}층 진입. ${FLOOR_OPEN_CUE[floor - 1] || ''}`.trim();
     log(`${f.n}층. ${FLOOR_OPEN_CUE[floor - 1] || ''}`);
+    showDialogue(run.lastAction);
   }
 
   function startNewRun() {
@@ -885,6 +904,7 @@
     run.currentItem = node.item && !node.itemTaken ? node.item : null;
     run.lastAction = run.currentItem ? `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 눈에 들어온다.` : '새 구역에 도착했다.';
     if (run.currentItem) log(`${run.currentItem.name}.`, node.style === 'danger' ? 'hot' : undefined);
+    showDialogue(run.lastAction, node.style === 'danger' ? 'hot' : '');
     maybeStartRoomEvent(node);
     if (!run.pendingEvent) triggerMonster(node);
   }
@@ -947,6 +967,7 @@
     run.pendingEvent = { ...ev, node: node.id };
     run.lastAction = ev.cue;
     log(ev.cue, ev.type === 'footprints' ? 'hot' : undefined);
+    showDialogue(ev.cue, ev.type === 'footprints' ? 'hot' : '');
   }
 
   function takeCheapestBagItem() {
@@ -1065,6 +1086,7 @@
 
   function resolveRoomEvent(choiceId) {
     if (!run || run.moving || !run.pendingEvent) return;
+    clearDialogue();
     const ev = run.pendingEvent;
     const node = nodeById(ev.node) || currentNode();
     let msg = '';
@@ -1149,13 +1171,16 @@
         run.pendingEvent = null;
         run.lastAction = msg;
         log(msg, 'hot');
+        showDialogue(msg, 'hot');
         failRun();
         return;
       }
     }
     run.pendingEvent = null;
     run.lastAction = msg || '상황을 정리했다.';
-    log(run.lastAction, /울렸다|따라온다|없다|어둠붙이|긴얼굴|축축한 발|문틈손|얼굴/.test(run.lastAction) ? 'hot' : undefined);
+    const actionTone = /울렸다|따라온다|없다|어둠붙이|긴얼굴|축축한 발|문틈손|얼굴/.test(run.lastAction) ? 'hot' : undefined;
+    log(run.lastAction, actionTone);
+    showDialogue(run.lastAction, actionTone || (ev.type === 'mental-break' ? 'good' : ''));
     if (ev.type !== 'monster-encounter' && ev.type !== 'mental-break' && node && node.monster && !node.monsterResolved) {
       triggerMonster(node);
       if (run.pendingEvent) return;
@@ -1217,6 +1242,7 @@
     };
     run.lastAction = run.pendingEvent.cue;
     log(run.pendingEvent.cue, 'hot');
+    showDialogue(run.pendingEvent.cue, 'hot');
     render();
     return true;
   }
@@ -1281,6 +1307,7 @@
   // 전진 연출 후 콜백 실행. 연출 중에는 갈림길/액션을 가린다.
   function beginTransition(after, fx, duration) {
     if (run.moving) return;
+    clearDialogue();
     run.moving = true;
     run.lastAction = fx === 'descend' ? '계단 아래로 내려가는 중이다.' : '어둠 속으로 이동하는 중이다.';
     render();
@@ -1296,6 +1323,7 @@
   // 갈림길 선택. 계단이면 강하, 아니면 인접 노드로 이동.
   function chooseExit(targetId) {
     if (!run || run.moving || run.pendingEvent) return;
+    clearDialogue();
     const node = currentNode();
     const target = nodeById(targetId);
     if (!target || !node.exits.includes(targetId)) return;
@@ -1338,16 +1366,19 @@
   // 대기. 지나가는/매복 어둠붙이를 흘려보낸다. 시간이 흘러 조명이 조금 닳는다.
   function chooseWait() {
     if (!run || !run.holdEvent || run.moving || run.pendingEvent) return;
+    clearDialogue();
     const ev = run.holdEvent;
     run.light = Math.max(0, run.light - WAIT_LIGHT_COST);
     if (ev.type === 'cross') {
       run.danger = Math.max(0, run.danger - 6);
       run.lastAction = '발소리가 갈림길을 지나갔다.';
       log('발소리가 갈림길을 지나갔다.');
+      showDialogue(run.lastAction);
     } else {
       run.danger = Math.max(0, run.danger - 3);
       run.lastAction = '숨을 죽였다. 발소리가 멀어진다.';
       log('숨을 죽였다. 발소리가 멀어진다.');
+      showDialogue(run.lastAction);
     }
     const evNode = nodeById(ev.node);
     if (evNode) evNode.monsterResolved = true;
@@ -1357,6 +1388,7 @@
 
   function grab() {
     if (run.pendingEvent || !run.currentItem || !roomFor(run.currentItem)) return;
+    clearDialogue();
     const node = currentNode();
     const item = run.currentItem;
     run.bag.push(item);
@@ -1371,12 +1403,14 @@
       const cue = pickupThreatCue(node);
       run.lastAction = `${item.name}${objectParticle(item.name)} 집었다. ${cue}`;
       log(`집었다. ${cue}`, 'hot');
+      showDialogue(run.lastAction, 'hot');
     } else {
       run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
       const dir = reversePathDirection(node);
       const cue = dir ? `${dir}에서 발소리가 가까워진다.` : '젖은 발소리가 가까워진다.';
       run.lastAction = `${item.name}까지 챙겼다. ${cue}`;
       log(`${item.name}까지 챙겼다. ${cue}`, 'hot');
+      showDialogue(run.lastAction, 'hot');
     }
     render();
   }
@@ -1396,6 +1430,7 @@
 
   function dropAndFlee() {
     if (!run.chasing || run.bag.length === 0) return;
+    clearDialogue();
     // 가장 비싼 물건을 미끼로 떨군다 → 위험 급감.
     let idx = 0;
     run.bag.forEach((it, i) => { if (it.value > run.bag[idx].value) idx = i; });
@@ -1407,9 +1442,11 @@
       run.chasing = false;
       run.lastAction = `${droppedObject} 던졌다. 발소리가 멀어진다.`;
       log(`${droppedObject} 던졌다. 발소리가 멀어진다.`);
+      showDialogue(run.lastAction);
     } else {
       run.lastAction = `${droppedObject} 미끼로 던졌다. 발소리와 거리가 조금 벌어진다.`;
       log(`${droppedObject} 미끼로 던졌다. 발소리와 거리가 조금 벌어진다.`);
+      showDialogue(run.lastAction);
     }
     render();
   }
@@ -1517,6 +1554,7 @@
 
   function attemptReturnToSurface() {
     if (!run || run.moving || run.pendingEvent) return;
+    clearDialogue();
     const risk = returnRisk();
     if (risk.score < 42) {
       run.lastAction = cleanReturnText(risk);
@@ -1528,6 +1566,7 @@
     run.pendingEvent = ev;
     run.lastAction = ev.cue;
     log(ev.cue, 'hot');
+    showDialogue(ev.cue, 'hot');
     render();
   }
 
@@ -1607,12 +1646,15 @@
       run.failContext = msg;
       run.lastAction = msg;
       log(msg, 'hot');
+      showDialogue(msg, 'hot');
       failRun();
       return;
     }
     run.pendingEvent = null;
     run.lastAction = msg;
-    log(msg, /발소리|사라진다|끊어질/.test(msg) ? 'hot' : 'win');
+    const returnTone = /발소리|사라진다|끊어질/.test(msg) ? 'hot' : 'win';
+    log(msg, returnTone);
+    showDialogue(msg, returnTone);
     returnToSurface();
   }
 
@@ -1773,6 +1815,7 @@
 
     // 갈림길 / 스테이지 / 깊이 레일
     renderChoices();
+    renderSituationLayer();
     if (el['stage']) {
       const monsterCrisisOpen = !!(run.pendingEvent && run.pendingEvent.type === 'monster-encounter');
       el['stage'].classList.toggle('moving', !!run.moving);
@@ -1879,6 +1922,23 @@
     const chase = run.chasing && !run.holdEvent ? ' 젖은 발소리가 따라붙는다.' : '';
     const action = run.lastAction && (!run.pendingEvent || run.lastAction !== run.pendingEvent.cue) ? ` ${run.lastAction}` : '';
     return cleanSituationText(`${here}${item}${pending}${event}${chase}${action}`);
+  }
+
+  function stageSituationCopy() {
+    if (!run || !run.floorMap) return '';
+    const pending = run.pendingEvent ? `${run.pendingEvent.title}: ${run.pendingEvent.cue}` : '';
+    return cleanSituationText(pending || run.lastAction || situationCopy(currentNode()));
+  }
+
+  function renderSituationLayer() {
+    if (!run) return;
+    const recent = stageSituationCopy();
+    if (el['stage-situation']) el['stage-situation'].textContent = recent || '아래가 열린다.';
+    if (!el['dialogue-card'] || !el['dialogue-copy']) return;
+    const card = el['dialogue-card'];
+    const dialogue = run.dialogue;
+    card.className = 'dialogue-card' + (dialogue ? '' : ' hidden') + (dialogue && dialogue.tone ? ` ${dialogue.tone}` : '');
+    if (dialogue) el['dialogue-copy'].textContent = dialogue.text;
   }
 
   // 현재 노드의 출구(+상황 선택지)를 8방향 패드로 그린다. 장소명은 도착 후 상황 텍스트로만 알려준다.
@@ -2170,6 +2230,7 @@
     el['btn-grab'].addEventListener('click', grab);
     el['btn-drop'].addEventListener('click', dropAndFlee);
     el['btn-return'].addEventListener('click', attemptReturnToSurface);
+    if (el['dialogue-card']) el['dialogue-card'].addEventListener('click', dismissDialogue);
     el['buy-committee'].addEventListener('click', () => chooseBuyer('committee'));
     el['buy-black'].addEventListener('click', () => chooseBuyer('black'));
     el['up-bag'].addEventListener('click', () => buyUpgrade('bag'));
