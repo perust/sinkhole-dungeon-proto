@@ -31,7 +31,7 @@
     ],
     2: [
       { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, truth: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
-      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, truth: '연구 노트에는 ‘회수자’가 방범 시스템이라고 적혀 있다.' },
+      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, truth: '연구 노트에는 ‘어둠붙이’가 빛과 소리에 다르게 반응한다고 적혀 있다.' },
     ],
     3: [
       { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4, truth: '코어는 싱크홀을 막는 장치가 아니라 더 깊게 여는 열쇠다.' },
@@ -99,13 +99,75 @@
   // 몬스터 이벤트 위험 수치
   const SIGHT_DANGER        = 8;  // 직선 끝에서 이상한 기척
   const SIGHT_MOVE_DANGER   = 6;  // 그쪽으로 전진할 때 추가 위험
-  const CROSS_DANGER        = 4;  // 갈림길을 회수자가 지나감(도착)
+  const CROSS_DANGER        = 4;  // 갈림길을 어둠붙이가 지나감(도착)
   const CROSS_MOVE_DANGER   = 14; // 지나가는 중에 움직이면 들킴
   const AMBUSH_MOVE_DANGER  = 20; // '움직이면 들킴' 상태에서 이동
   const MONSTER_GRACE_DANGER = 86; // 위기 선택 성공 후 즉시 재기절하지 않게 낮출 기준
   const TICK_MS            = 150;
   const MOVE_MS            = 420; // 전진 연출은 짧게, 상황 문구는 상단 패널에 지속
   const DESCEND_MS         = 560; // 층 이동 연출도 조작감을 해치지 않게 짧게 유지
+
+  const MONSTER_ARCHETYPES = {
+    longFace: {
+      name: '긴얼굴',
+      tag: '빛에 굳는 것',
+      title: '긴얼굴과 마주침',
+      reasons: {
+        sight: {
+          known: (dir) => `${dir} 어둠에서 젖은 쇳소리가 멈추고, 긴 얼굴이 조명 끝에 걸린다. 눈꺼풀 없는 눈이 빛을 피한다.`,
+          unknown: '어둠 속 젖은 쇳소리가 멈추고, 긴 얼굴이 조명 끝에 걸린다. 눈꺼풀 없는 눈이 빛을 피한다.',
+        },
+        cross: '갈림길을 가로지르던 긴얼굴이 빛을 피해 허리를 접고, 고개만 이쪽으로 꺾는다.',
+        ambush: '문 옆 어둠에서 긴얼굴이 접힌 몸을 펴며 조명 원 가장자리를 더듬는다.',
+        critical: '젖은 쇳소리가 등 뒤에서 끊긴다. 긴얼굴이 빛이 닿지 않는 높이까지 숙였다.',
+      },
+      choices: (ctx) => [
+        ctx.canLight && eventChoice('shine', '조명을 정면에 건다', '강한 빛이면 굳음', ctx.lightStrong ? 'good' : 'danger'),
+        eventChoice('sidestep', '옆으로 비켜선다', '접힌 팔 사거리 벗어나기'),
+        eventChoice('hold', '숨을 죽인다', '빛이 약하면 위험', ctx.mentalOk ? '' : 'danger'),
+      ].filter(Boolean),
+    },
+    wetFeet: {
+      name: '축축한 발',
+      tag: '소리와 발자국을 좇는 것',
+      title: '축축한 발과 마주침',
+      reasons: {
+        sight: {
+          known: (dir) => `${dir} 바닥의 물자국이 거꾸로 찍힌다. 축축한 발이 발소리의 박자에 맞춰 다가온다.`,
+          unknown: '바닥의 물자국이 거꾸로 찍힌다. 축축한 발이 발소리의 박자에 맞춰 다가온다.',
+        },
+        cross: '갈림길 바닥에 젖은 발자국이 여러 겹 번진다. 축축한 발이 소리가 난 쪽으로 몸을 튼다.',
+        ambush: '바로 옆 물웅덩이에 새 발자국이 찍힌다. 축축한 발은 숨보다 발소리를 먼저 듣는다.',
+        critical: '등 뒤의 물 밟는 소리가 당신의 걸음과 같은 박자로 붙었다. 축축한 발이다.',
+      },
+      choices: (ctx) => [
+        ctx.hasBag && eventChoice('bait', '미끼를 던진다', '회수물 1개로 소리 돌림', 'good'),
+        eventChoice('hold', '발소리를 끊는다', '멈춰서 흔적 줄이기', ctx.mentalOk ? 'good' : 'danger'),
+        eventChoice('run', '뛰어서 벌린다', '빠르지만 소리를 남김', 'danger'),
+      ].filter(Boolean),
+    },
+    doorHand: {
+      name: '문틈손',
+      tag: '가까이서 붙잡는 것',
+      title: '문틈손에 붙잡힘',
+      reasons: {
+        sight: {
+          known: (dir) => `${dir} 문틈이 안쪽에서 벌어진다. 길고 얇은 손가락들이 문틀을 짚고 기다린다.`,
+          unknown: '문틈이 안쪽에서 벌어진다. 길고 얇은 손가락들이 문틀을 짚고 기다린다.',
+        },
+        cross: '갈림길 옆 문틈에서 손가락이 먼저 나온다. 문틈손이 지나가는 길목을 좁힌다.',
+        ambush: '어깨 옆 문틈에서 손목이 튀어나와 가방 끈을 움켜쥔다. 너무 가깝다.',
+        critical: '등 뒤 문틀이 비틀리며 손목 여러 개가 뻗는다. 문틈손이 바로 붙었다.',
+      },
+      choices: (ctx) => [
+        eventChoice('strike', '손목을 후려친다', '무기/멘탈로 틈 만들기', 'good'),
+        eventChoice('kick', '문틀을 걷어찬다', '조명·멘탈 소모'),
+        ctx.canLight && eventChoice('shine', '조명을 비춘다', '잠깐 느려짐', ''),
+        eventChoice('run', '몸을 빼 달린다', '너무 가까워 위험', 'danger'),
+      ].filter(Boolean),
+    },
+  };
+  const MONSTER_KIND_KEYS = Object.keys(MONSTER_ARCHETYPES);
 
   const RECOVERY_OUTCOMES = [
     {
@@ -147,13 +209,13 @@
       key: 'panic',
       title: '공황',
       cue: '숨이 목에 걸린다. 손전등 원이 바닥으로 떨어진다.',
-      choice: '숨을 세어 버틴다',
+      choice: '숨을 고른다',
       sub: '조명 -8 · 기척 +6',
       apply() {
         run.light = clamp(run.light - 8, 0, maxLight());
         run.danger = clamp(run.danger + 6, 0, 100);
       },
-      after: '숨을 억지로 맞췄다. 빛은 흔들리지만 다시 앞으로 볼 수 있다.',
+      after: '천천히 숨을 골랐다. 빛은 흔들리지만 다시 앞으로 볼 수 있다.',
     },
     {
       key: 'voices',
@@ -567,9 +629,18 @@
     return { nodes, entryId: 0, stairsId, count, travelledEdges: new Set() };
   }
 
+  function monsterKindForEvent(type, floor, node) {
+    if (type === 'ambush') return 'doorHand';
+    if (type === 'cross') return Math.random() < 0.65 ? 'wetFeet' : 'doorHand';
+    if (node && (node.kind === 'door' || node.kind === 'office')) return Math.random() < 0.7 ? 'doorHand' : 'longFace';
+    if (node && (node.kind === 'crack' || node.kind === 'hall')) return Math.random() < 0.65 ? 'wetFeet' : 'longFace';
+    if (floor <= 1) return Math.random() < 0.7 ? 'longFace' : 'wetFeet';
+    return MONSTER_KIND_KEYS[Math.floor(Math.random() * MONSTER_KIND_KEYS.length)];
+  }
+
   // 몬스터 이벤트 3종:
   //  - sight : 직선 끝에서 이상한 기척(위험 상승, 선택은 가능, 그쪽으로 가면 위험 추가)
-  //  - cross : 앞 갈림길을 회수자가 지나감(기다리거나 다른 길; 지나가는 중 움직이면 들킴)
+  //  - cross : 앞 갈림길을 어둠붙이가 지나감(기다리거나 다른 길; 지나가는 중 움직이면 들킴)
   //  - ambush: '움직이면 들킴' 상태(다음 이동 시 위험 급증/추격; 기다리면 완화)
   function placeMonsters(nodes, others, stairsId, floor) {
     if (!others.length) return;
@@ -593,7 +664,7 @@
     plan.forEach((type, i) => {
       const id = targets[i % targets.length];
       if (id == null || nodes[id].monster) return;
-      nodes[id].monster = { type };
+      nodes[id].monster = { type, kind: monsterKindForEvent(type, floor, nodes[id]) };
       if (type === 'sight') {
         const nb = nodes[id].exits;
         nodes[id].dangerExit = nb.length ? nb[Math.floor(Math.random() * nb.length)] : null;
@@ -723,12 +794,12 @@
     if (run.mentalGraceTicks > 0) run.mentalGraceTicks -= 1;
     if (maybeTriggerMentalBreak()) return;
 
-    // 추격 중에만 위험이 오른다. 회수자를 정면으로 마주친 위기 선택 중에는
+    // 추격 중에만 위험이 오른다. 어둠붙이를 정면으로 마주친 위기 선택 중에는
     // 먼저 한 번 대응하게 두고, 선택 없이 틱으로 바로 실패시키지 않는다.
     const pausingEventOpen = run.pendingEvent && (run.pendingEvent.type === 'monster-encounter' || run.pendingEvent.type === 'return-attempt');
     if (run.chasing && !pausingEventOpen) {
       let rate = FLOORS[run.floor - 1].dangerBase / weaponFactor();
-      if (run.light <= 0) rate *= 2.2; // 조명 0 → 회수자 광폭화
+      if (run.light <= 0) rate *= 2.2; // 조명 0 → 어둠붙이 광폭화
       run.danger = Math.min(100, run.danger + rate);
 
       if (run.danger >= 100) {
@@ -885,6 +956,113 @@
     return run.bag.splice(idx, 1)[0];
   }
 
+  function resolveMonsterEncounter(ev, choiceId) {
+    const kind = MONSTER_ARCHETYPES[ev.monsterKind] || MONSTER_ARCHETYPES.longFace;
+    let msg = '';
+    let knockedOut = false;
+
+    if (ev.monsterKind === 'longFace') {
+      if (choiceId === 'shine') {
+        const enoughLight = run.light >= 12;
+        run.light = Math.max(0, run.light - 12);
+        if (enoughLight) {
+          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 30);
+          run.mental = clamp(run.mental + 2, 0, 100);
+          msg = '조명을 정면에 고정했다. 긴얼굴의 목이 접히듯 굳고, 팔이 눈을 가리는 사이 벽 틈으로 빠져나왔다.';
+        } else {
+          run.danger = Math.min(100, run.danger + 14);
+          msg = '빛이 힘없이 튀었다. 긴얼굴은 굳지 않고, 오히려 깜빡인 방향으로 손을 뻗는다.';
+          knockedOut = run.danger >= 100;
+        }
+      } else if (choiceId === 'sidestep') {
+        run.light = Math.max(0, run.light - 4);
+        if (run.danger < 90 || run.mental >= 18) {
+          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 14);
+          msg = '팔이 접히는 박자를 보고 옆으로 몸을 뺐다. 긴얼굴의 손끝이 벽만 긁고 지나간다.';
+        } else {
+          run.danger = Math.min(100, run.danger + 10);
+          msg = '옆으로 비키려는 순간 발이 엉켰다. 긴얼굴의 접힌 팔이 퇴로를 막는다.';
+          knockedOut = run.danger >= 100;
+        }
+      } else {
+        const steady = run.mental >= 24;
+        run.mental = Math.max(0, run.mental - 12);
+        if (steady && run.light < 12) {
+          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 8);
+          msg = '조명을 낮추고 숨을 눌렀다. 긴얼굴은 빛을 찾지 못해 천천히 다른 벽을 더듬는다.';
+        } else {
+          run.danger = Math.min(100, run.danger + 12);
+          msg = '숨은 죽였지만 조명 끝이 흔들렸다. 긴얼굴이 그 흔들림을 따라 고개를 내린다.';
+          knockedOut = run.danger >= 100 || run.mental <= 0;
+        }
+      }
+    } else if (ev.monsterKind === 'wetFeet') {
+      if (choiceId === 'bait') {
+        const bait = takeCheapestBagItem();
+        if (bait) {
+          run.droppedCount += 1;
+          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 36);
+          msg = `${bait.name}${objectParticle(bait.name)} 물웅덩이 건너로 던졌다. 축축한 발은 새 소리와 무게를 따라 방향을 바꾼다.`;
+          if (run.bag.length === 0 && run.danger < 35) run.chasing = false;
+        } else {
+          run.danger = Math.min(100, run.danger + 10);
+          msg = '던질 게 없다. 빈 가방 끈이 철벅거리고, 축축한 발이 그 소리에 맞춰 빨라진다.';
+          knockedOut = run.danger >= 100;
+        }
+      } else if (choiceId === 'hold') {
+        const steady = run.mental >= 16;
+        run.mental = Math.max(0, run.mental - 10);
+        if (steady) {
+          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 24);
+          msg = '발을 바닥에서 떼고 숨까지 멈췄다. 축축한 발은 끊긴 박자를 찾지 못해 물자국 사이를 맴돈다.';
+        } else {
+          run.danger = Math.min(100, run.danger + 12);
+          msg = '다리가 떨려 물이 한 번 울렸다. 축축한 발이 그 박자를 정확히 따라붙는다.';
+          knockedOut = run.danger >= 100 || run.mental <= 0;
+        }
+      } else {
+        run.light = Math.max(0, run.light - 5);
+        run.danger = Math.min(100, run.danger + 22);
+        msg = '뛰자 발소리가 길게 남았다. 축축한 발은 더 빠르다. 젖은 박자가 바로 뒤까지 붙는다.';
+        knockedOut = run.danger >= 100;
+      }
+    } else if (ev.monsterKind === 'doorHand') {
+      if (choiceId === 'strike') {
+        const steady = run.mental >= 12;
+        run.mental = Math.max(0, run.mental - 8);
+        const relief = 24 + Math.min(10, (meta.weaponLevel - 1) * 4);
+        if (steady) {
+          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - relief);
+          msg = '손목 마디가 꺾이는 곳을 후려쳤다. 문틈손이 움찔 물러나고, 문짝과 벽 사이에 몸 하나 들어갈 틈이 생긴다.';
+        } else {
+          run.danger = Math.min(100, run.danger + 12);
+          msg = '팔은 휘둘렀지만 힘이 빠졌다. 문틈손이 손목 대신 가방 끈을 더 세게 감는다.';
+          knockedOut = run.danger >= 100 || run.mental <= 0;
+        }
+      } else if (choiceId === 'kick') {
+        run.light = Math.max(0, run.light - 6);
+        run.mental = Math.max(0, run.mental - 10);
+        run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 18);
+        msg = '문틀을 걷어차자 삭은 나무가 터졌다. 문틈손의 손가락들이 잠깐 끼이고, 그 사이 어깨를 빼냈다.';
+      } else if (choiceId === 'shine') {
+        run.light = Math.max(0, run.light - 10);
+        run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 8);
+        msg = '빛을 들이대자 문틈손의 손가락이 얇게 떨린다. 완전히 물러나진 않지만, 움켜쥔 힘이 잠깐 느슨해진다.';
+      } else {
+        run.danger = Math.min(100, run.danger + 18);
+        msg = '몸을 빼 달렸지만 너무 가까웠다. 문틈손이 팔꿈치와 가방 끈을 한꺼번에 낚아챈다.';
+        knockedOut = run.danger >= 100;
+      }
+    } else {
+      run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 10);
+      msg = `${kind.name}${subjectParticle(kind.name)} 잠깐 물러난 틈에 빠져나왔다.`;
+    }
+
+    if (knockedOut) run.failContext = msg;
+    if (!knockedOut && run.danger >= 100) run.danger = MONSTER_GRACE_DANGER;
+    return { msg, knockedOut };
+  }
+
   function resolveRoomEvent(choiceId) {
     if (!run || run.moving || !run.pendingEvent) return;
     const ev = run.pendingEvent;
@@ -965,56 +1143,9 @@
         msg = '불안정한 전원은 건드리지 않는다.';
       }
     } else if (ev.type === 'monster-encounter') {
-      let knockedOut = false;
-      if (choiceId === 'shine') {
-        const enoughLight = run.light >= 12;
-        run.light = Math.max(0, run.light - 12);
-        if (enoughLight) {
-          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 28);
-          run.mental = clamp(run.mental + 2, 0, 100);
-          msg = '빛이 얼굴 없는 윤곽을 갈랐다. 벽 틈 하나가 보이고, 발소리가 반 박자 늦어진다.';
-        } else {
-          run.danger = Math.min(100, run.danger + 12);
-          msg = '꺼져가는 빛이 한 번 튀었다. 회수자가 빛을 따라 손을 뻗는다.';
-          knockedOut = run.danger >= 100;
-        }
-      } else if (choiceId === 'bait') {
-        const bait = takeCheapestBagItem();
-        if (bait) {
-          run.droppedCount += 1;
-          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 36);
-          msg = `${bait.name}${objectParticle(bait.name)} 어둠 속으로 밀어 던졌다. 회수자의 고개가 그쪽으로 꺾인다.`;
-          if (run.bag.length === 0 && run.danger < 35) run.chasing = false;
-        } else {
-          run.danger = Math.min(100, run.danger + 10);
-          msg = '던질 게 없다. 빈 가방 끈만 젖은 손에 걸린다.';
-          knockedOut = run.danger >= 100;
-        }
-      } else if (choiceId === 'retreat') {
-        run.light = Math.max(0, run.light - 4);
-        run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 12);
-        if (run.previousNodeId !== null && nodeById(run.previousNodeId)) {
-          const fromId = run.currentNodeId;
-          run.currentNodeId = run.previousNodeId;
-          run.previousNodeId = fromId;
-          run.currentItem = currentNode().item && !currentNode().itemTaken ? currentNode().item : null;
-        }
-        msg = '한 발 물러나 벽을 등졌다. 회수자의 손끝이 허공을 긁고 지나간다.';
-      } else {
-        const steady = run.mental >= 18;
-        run.mental = Math.max(0, run.mental - 14);
-        if (steady) {
-          run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 18);
-          msg = '숨을 목 안쪽에 묶었다. 젖은 발소리가 당신을 지나쳐 한 걸음 늦게 멈춘다.';
-        } else {
-          run.danger = Math.min(100, run.danger + 14);
-          msg = '숨이 새어 나왔다. 회수자의 얼굴이 바로 앞에서 멈춘다.';
-          knockedOut = run.danger >= 100 || run.mental <= 0;
-        }
-      }
-      if (knockedOut) run.failContext = msg;
-      if (!knockedOut && run.danger >= 100) run.danger = MONSTER_GRACE_DANGER;
-      if (knockedOut) {
+      const result = resolveMonsterEncounter(ev, choiceId);
+      msg = result.msg;
+      if (result.knockedOut) {
         run.pendingEvent = null;
         run.lastAction = msg;
         log(msg, 'hot');
@@ -1024,7 +1155,7 @@
     }
     run.pendingEvent = null;
     run.lastAction = msg || '상황을 정리했다.';
-    log(run.lastAction, /울렸다|따라온다|없다|회수자|얼굴/.test(run.lastAction) ? 'hot' : undefined);
+    log(run.lastAction, /울렸다|따라온다|없다|어둠붙이|긴얼굴|축축한 발|문틈손|얼굴/.test(run.lastAction) ? 'hot' : undefined);
     if (ev.type !== 'monster-encounter' && ev.type !== 'mental-break' && node && node.monster && !node.monsterResolved) {
       triggerMonster(node);
       if (run.pendingEvent) return;
@@ -1039,37 +1170,48 @@
     run.floorMap.travelledEdges.add(edgeKey(fromId, toId));
   }
 
-  function monsterEncounterCue(reason, node) {
-    if (reason === 'sight') {
-      return directionCueFromNode(node, node && node.dangerExit, {
-        known: (dir) => `${dir} 어둠에서 젖은 쇳소리가 멈추고, 긴 얼굴이 조명 끝에 걸린다.`,
-        unknown: '어둠 속 젖은 쇳소리가 멈추고, 긴 얼굴이 조명 끝에 걸린다.',
-      });
+  function monsterEncounterCue(reason, node, monsterKind) {
+    const kind = MONSTER_ARCHETYPES[monsterKind] || MONSTER_ARCHETYPES.longFace;
+    const copy = kind.reasons[reason] || kind.reasons.critical;
+    if (reason === 'sight' && copy && typeof copy === 'object') {
+      return directionCueFromNode(node, node && node.dangerExit, copy);
     }
-    if (reason === 'cross') return '갈림길을 가로지르던 회수자가 멈춰 서서, 고개만 이쪽으로 꺾는다.';
-    if (reason === 'ambush') return '바로 옆 어둠에서 숨소리가 끊긴다. 회수자의 손끝이 조명 원 안으로 들어온다.';
-    return '젖은 발소리가 등 뒤에서 끊긴다. 회수자가 바로 앞까지 붙었다.';
+    return copy;
+  }
+
+  function monsterChoices(monsterKind) {
+    const kind = MONSTER_ARCHETYPES[monsterKind] || MONSTER_ARCHETYPES.longFace;
+    const ctx = {
+      canLight: run.light >= 6,
+      lightStrong: run.light >= 18,
+      mentalOk: run.mental >= 18,
+      hasBag: run.bag.length > 0,
+    };
+    const choices = kind.choices(ctx);
+    return choices.length ? choices : [eventChoice('hold', '버틴다', '마지막으로 기척을 낮춤', 'danger')];
   }
 
   function startMonsterEncounter(reason, node) {
     if (!run || run.pendingEvent) return false;
     if (reason === 'critical' && run.monsterCrisisCount > 0 && run.light <= 0 && run.mental <= 0) return false;
 
-    const choices = [];
-    if (run.light >= 6) choices.push(eventChoice('shine', '조명을 비춘다', '조명 소모 · 틈 찾기', 'good'));
-    choices.push(eventChoice('hold', '숨을 죽인다', '멘탈 소모 · 기척 낮춤', run.mental >= 12 ? 'good' : 'danger'));
-    if (run.bag.length > 0) choices.push(eventChoice('bait', '가방을 던진다', '회수물 1개 소모', 'good'));
-    if (run.previousNodeId !== null && nodeById(run.previousNodeId)) choices.push(eventChoice('retreat', '뒤로 물러난다', '이전 구역으로 후퇴'));
-    if (!choices.length) choices.push(eventChoice('hold', '숨을 죽인다', '마지막으로 버틴다', 'danger'));
+    const monsterKind = node && node.monster && node.monster.kind
+      ? node.monster.kind
+      : monsterKindForEvent(reason, run.floor, node);
+    const kind = MONSTER_ARCHETYPES[monsterKind] || MONSTER_ARCHETYPES.longFace;
+    const choices = monsterChoices(monsterKind);
 
     run.holdEvent = null;
     run.chasing = true;
     run.monsterCrisisCount += 1;
     run.pendingEvent = {
       type: 'monster-encounter',
-      title: '회수자와 마주침',
-      cue: monsterEncounterCue(reason, node),
+      title: kind.title,
+      cue: monsterEncounterCue(reason, node, monsterKind),
       reason,
+      monsterKind,
+      monsterName: kind.name,
+      monsterTrait: kind.tag,
       node: node ? node.id : run.currentNodeId,
       choices,
     };
@@ -1177,7 +1319,7 @@
       run.holdEvent = null;
     }
 
-    // 회수자가 보이는 방향으로 전진하면 위험이 더 오른다.
+    // 어둠붙이가 보이는 방향으로 전진하면 위험이 더 오른다.
     if (node.dangerExit === targetId) {
       run.danger = Math.min(100, run.danger + SIGHT_MOVE_DANGER);
     }
@@ -1193,7 +1335,7 @@
     }, 'move', MOVE_MS);
   }
 
-  // 대기. 지나가는/매복 회수자를 흘려보낸다. 시간이 흘러 조명이 조금 닳는다.
+  // 대기. 지나가는/매복 어둠붙이를 흘려보낸다. 시간이 흘러 조명이 조금 닳는다.
   function chooseWait() {
     if (!run || !run.holdEvent || run.moving || run.pendingEvent) return;
     const ev = run.holdEvent;
@@ -1938,7 +2080,7 @@
       rpEl.innerHTML = `<span class="rp-name">${hint}</span>`;
     }
 
-    // 회수자: 위험이 클수록 플레이어(왼쪽)에 가까워진다. 조우 위기 중에는
+    // 어둠붙이: 위험이 클수록 플레이어(왼쪽)에 가까워진다. 조우 위기 중에는
     // 중앙 시야에 고정해 '무엇을 만났는지'를 먼저 보여준다.
     const chaser = el['chaser'];
     const monsterCrisisOpen = !!(run.pendingEvent && run.pendingEvent.type === 'monster-encounter');
