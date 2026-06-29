@@ -1540,17 +1540,34 @@
       const usedDirs = new Set();
       const stubStart = 5.5;
       const stubEnd = 15;
+      const stairMark = 18;
       current.exits.forEach((nid, index) => {
         const target = nodeById(nid);
         if (!target) return;
         const slot = directionForExit(current, target, index, usedDirs);
-        if (seen(nid) || travelled.has(edgeKey(current.id, nid))) return;
         const dir = slot && MAP_DIRECTION_BY_KEY[slot.key];
         if (!dir) return;
         const len = Math.hypot(dir.dx, dir.dy) || 1;
         const ux = dir.dx / len;
         const uy = dir.dy / len;
-        html += `<line class="exit-hint" x1="${center.x + ux * stubStart}" y1="${center.y + uy * stubStart}" x2="${center.x + ux * stubEnd}" y2="${center.y + uy * stubEnd}"/>`;
+        const isTravelled = travelled.has(edgeKey(current.id, nid));
+        const isSeen = seen(nid);
+        const isStairs = target.kind === 'stairs';
+
+        if (!isSeen && !isTravelled) {
+          html += `<line class="exit-hint" x1="${center.x + ux * stubStart}" y1="${center.y + uy * stubStart}" x2="${center.x + ux * stubEnd}" y2="${center.y + uy * stubEnd}"/>`;
+        }
+
+        // Stairs are visible structures, but not map reveal. Mark only the
+        // current exit direction near the center; never draw the stair node or
+        // any destination-floor geometry for an unvisited stair.
+        if (isStairs) {
+          const x = center.x + ux * stairMark;
+          const y = center.y + uy * stairMark;
+          const angle = Math.atan2(uy, ux) * 180 / Math.PI;
+          const state = isSeen || isTravelled ? ' travelled' : '';
+          html += `<g class="stair-marker${state}" transform="translate(${x} ${y}) rotate(${angle})"><path d="M -5 4 H -2 V 1 H 1 V -2 H 4"/><path d="M -4 -4 L 4 -4"/></g>`;
+        }
       });
     }
 

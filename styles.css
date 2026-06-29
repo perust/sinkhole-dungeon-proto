@@ -1015,6 +1015,8 @@ html, body { touch-action: manipulation; }
 .mini-map line { stroke: rgba(160,176,208,.32); stroke-width: 2; stroke-linecap: round; }
 .mini-map line.seen { stroke: rgba(87,224,200,.58); }
 .mini-map line.exit-hint { stroke: rgba(180,188,204,.34); stroke-width: 1.7; stroke-linecap: round; }
+.mini-map .stair-marker { fill: none; stroke: rgba(255,209,102,.9); stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 3px rgba(255,209,102,.42)); }
+.mini-map .stair-marker.travelled { stroke: rgba(255,226,153,.95); }
 .mini-map line.hint { stroke-dasharray: 3 4; }
 .mini-map circle { fill: rgba(160,176,208,.72); }
 .mini-map circle.current { fill: var(--gold); filter: drop-shadow(0 0 4px rgba(255,209,102,.55)); }
