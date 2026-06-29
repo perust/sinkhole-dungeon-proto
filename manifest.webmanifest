@@ -1,0 +1,25 @@
+{
+  "name": "Unlit Halls",
+  "short_name": "Unlit Halls",
+  "description": "챙기고, 도망치고, 팔고, 더 깊이 내려가는 모바일 extraction prototype.",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#05070c",
+  "theme_color": "#0b0d14",
+  "icons": [
+    {
+      "src": "assets/pixel/player-delver.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/pixel/title-splash.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

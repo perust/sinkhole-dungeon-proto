@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0b0d14" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Unlit Halls" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/pixel/player-delver.png" />
+  <title>Unlit Halls</title>
+  <link rel="stylesheet" href="styles.css?v=16" />
+</head>
+<body>
+  <div id="app" class="phone">
+
+    <!-- ===================== 시작 화면 ===================== -->
+    <section id="screen-start" class="screen active">
+      <div class="app-chip">1F</div>
+      <div class="start-art pixel-splash" aria-hidden="true">
+        <img src="assets/pixel/title-splash.png" alt="" class="title-splash-img" />
+        <div class="skyline"></div>
+        <div class="sinkhole">
+          <div class="ring r1"></div>
+          <div class="ring r2"></div>
+          <div class="ring r3"></div>
+          <div class="hole-glow"></div>
+        </div>
+        <div class="permit-desk">
+          <span class="permit-stamp">던전관리위원회 · 허가소</span>
+          <div class="queue"><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+
+      <h1 class="title">Unlit Halls</h1>
+      <p class="tagline">아래에서 소리가 난다</p>
+      <div class="prologue" aria-label="하강 이유">
+        <p>우리는 더 멀리 떠날 수 없었다.</p>
+        <p>무너진 자리 위에 도시를 세웠다.</p>
+        <p>밤마다 아래에서 낯선 것들이 올라온다.</p>
+        <p>살아남으려면, 누군가는 더 깊이 내려가야 한다.</p>
+      </div>
+      <p class="premise">가방을 열었다. 조명은 켜졌다.</p>
+
+      <div class="pixel-preview" aria-label="싱크홀 탐사 장비 미리보기">
+        <img src="assets/pixel/player-delver.png" alt="탐사자 도트 캐릭터" />
+        <img src="assets/pixel/sinkhole-chaser.png" alt="어둠붙이 몬스터 도트 캐릭터" />
+        <img src="assets/pixel/loot-icons-strip.png" alt="아이템 도트 아이콘" />
+      </div>
+
+      <button id="btn-enter" class="btn btn-primary btn-enter">들어가기</button>
+
+      <div class="meta-line">
+        누적 RP <b id="start-rp">0</b> · 최고 깊이 <b id="start-depth">1</b>층
+        · 의심도 <b id="start-susp" class="susp-v">0</b>
+      </div>
+      <div class="codex-line" id="start-codex">진실 조각 <b id="start-truth-count">0</b>/6 — 아직 아무것도 모른다.</div>
+      <div class="contract-card" id="start-contract"></div>
+      <div class="goal-hint">다음 목표 · <b id="start-goal">2층 도달</b></div>
+      <button id="btn-reset" class="btn-reset" type="button">기록 초기화</button>
+    </section>
+
+    <!-- ===================== 던전 화면 ===================== -->
+    <section id="screen-dungeon" class="screen">
+      <div class="app-topline">
+        <span class="phase-chip">1F</span>
+        <span class="gesture-hint"></span>
+      </div>
+      <header class="hud hud-compact">
+        <button id="btn-meta" class="meta-toggle" type="button" aria-expanded="false" aria-controls="meta-panel">정보</button>
+        <div id="meta-panel" class="hud-meta-panel" hidden>
+          <div class="hud-cell"><span class="hud-k">RP</span><span id="hud-rp" class="hud-v">0</span></div>
+          <div class="hud-cell"><span class="hud-k">최고</span><span id="hud-depth" class="hud-v">1</span><span class="hud-u">층</span></div>
+          <div class="hud-cell"><span class="hud-k">가방</span><span id="hud-bag" class="hud-v">0/3</span></div>
+        </div>
+      </header>
+
+      <div class="floor-banner">
+        <span class="floor-num"><b id="floor-num">1</b>층</span>
+        <span class="floor-name" id="floor-name">무너진 도시 시설</span>
+      </div>
+
+      <div id="situation-panel" class="situation-panel" aria-live="polite">
+        <span class="situation-label">상황</span>
+        <div id="choice-cue" class="situation-copy">아래가 열린다.</div>
+      </div>
+
+      <div class="gauges">
+        <div class="gauge">
+          <div class="gauge-label"><span>조명</span><span id="light-val">또렷함 100%</span></div>
+          <div class="gauge-bar"><div id="light-fill" class="gauge-fill light"></div></div>
+        </div>
+        <div class="gauge mental-gauge">
+          <div class="gauge-label"><span>멘탈</span><span id="mental-val">80%</span></div>
+          <div class="gauge-bar"><div id="mental-fill" class="gauge-fill mental"></div></div>
+        </div>
+        <div class="gauge stealth-gauge">
+          <div class="gauge-label"><span>기척</span><span id="danger-val">정적</span></div>
+          <div class="gauge-bar"><div id="danger-fill" class="gauge-fill danger"></div></div>
+        </div>
+      </div>
+
+      <div id="risk-panel" class="risk-panel safe minimal">
+        <span id="risk-chip" class="risk-chip">대기</span>
+        <span id="risk-copy" class="risk-copy"></span>
+      </div>
+
+      <div class="bag-row">
+        <div id="bag-slots" class="bag-slots"></div>
+      </div>
+
+      <button id="dialogue-card" class="dialogue-card hidden" type="button" aria-live="assertive" aria-label="상황 대화 계속">
+        <span id="dialogue-copy" class="dialogue-copy">아래가 열린다.</span>
+        <span class="dialogue-hint">탭해서 계속</span>
+      </button>
+
+      <div class="stage" id="stage">
+        <svg id="mini-map" class="mini-map" viewBox="0 0 120 90" aria-hidden="true"></svg>
+        <div class="fp-view" aria-hidden="true">
+          <div class="fp-ceiling"></div>
+          <div class="fp-floor"></div>
+          <div class="fp-left-wall"></div>
+          <div class="fp-right-wall"></div>
+          <div class="fp-door fp-left"></div>
+          <div class="fp-door fp-center"></div>
+          <div class="fp-door fp-right"></div>
+        </div>
+        <div id="stage-situation" class="stage-situation" aria-live="polite">아래가 열린다.</div>
+        <div class="stage-floor"></div>
+        <div id="recovery-point" class="recovery-point">
+          <span class="rp-name">회수물</span>
+        </div>
+        <button id="btn-grab" class="btn stage-grab hidden">줍기</button>
+        <div id="player" class="actor player actor-sprite" title="탐사자" aria-label="탐사자"></div>
+        <div id="chaser" class="actor chaser actor-sprite" title="어둠붙이" aria-label="어둠붙이"></div>
+        <div id="depth-rail" class="depth-rail" aria-hidden="true"></div>
+        <div id="log" class="log">
+          <div class="log-line">아래가 열린다.</div>
+        </div>
+      </div>
+
+      <div id="dock" class="dock">
+        <div id="room-choices" class="room-choices" aria-label="갈림길"></div>
+        <div id="dock-actions" class="dock-actions">
+          <button id="btn-drop"   class="btn btn-act warn hidden-action">버리고 도망</button>
+          <button id="btn-return" class="btn btn-act good">돌아가기</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 판매처 선택 화면 ===================== -->
+    <section id="screen-return" class="screen">
+      <h2 class="result-title good-text">지상으로 나왔다</h2>
+      <div class="sale-card">
+        <p class="buyer-hint">이 짐, 누구에게 넘길까?</p>
+        <div class="sale-list" id="return-list"></div>
+        <div class="meta-clock">현재 의심도 <b id="return-susp" class="susp-v">0</b></div>
+      </div>
+      <div class="contract-card" id="return-contract"></div>
+
+      <div class="buyers">
+        <button id="buy-committee" class="btn buyer-btn committee">
+          <span class="buyer-name">위원회</span>
+          <span class="buyer-sub">정식 반납 · 값은 낮아도 흔적이 지워진다</span>
+          <span class="buyer-est"><b id="committee-rp">+0</b> RP · 의심도 <span id="committee-susp" class="susp-delta">0</span></span>
+        </button>
+        <button id="buy-black" class="btn buyer-btn black">
+          <span class="buyer-name">암시장</span>
+          <span class="buyer-sub">값은 세지만, 뜨거운 물건일수록 꼬리가 남는다</span>
+          <span class="buyer-est"><b id="black-rp">+0</b> RP · 의심도 <span id="black-susp" class="susp-delta">+0</span></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ===================== 강화(귀환) 화면 ===================== -->
+    <section id="screen-upgrade" class="screen">
+      <h2 class="result-title good-text">살아 나왔다</h2>
+      <div class="sale-card">
+        <div class="sale-buyer" id="sale-buyer"></div>
+        <div class="sale-list" id="sale-list"></div>
+        <div class="run-summary" id="run-summary"></div>
+        <div class="sale-total">판매 <b id="sale-gain">+0</b> RP</div>
+        <div class="sale-balance">보유 RP <b id="sale-balance">0</b> · 의심도 <b id="sale-susp" class="susp-v">0</b></div>
+      </div>
+
+      <div class="truth-news" id="truth-news" hidden></div>
+      <div class="contract-card" id="sale-contract"></div>
+      <div class="street-news" id="street-news"></div>
+      <p class="goal-line">다음 목표 · <b id="return-goal">2층 도달</b></p>
+      <p class="shop-hint">이번엔 하나만 고르자.</p>
+      <div class="upgrades">
+        <button id="up-bag"    class="btn up-btn"></button>
+        <button id="up-light"  class="btn up-btn"></button>
+        <button id="up-weapon" class="btn up-btn"></button>
+      </div>
+
+      <button id="btn-again" class="btn btn-primary">다시 내려가기</button>
+    </section>
+
+    <!-- ===================== 실패 화면 ===================== -->
+    <section id="screen-fail" class="screen">
+      <h2 class="result-title bad-text">기절했다.</h2>
+      <div class="fail-card">
+        <p class="fail-line">정신이 끊겼다. 깨어났을 때 런은 끝나 있었다.</p>
+        <div class="fail-recovery" id="fail-recovery"></div>
+        <div class="fail-detail" id="fail-detail"></div>
+        <div class="fail-meta">지상 의심도 <b id="fail-susp" class="susp-v">0</b></div>
+        <p class="fail-keep">강화와 남은 RP는 유지된다.</p>
+      </div>
+      <button id="btn-retry" class="btn btn-primary">다시 내려가기</button>
+    </section>
+
+  </div>
+
+  <script src="src/game.js?v=14"></script>
+</body>
+</html>
