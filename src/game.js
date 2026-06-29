@@ -809,6 +809,18 @@
     render();
   }
 
+  function handleDialogueCardClick(event) {
+    if (event) event.stopPropagation();
+    dismissDialogue();
+  }
+
+  function handleDungeonDialogueTap(event) {
+    if (!run || !run.dialogue || !el['screen-dungeon'] || !el['screen-dungeon'].classList.contains('active')) return;
+    if (event && event.target && event.target.closest && event.target.closest('#dialogue-card')) return;
+    if (event) event.preventDefault();
+    dismissDialogue();
+  }
+
   /* ---------------- 틱 루프 ---------------- */
 
   function startTick() { stopTick(); timer = setInterval(tick, TICK_MS); }
@@ -2246,11 +2258,18 @@
 
   function bind() {
     el['btn-enter'].addEventListener('click', startNewRun);
-    if (el['btn-meta']) el['btn-meta'].addEventListener('click', toggleMetaPanel);
+    if (el['btn-meta']) el['btn-meta'].addEventListener('click', (event) => {
+      if (run && run.dialogue) {
+        event.preventDefault();
+        return;
+      }
+      toggleMetaPanel();
+    });
+    if (el['screen-dungeon']) el['screen-dungeon'].addEventListener('click', handleDungeonDialogueTap);
     el['btn-grab'].addEventListener('click', grab);
     el['btn-drop'].addEventListener('click', dropAndFlee);
     el['btn-return'].addEventListener('click', attemptReturnToSurface);
-    if (el['dialogue-card']) el['dialogue-card'].addEventListener('click', dismissDialogue);
+    if (el['dialogue-card']) el['dialogue-card'].addEventListener('click', handleDialogueCardClick);
     el['buy-committee'].addEventListener('click', () => chooseBuyer('committee'));
     el['buy-black'].addEventListener('click', () => chooseBuyer('black'));
     el['up-bag'].addEventListener('click', () => buyUpgrade('bag'));
