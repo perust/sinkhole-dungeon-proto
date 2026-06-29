@@ -725,8 +725,8 @@
 
     // 추격 중에만 위험이 오른다. 회수자를 정면으로 마주친 위기 선택 중에는
     // 먼저 한 번 대응하게 두고, 선택 없이 틱으로 바로 실패시키지 않는다.
-    const monsterCrisisOpen = run.pendingEvent && run.pendingEvent.type === 'monster-encounter';
-    if (run.chasing && !monsterCrisisOpen) {
+    const pausingEventOpen = run.pendingEvent && (run.pendingEvent.type === 'monster-encounter' || run.pendingEvent.type === 'return-attempt');
+    if (run.chasing && !pausingEventOpen) {
       let rate = FLOORS[run.floor - 1].dangerBase / weaponFactor();
       if (run.light <= 0) rate *= 2.2; // 조명 0 → 회수자 광폭화
       run.danger = Math.min(100, run.danger + rate);
@@ -889,7 +889,10 @@
     const ev = run.pendingEvent;
     const node = nodeById(ev.node) || currentNode();
     let msg = '';
-    if (ev.type === 'mental-break') {
+    if (ev.type === 'return-attempt') {
+      resolveReturnAttempt(ev, choiceId);
+      return;
+    } else if (ev.type === 'mental-break') {
       const outcome = ev.outcome;
       if (outcome && typeof outcome.apply === 'function') outcome.apply();
       run.mental = MENTAL_BREAK_RECOVERY;
@@ -1268,6 +1271,208 @@
     render();
   }
 
+  function returnPathLength() {
+    if (!run || !run.floorMap) return 0;
+    const travelled = run.floorMap.travelledEdges ? run.floorMap.travelledEdges.size : 0;
+    const seenNodes = run.floorMap.nodes.filter((node) => node.entered).length;
+    return Math.max(travelled, Math.max(0, seenNodes - 1)) + Math.max(0, run.floor - 1) * 4;
+  }
+
+  function returnRisk() {
+    const lightPct = lightPercent();
+    const slots = usedSlots();
+    const path = returnPathLength();
+    const causes = [];
+    let score = 0;
+
+    score += Math.max(0, run.floor - 1) * 13;
+    score += Math.min(22, path * 4);
+    if (slots > 0) score += Math.min(18, slots * 5 + run.bag.length * 2);
+    if (lightPct < 45) score += 8;
+    if (lightPct < 25) score += 14;
+    if (run.mental < 40) score += 10;
+    if (run.mental < 20) score += 16;
+    if (run.danger >= 35) score += 10;
+    if (run.danger >= 65) score += 18;
+    if (run.chasing) score += 16;
+
+    if (lightPct < 35) causes.push('light');
+    if (run.mental < 35) causes.push('mental');
+    if (run.chasing || run.danger >= 55) causes.push('pursuit');
+    if (slots >= Math.max(2, Math.ceil(bagCap() * 0.6)) || run.bag.length >= 2) causes.push('bag');
+    if (run.floor >= 2 || path >= 4) causes.push('depth');
+
+    return { score, causes, path, lightPct, slots };
+  }
+
+  function cleanReturnText(risk) {
+    if (risk.path <= 1 && risk.slots === 0) return '입구의 찬 공기를 따라 곧장 지상으로 돌아왔다.';
+    if (risk.slots > 0) return '내려온 자국을 더듬어 짐을 끌어올렸다. 지상의 소음이 천천히 돌아온다.';
+    return '표시해 둔 벽 흠집을 거꾸로 밟아 지상으로 올라왔다.';
+  }
+
+  function makeReturnEvent(risk) {
+    const choice = (id, label, sub, tone = '') => eventChoice(id, label, sub, tone);
+    const has = (cause) => risk.causes.includes(cause);
+    if (has('pursuit')) {
+      const choices = [
+        choice('lights-out', '조명을 끈다', '조명 소모 멈춤 · 기척 낮춤', 'good'),
+        choice('sprint', '그냥 뛴다', '멘탈/기척 압박', risk.score >= 90 ? 'danger' : ''),
+      ];
+      if (run.bag.length > 0) choices.splice(1, 0, choice('bait', '미끼를 던진다', '가벼운 짐 1개 소모', 'good'));
+      return {
+        type: 'return-attempt',
+        variant: 'pursuit',
+        title: '따라오는 발소리',
+        cue: '올라가는 계단 밑에서 젖은 발소리가 같은 박자로 붙는다.',
+        risk,
+        choices,
+      };
+    }
+    if (has('light')) {
+      const choices = [
+        choice('feel-wall', '벽을 짚고 오른다', '멘탈 소모 · 안전한 귀환', 'good'),
+        choice('save-light', '빛을 아낀다', '기척 상승 · 조명 보존'),
+      ];
+      if (run.bag.length > 0) choices.push(choice('drop-one', '가방 하나를 버린다', '짐 1개 소모 · 길 확보', 'good'));
+      return {
+        type: 'return-attempt',
+        variant: 'light',
+        title: '어두운 계단',
+        cue: '손전등 원이 계단 중간에서 끊긴다. 위쪽 난간만 젖어 번들거린다.',
+        risk,
+        choices,
+      };
+    }
+    if (has('bag')) {
+      return {
+        type: 'return-attempt',
+        variant: 'bag',
+        title: '무거운 가방',
+        cue: '가방 끈이 어깨 살을 파고든다. 내려올 때보다 계단 폭이 좁아 보인다.',
+        risk,
+        choices: [
+          choice('drop-light', '가벼운 것부터 버린다', '싼 짐 1개 소모 · 기척 낮춤', 'good'),
+          choice('retie', '끈을 고쳐 묶는다', '시간 소모 · 안정'),
+          choice('haul', '그대로 오른다', '멘탈 소모 · 빠른 귀환', risk.score >= 85 ? 'danger' : ''),
+        ],
+      };
+    }
+    return {
+      type: 'return-attempt',
+      variant: 'mental',
+      title: '끝없는 복도',
+      cue: '돌아가는 복도가 한 번 더 늘어난다. 뒤돌아보면 입구 표식이 사라질 것 같다.',
+      risk,
+      choices: [
+        choice('count-breath', '숨을 센다', '멘탈 회복 · 조명 소모', 'good'),
+        choice('no-look', '뒤돌아보지 않는다', '기척 무시 · 안전한 귀환'),
+        choice('run-up', '뛰어 오른다', '위험한 빠른 귀환', risk.score >= 85 ? 'danger' : ''),
+      ],
+    };
+  }
+
+  function attemptReturnToSurface() {
+    if (!run || run.moving || run.pendingEvent) return;
+    const risk = returnRisk();
+    if (risk.score < 42) {
+      run.lastAction = cleanReturnText(risk);
+      log(run.lastAction, 'win');
+      returnToSurface();
+      return;
+    }
+    const ev = makeReturnEvent(risk);
+    run.pendingEvent = ev;
+    run.lastAction = ev.cue;
+    log(ev.cue, 'hot');
+    render();
+  }
+
+  function resolveReturnAttempt(ev, choiceId) {
+    let msg = '';
+    let knockedOut = false;
+    const risky = ev.risk.score >= 86;
+    const veryRisky = ev.risk.score >= 102;
+    const loseCheapest = (fallback) => {
+      const lost = takeCheapestBagItem();
+      if (!lost) return fallback || '버릴 짐이 없다. 가방이 빈 소리만 낸다.';
+      run.droppedCount += 1;
+      return `${lost.name}${objectParticle(lost.name)} 놓고 왔다.`;
+    };
+
+    if (ev.variant === 'pursuit') {
+      if (choiceId === 'lights-out') {
+        run.light = Math.max(0, run.light - 4);
+        run.danger = Math.max(0, run.danger - 18);
+        msg = '빛을 죽이자 발소리가 한 층 아래에서 헛돈다. 난간을 붙잡고 지상까지 오른다.';
+      } else if (choiceId === 'bait') {
+        msg = `${loseCheapest()} 발소리가 그쪽으로 꺾인 틈에 계단을 빠져나왔다.`;
+        run.danger = Math.max(0, run.danger - 28);
+      } else {
+        run.light = Math.max(0, run.light - 10);
+        run.mental = Math.max(0, run.mental - 16);
+        run.danger = Math.min(100, run.danger + 18);
+        msg = '숨이 터질 때까지 뛰었다. 발소리가 마지막 계단까지 따라붙는다.';
+        knockedOut = veryRisky || run.danger >= 100 || run.mental <= 0;
+      }
+    } else if (ev.variant === 'light') {
+      if (choiceId === 'feel-wall') {
+        run.mental = Math.max(0, run.mental - 8);
+        run.danger = Math.max(0, run.danger - 4);
+        msg = '벽의 금 간 선을 손끝으로 세며 올랐다. 손바닥이 젖었지만 길은 잃지 않았다.';
+      } else if (choiceId === 'drop-one') {
+        msg = `${loseCheapest()} 가방이 가벼워지자 어둠 속 계단 폭이 다시 맞아떨어진다.`;
+        run.danger = Math.max(0, run.danger - 10);
+      } else {
+        run.danger = Math.min(100, run.danger + 12);
+        msg = '빛을 아끼자 계단참의 윤곽이 사라진다. 젖은 난간만 따라 겨우 올라왔다.';
+        knockedOut = veryRisky && run.mental < 18;
+      }
+    } else if (ev.variant === 'bag') {
+      if (choiceId === 'drop-light') {
+        msg = `${loseCheapest()} 끈이 덜 비명을 지른다. 남은 짐을 안고 지상으로 나왔다.`;
+        run.danger = Math.max(0, run.danger - 8);
+      } else if (choiceId === 'retie') {
+        run.light = Math.max(0, run.light - 5);
+        run.mental = clamp(run.mental + 3, 0, 100);
+        msg = '끈을 짧게 묶자 무게가 등 가운데로 붙는다. 느리지만 흔들리지 않고 올라왔다.';
+      } else {
+        run.mental = Math.max(0, run.mental - 14);
+        run.danger = Math.min(100, run.danger + 10);
+        msg = '가방이 계단 모서리에 계속 걸린다. 마지막에는 거의 끌고 올라왔다.';
+        knockedOut = veryRisky && (usedSlots() >= bagCap() || run.mental <= 0);
+      }
+    } else {
+      if (choiceId === 'count-breath') {
+        run.light = Math.max(0, run.light - 6);
+        run.mental = clamp(run.mental + 10, 0, 100);
+        msg = '숨을 열 번씩 끊어 세자 복도 길이가 제자리로 돌아온다.';
+      } else if (choiceId === 'no-look') {
+        run.mental = Math.max(0, run.mental - 6);
+        run.danger = Math.max(0, run.danger - 3);
+        msg = '뒤를 보지 않았다. 사라지는 표식 대신 발밑 경사만 믿고 올랐다.';
+      } else {
+        run.mental = Math.max(0, run.mental - 18);
+        run.danger = Math.min(100, run.danger + 12);
+        msg = '뛰어오르는 동안 복도가 접혔다 펴진다. 숨이 끊어질 듯하다.';
+        knockedOut = risky && run.mental <= 10;
+      }
+    }
+
+    if (knockedOut) {
+      run.pendingEvent = null;
+      run.failContext = msg;
+      run.lastAction = msg;
+      log(msg, 'hot');
+      failRun();
+      return;
+    }
+    run.pendingEvent = null;
+    run.lastAction = msg;
+    log(msg, /발소리|사라진다|끊어질/.test(msg) ? 'hot' : 'win');
+    returnToSurface();
+  }
+
   function returnToSurface() {
     stopTick();
     run.lastSale = run.bag.slice();
@@ -1446,9 +1651,11 @@
     el['btn-drop'].disabled = !showDrop;
     el['btn-drop'].classList.toggle('hidden-action', !showDrop);
     if (el['dock-actions']) el['dock-actions'].classList.toggle('has-drop', showDrop);
-    el['btn-return'].disabled = false;
+    el['btn-return'].disabled = !!(run.moving || run.pendingEvent);
     el['btn-drop'].textContent = '↙ 버리고 도망';
-    el['btn-return'].textContent = run.bag.length > 0 ? '↩ 나가기' : '↩ 돌아가기';
+    el['btn-return'].textContent = run.pendingEvent && run.pendingEvent.type === 'return-attempt'
+      ? '↩ 올라가는 중'
+      : (run.bag.length > 0 ? '↩ 나가기' : '↩ 돌아가기');
   }
 
   function renderBag() {
@@ -1807,7 +2014,7 @@
     el['btn-enter'].addEventListener('click', startNewRun);
     el['btn-grab'].addEventListener('click', grab);
     el['btn-drop'].addEventListener('click', dropAndFlee);
-    el['btn-return'].addEventListener('click', returnToSurface);
+    el['btn-return'].addEventListener('click', attemptReturnToSurface);
     el['buy-committee'].addEventListener('click', () => chooseBuyer('committee'));
     el['buy-black'].addEventListener('click', () => chooseBuyer('black'));
     el['up-bag'].addEventListener('click', () => buyUpgrade('bag'));
