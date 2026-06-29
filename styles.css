@@ -227,6 +227,8 @@ body {
 .gauge-fill { height: 100%; width: 0%; border-radius: 8px; transition: width .15s linear; }
 .gauge-fill.light  { background: linear-gradient(90deg, #8a6b1f, var(--gold)); }
 .gauge-fill.light.low { background: linear-gradient(90deg, #b5502a, #ff7a45); }
+.gauge-fill.mental { background: linear-gradient(90deg, #5b6bb8, #b7a7ff); }
+.gauge-fill.mental.low { background: linear-gradient(90deg, #7a2533, var(--danger)); }
 .gauge-fill.danger { background: linear-gradient(90deg, #7a2533, var(--danger)); }
 .gauge-fill.danger.high { animation: dangerPulse .5s ease-in-out infinite; }
 @keyframes dangerPulse { 0%,100%{filter:brightness(1);} 50%{filter:brightness(1.6);} }
@@ -963,6 +965,7 @@ html, body { touch-action: manipulation; }
 #screen-dungeon .floor-banner { margin-top: 5px; }
 #screen-dungeon .gauges { flex-direction: row; gap: 10px; margin-top: 7px; }
 #screen-dungeon .gauges .gauge { flex: 1 1 0; }
+#screen-dungeon .gauges .mental-gauge { flex: .9 1 0; }
 #screen-dungeon .gauges .gauge-label { margin-bottom: 3px; }
 #screen-dungeon .bag-row { margin-top: 7px; }
 .situation-panel {

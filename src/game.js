@@ -92,6 +92,10 @@
   const DROP_DANGER_FACTOR = 0.45;// 버리고 도망: 위험 ×0.45
   const DROP_DANGER_MINUS  = 6;
   const WAIT_LIGHT_COST     = 4;  // 기다리기: 시간이 흘러 조명 소모
+  const START_MENTAL        = 80; // 침착함/판단력. 조명 상태에 따라 서서히 변한다.
+  const MENTAL_BREAK_RECOVERY = 28; // 붕괴 후 간신히 다시 움직일 수 있는 기준선
+  const MENTAL_BREAK_GRACE_TICKS = 40; // 해결 직후 약 6초간 연쇄 붕괴 방지
+  const MENTAL_BREAK_MIN_LIGHT_PCT = 8; // 암전이면 손전등을 아주 약하게 되살림
   // 몬스터 이벤트 위험 수치
   const SIGHT_DANGER        = 8;  // 직선 끝에서 이상한 기척
   const SIGHT_MOVE_DANGER   = 6;  // 그쪽으로 전진할 때 추가 위험
@@ -134,6 +138,49 @@
       rpRate: 0.25,
       suspDelta: 7,
       loss: '쓸 만한 회수품 일부가 치료비로 사라졌다.',
+    },
+  ];
+
+  const MENTAL_BREAK_EVENTS = [
+    {
+      key: 'panic',
+      title: '공황',
+      cue: '숨이 목에 걸린다. 손전등 원이 바닥으로 떨어진다.',
+      choice: '숨을 세어 버틴다',
+      sub: '조명 -8 · 기척 +6',
+      apply() {
+        run.light = clamp(run.light - 8, 0, maxLight());
+        run.danger = clamp(run.danger + 6, 0, 100);
+      },
+      after: '숨을 억지로 맞췄다. 빛은 흔들리지만 다시 앞으로 볼 수 있다.',
+    },
+    {
+      key: 'voices',
+      title: '환청',
+      cue: '뒤에서 누군가 이름을 부른다. 돌아본 순간 길 감각이 흐려진다.',
+      choice: '벽을 짚고 확인한다',
+      sub: '기척 +10 · 멘탈 회복',
+      apply() {
+        run.danger = clamp(run.danger + 10, 0, 100);
+      },
+      after: '아무도 없다. 젖은 벽 감촉만 남았다.',
+    },
+    {
+      key: 'tremor',
+      title: '손이 떨림',
+      cue: '손끝이 말을 듣지 않는다. 가방 끈이 어둠 속으로 미끄러진다.',
+      choice: '가방부터 붙잡는다',
+      sub: '가벼운 짐 1개 손실 가능',
+      apply() {
+        if (run.bag.length && Math.random() < 0.55) {
+          const lost = takeCheapestBagItem();
+          if (lost) {
+            run.droppedCount += 1;
+            run.lastMentalLoss = lost.name;
+          }
+        }
+      },
+      after: '떨림이 조금 잦아든다.',
     },
   ];
 
@@ -273,10 +320,26 @@
   const bagValue   = () => run.bag.reduce((s, i) => s + i.value, 0);
   const roomFor    = (item) => bagCap() - usedSlots() >= item.slots;
 
+  function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+
+  function lightPercent() {
+    return run ? Math.round((run.light / maxLight()) * 100) : 0;
+  }
+
+  function lightState() {
+    const pct = lightPercent();
+    if (pct <= 0) return { key: 'blackout', label: '암전' };
+    if (pct < 20) return { key: 'dying', label: '꺼져감' };
+    if (pct < 45) return { key: 'flicker', label: '깜빡임' };
+    if (pct < 75) return { key: 'dim', label: '흐림' };
+    return { key: 'clear', label: '또렷함' };
+  }
+
   function newRun() {
     return {
       floor: 1,
       light: maxLight(),
+      mental: START_MENTAL,
       bag: [],
       danger: 0,
       chasing: false,
@@ -285,6 +348,9 @@
       currentNodeId: 0,    // 현재 위치한 노드 id
       holdEvent: null,     // 활성 몬스터 대기 이벤트({type:'cross'|'ambush', node})
       pendingEvent: null,  // 방 도착 후 플레이어가 고르는 짧은 환경 이벤트
+      mentalEventCount: 0,
+      mentalGraceTicks: 0,
+      lastMentalLoss: null,
       moving: false,       // 전진/강하 연출 중
       lastAction: '',      // 다음 의미 있는 행동/상태 갱신 전까지 상단 상황판에 남길 최근 맥락
       maxFloor: 1,
@@ -539,7 +605,7 @@
     'btn-enter', 'btn-reset', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-contract', 'start-goal',
     'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
-    'light-val', 'light-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
+    'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
     'room-choices', 'dock', 'dock-actions',
     'bag-slots', 'choice-cue', 'mini-map', 'recovery-point', 'chaser', 'stage', 'depth-rail', 'log',
     'btn-grab', 'btn-drop', 'btn-return',
@@ -649,6 +715,10 @@
     // 조명은 잠수 내내 천천히 닳는다.
     run.light = Math.max(0, run.light - FLOORS[run.floor - 1].drain);
 
+    updateMentalByLight();
+    if (run.mentalGraceTicks > 0) run.mentalGraceTicks -= 1;
+    if (maybeTriggerMentalBreak()) return;
+
     // 추격 중에만 위험이 오른다.
     if (run.chasing) {
       let rate = FLOORS[run.floor - 1].dangerBase / weaponFactor();
@@ -658,6 +728,37 @@
       if (run.danger >= 100) { failRun(); return; }
     }
     render();
+  }
+
+  function updateMentalByLight(extra = 1) {
+    if (!run) return;
+    if (run.mentalGraceTicks > 0) return;
+    const pct = lightPercent();
+    let delta;
+    if (pct >= 75) delta = 0.025;
+    else if (pct >= 45) delta = -0.015;
+    else if (pct >= 20) delta = -0.075;
+    else if (pct > 0) delta = -0.16;
+    else delta = -0.33;
+    run.mental = clamp(run.mental + delta * extra, 0, 100);
+  }
+
+  function maybeTriggerMentalBreak() {
+    if (!run || run.mental > 0 || run.mentalGraceTicks > 0 || run.pendingEvent || run.moving) return false;
+    const outcome = MENTAL_BREAK_EVENTS[Math.floor(Math.random() * MENTAL_BREAK_EVENTS.length)];
+    run.mentalEventCount += 1;
+    run.lastMentalLoss = null;
+    run.pendingEvent = {
+      type: 'mental-break',
+      title: outcome.title,
+      cue: outcome.cue,
+      outcome,
+      choices: [eventChoice('recover', outcome.choice, outcome.sub, 'danger')],
+    };
+    run.lastAction = outcome.cue;
+    log(`${outcome.title}: ${outcome.cue}`, 'hot');
+    render();
+    return true;
   }
 
   /* ---------------- 런 진행 액션 ---------------- */
@@ -745,6 +846,19 @@
           eventChoice('turn', '돌아선다', '위험 피함'),
         ],
       };
+    } else if (node.kind === 'storage' || node.kind === 'door') {
+      ev = {
+        type: 'light-recovery',
+        title: node.kind === 'storage' ? '비상 배터리' : '벽 비상등',
+        cue: node.kind === 'storage'
+          ? '선반 아래에 아직 미약한 배터리가 깜빡인다.'
+          : '깨진 비상등 커버 안쪽에 남은 전원이 보인다.',
+        choices: [
+          eventChoice('charge', '조명에 연결한다', '조명 회복', 'good'),
+          eventChoice('wipe', '렌즈만 닦는다', '조금 밝아짐 · 멘탈 안정', 'good'),
+          eventChoice('skip', '그냥 둔다', '시간 절약'),
+        ],
+      };
     }
     if (!ev) return;
     node.roomEventResolved = true;
@@ -765,7 +879,15 @@
     const ev = run.pendingEvent;
     const node = nodeById(ev.node) || currentNode();
     let msg = '';
-    if (ev.type === 'cabinet') {
+    if (ev.type === 'mental-break') {
+      const outcome = ev.outcome;
+      if (outcome && typeof outcome.apply === 'function') outcome.apply();
+      run.mental = MENTAL_BREAK_RECOVERY;
+      run.mentalGraceTicks = MENTAL_BREAK_GRACE_TICKS;
+      if (lightPercent() <= 0) run.light = Math.max(run.light, maxLight() * (MENTAL_BREAK_MIN_LIGHT_PCT / 100));
+      if (run.lastMentalLoss) msg = `${outcome.after} ${run.lastMentalLoss}${subjectParticle(run.lastMentalLoss)} 손에서 빠져나갔다.`;
+      else msg = outcome ? outcome.after : '간신히 정신을 붙잡았다.';
+    } else if (ev.type === 'cabinet') {
       if (choiceId === 'open') {
         run.light = Math.max(0, run.light - 3);
         if (!run.currentItem && !node.itemTaken) {
@@ -813,10 +935,26 @@
         run.danger = Math.max(0, run.danger - 1);
         msg = '좁은 틈은 포기했다. 몸이 걸릴 위험은 없다.';
       }
+    } else if (ev.type === 'light-recovery') {
+      if (choiceId === 'charge') {
+        const gain = node && node.kind === 'storage' ? 22 : 15;
+        run.light = clamp(run.light + gain, 0, maxLight());
+        run.mental = clamp(run.mental + 3, 0, 100);
+        msg = node && node.kind === 'storage'
+          ? '비상 배터리를 물렸다. 조명 원이 다시 넓어진다.'
+          : '비상등 잔류 전원을 끌어왔다. 빛이 잠깐 또렷해진다.';
+      } else if (choiceId === 'wipe') {
+        run.light = clamp(run.light + 7, 0, maxLight());
+        run.mental = clamp(run.mental + 5, 0, 100);
+        msg = '렌즈의 흙탕물을 닦아냈다. 앞뒤 판단이 조금 돌아온다.';
+      } else {
+        msg = '불안정한 전원은 건드리지 않는다.';
+      }
     }
     run.pendingEvent = null;
     run.lastAction = msg || '상황을 정리했다.';
     log(run.lastAction, /울렸다|따라온다|없다/.test(run.lastAction) ? 'hot' : undefined);
+    if (maybeTriggerMentalBreak()) return;
     render();
   }
 
@@ -1152,10 +1290,19 @@
     el['floor-name'].textContent = f.name;
 
     // 조명 게이지
-    const lightPct = Math.round((run.light / maxLight()) * 100);
+    const lightPct = lightPercent();
+    const light = lightState();
     el['light-fill'].style.width = lightPct + '%';
     el['light-fill'].classList.toggle('low', lightPct <= 25);
-    el['light-val'].textContent = lightPct + '%';
+    el['light-val'].textContent = `${light.label} ${lightPct}%`;
+
+    // 멘탈 게이지
+    const mentalPct = Math.round(run.mental);
+    if (el['mental-fill']) {
+      el['mental-fill'].style.width = mentalPct + '%';
+      el['mental-fill'].classList.toggle('low', mentalPct <= 25);
+    }
+    if (el['mental-val']) el['mental-val'].textContent = mentalPct + '%';
 
     // 위험 게이지
     el['danger-fill'].style.width = run.danger + '%';
