@@ -111,6 +111,12 @@
         <div id="bag-slots" class="bag-slots"></div>
       </div>
 
+      <button id="dialogue-card" class="dialogue-card hidden" type="button" aria-live="assertive" aria-label="상황 대화 계속">
+        <span class="dialogue-label">상황</span>
+        <span id="dialogue-copy" class="dialogue-copy">아래가 열린다.</span>
+        <span class="dialogue-hint">탭해서 계속</span>
+      </button>
+
       <div class="stage" id="stage">
         <svg id="mini-map" class="mini-map" viewBox="0 0 120 90" aria-hidden="true"></svg>
         <div class="fp-view" aria-hidden="true">
@@ -123,11 +129,6 @@
           <div class="fp-door fp-right"></div>
         </div>
         <div id="stage-situation" class="stage-situation" aria-live="polite">아래가 열린다.</div>
-        <button id="dialogue-card" class="dialogue-card hidden" type="button" aria-live="assertive" aria-label="상황 대화 닫기">
-          <span class="dialogue-label">상황</span>
-          <span id="dialogue-copy" class="dialogue-copy">아래가 열린다.</span>
-          <span class="dialogue-hint">탭해서 닫기</span>
-        </button>
         <div class="stage-floor"></div>
         <div id="recovery-point" class="recovery-point">
           <span class="rp-name">회수물</span>

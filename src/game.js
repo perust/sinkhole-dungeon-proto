@@ -419,7 +419,8 @@
       lastMentalLoss: null,
       moving: false,       // 전진/강하 연출 중
       lastAction: '',      // 다음 의미 있는 행동/상태 갱신 전까지 상단 상황판에 남길 최근 맥락
-      dialogue: null,      // 선택/이동 결과를 stage 중앙에서 탭해 닫는 짧은 상황 카드
+      dialogue: null,      // 선택/이동 결과를 가방 아래에서 탭해 넘기는 읽기 게이트
+      dialogueQueue: [],   // 한 행동 안에서 도착→이벤트처럼 이어지는 중요한 문장 순서 보존
       maxFloor: 1,
       grabbedCount: 0,
       droppedCount: 0,
@@ -784,16 +785,27 @@
     if (!run || !text) return;
     const copy = cleanSituationText(String(text));
     if (!copy) return;
-    run.dialogue = { text: copy, tone };
+    const next = { text: copy, tone };
+    if (run.dialogue) {
+      run.dialogueQueue = run.dialogueQueue || [];
+      run.dialogueQueue.push(next);
+    } else {
+      run.dialogue = next;
+    }
   }
 
   function clearDialogue() {
-    if (run) run.dialogue = null;
+    if (run) {
+      run.dialogue = null;
+      run.dialogueQueue = [];
+    }
   }
 
   function dismissDialogue() {
     if (!run || !run.dialogue) return;
-    run.dialogue = null;
+    const queue = run.dialogueQueue || [];
+    run.dialogue = queue.shift() || null;
+    run.dialogueQueue = queue;
     render();
   }
 
@@ -804,6 +816,10 @@
 
   function tick() {
     if (!run) return;
+    if (run.dialogue) {
+      render();
+      return;
+    }
 
     // 조명은 잠수 내내 천천히 닳는다.
     run.light = Math.max(0, run.light - FLOORS[run.floor - 1].drain);
@@ -1085,7 +1101,7 @@
   }
 
   function resolveRoomEvent(choiceId) {
-    if (!run || run.moving || !run.pendingEvent) return;
+    if (!run || run.moving || run.dialogue || !run.pendingEvent) return;
     clearDialogue();
     const ev = run.pendingEvent;
     const node = nodeById(ev.node) || currentNode();
@@ -1322,7 +1338,7 @@
 
   // 갈림길 선택. 계단이면 강하, 아니면 인접 노드로 이동.
   function chooseExit(targetId) {
-    if (!run || run.moving || run.pendingEvent) return;
+    if (!run || run.moving || run.dialogue || run.pendingEvent) return;
     clearDialogue();
     const node = currentNode();
     const target = nodeById(targetId);
@@ -1365,7 +1381,7 @@
 
   // 대기. 지나가는/매복 어둠붙이를 흘려보낸다. 시간이 흘러 조명이 조금 닳는다.
   function chooseWait() {
-    if (!run || !run.holdEvent || run.moving || run.pendingEvent) return;
+    if (!run || run.dialogue || !run.holdEvent || run.moving || run.pendingEvent) return;
     clearDialogue();
     const ev = run.holdEvent;
     run.light = Math.max(0, run.light - WAIT_LIGHT_COST);
@@ -1387,7 +1403,7 @@
   }
 
   function grab() {
-    if (run.pendingEvent || !run.currentItem || !roomFor(run.currentItem)) return;
+    if (run.dialogue || run.pendingEvent || !run.currentItem || !roomFor(run.currentItem)) return;
     clearDialogue();
     const node = currentNode();
     const item = run.currentItem;
@@ -1429,7 +1445,7 @@
   }
 
   function dropAndFlee() {
-    if (!run.chasing || run.bag.length === 0) return;
+    if (run.dialogue || !run.chasing || run.bag.length === 0) return;
     clearDialogue();
     // 가장 비싼 물건을 미끼로 떨군다 → 위험 급감.
     let idx = 0;
@@ -1553,7 +1569,7 @@
   }
 
   function attemptReturnToSurface() {
-    if (!run || run.moving || run.pendingEvent) return;
+    if (!run || run.moving || run.dialogue || run.pendingEvent) return;
     clearDialogue();
     const risk = returnRisk();
     if (risk.score < 42) {
@@ -1816,6 +1832,7 @@
     // 갈림길 / 스테이지 / 깊이 레일
     renderChoices();
     renderSituationLayer();
+    const dialogueOpen = !!run.dialogue;
     if (el['stage']) {
       const monsterCrisisOpen = !!(run.pendingEvent && run.pendingEvent.type === 'monster-encounter');
       el['stage'].classList.toggle('moving', !!run.moving);
@@ -1827,17 +1844,20 @@
     renderMiniMap();
 
     // 액션 버튼: 줍기(스테이지 위), 버리고 도망, 나가기.
-    if (el['dock']) el['dock'].classList.toggle('hidden', !!run.moving);
-    const canGrab = !!(run.currentItem && roomFor(run.currentItem) && !run.pendingEvent);
-    el['btn-grab'].classList.toggle('hidden', !(run.currentItem && !run.moving && !run.pendingEvent));
+    if (el['dock']) {
+      el['dock'].classList.toggle('hidden', !!(run.moving || dialogueOpen));
+      el['dock'].setAttribute('aria-hidden', dialogueOpen ? 'true' : 'false');
+    }
+    const canGrab = !!(run.currentItem && roomFor(run.currentItem) && !run.pendingEvent && !dialogueOpen);
+    el['btn-grab'].classList.toggle('hidden', !(run.currentItem && !run.moving && !run.pendingEvent && !dialogueOpen));
     el['btn-grab'].disabled = !canGrab;
     el['btn-grab'].textContent = run.currentItem ? (canGrab ? '줍기' : '가방 가득') : '';
 
     const showDrop = run.chasing && run.bag.length > 0;
-    el['btn-drop'].disabled = !showDrop;
+    el['btn-drop'].disabled = !showDrop || dialogueOpen;
     el['btn-drop'].classList.toggle('hidden-action', !showDrop);
     if (el['dock-actions']) el['dock-actions'].classList.toggle('has-drop', showDrop);
-    el['btn-return'].disabled = !!(run.moving || run.pendingEvent);
+    el['btn-return'].disabled = !!(run.moving || run.pendingEvent || dialogueOpen);
     el['btn-drop'].textContent = '↙ 버리고 도망';
     el['btn-return'].textContent = run.pendingEvent && run.pendingEvent.type === 'return-attempt'
       ? '↩ 올라가는 중'
