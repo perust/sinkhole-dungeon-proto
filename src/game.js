@@ -71,6 +71,27 @@
     '공간이 접힌 듯 어긋나 있다.',
   ];
 
+  const EXTRACTION_TUTORIAL_CUE = '쓸 만한 건 챙기고, 살아서 올라가야 한다. 지상에서 팔아야 다음 장비를 살 수 있다.';
+
+  const LIGHT_ALERTS = [
+    { key: 'dim70', pct: 70, text: '손전등 원이 벽 끝까지 닿지 않는다.' },
+    { key: 'dim45', pct: 45, text: '조명이 흐릿해진다. 어둠의 가장자리가 한 발 안쪽으로 밀려온다.' },
+    { key: 'dim25', pct: 25, text: '조명이 깜빡거린다. 젖은 웃음 같은 소리가 아래에서 번진다.' },
+    { key: 'dim10', pct: 10, text: '빛이 거의 꺼져간다. 무언가가 조금 더 가까워진 것 같다.' },
+  ];
+
+  const MENTAL_ALERTS = [
+    { key: 'uneasy60', value: 60, text: '숨이 얕아진다. 발밑 경사가 이상하게 느껴진다.' },
+    { key: 'shaken35', value: 35, text: '생각이 한 박자씩 늦어진다. 지금 돌아가도 늦지 않다.' },
+    { key: 'fraying15', value: 15, text: '손전등을 쥔 손에 힘이 빠진다.' },
+  ];
+
+  const BAG_ALERTS = {
+    heavy: '가방 끈이 어깨를 파고든다. 이 이상 넣으면 뛰기 어렵다.',
+    full: '가방이 이제 무거워서 못 넣을 것 같다.',
+    blocked: '가방이 더는 버티지 못한다.',
+  };
+
   function itemIcon(index) {
     return `<span class="loot-icon" style="--icon-index:${index}" aria-hidden="true"></span>`;
   }
@@ -266,6 +287,7 @@
     suspicion: 0,
     truths: [],
     contractIndex: 0,
+    extractionCueSeen: false,
   };
 
   /* ---------------- 저장 / 이어하기 ---------------- */
@@ -312,6 +334,7 @@
         suspicion: meta.suspicion,
         truths: meta.truths,
         contractIndex: meta.contractIndex,
+        extractionCueSeen: !!meta.extractionCueSeen,
       };
       window.localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -342,6 +365,7 @@
     meta.maxDepth    = safeInt(data.maxDepth,    1, 1, FLOORS.length);
     meta.suspicion   = safeInt(data.suspicion,   0, 0, 99);
     meta.contractIndex = safeInt(data.contractIndex, 0, 0);
+    meta.extractionCueSeen = !!data.extractionCueSeen;
     // truths: 배열이면서 현재 회수물에 실제로 존재하는 이름만 남기고 중복 제거.
     if (Array.isArray(data.truths)) {
       meta.truths = [...new Set(data.truths.filter((t) => KNOWN_TRUTHS.has(t)))];
@@ -359,7 +383,7 @@
     clearSave();
     Object.assign(meta, {
       rp: 0, bagLevel: 1, lightLevel: 1, weaponLevel: 1,
-      maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0,
+      maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0, extractionCueSeen: false,
     });
     renderStartScreen();
   }
@@ -421,6 +445,9 @@
       lastAction: '',      // 다음 의미 있는 행동/상태 갱신 전까지 상단 상황판에 남길 최근 맥락
       dialogue: null,      // 선택/이동 결과를 가방 아래에서 탭해 넘기는 읽기 게이트
       dialogueQueue: [],   // 한 행동 안에서 도착→이벤트처럼 이어지는 중요한 문장 순서 보존
+      seenLightAlerts: new Set(),
+      seenMentalAlerts: new Set(),
+      seenBagAlerts: new Set(),
       maxFloor: 1,
       grabbedCount: 0,
       droppedCount: 0,
@@ -821,6 +848,65 @@
     dismissDialogue();
   }
 
+  function queueSensoryAlert(text, tone = 'hot') {
+    if (!run || !text) return false;
+    if (run.pendingEvent || run.moving) return false;
+    run.lastAction = text;
+    log(text, tone);
+    showDialogue(text, tone);
+    return true;
+  }
+
+  function maybeQueueLightAlert() {
+    if (!run || run.pendingEvent || run.moving) return false;
+    const pct = lightPercent();
+    for (const alert of LIGHT_ALERTS) {
+      if (pct <= alert.pct && !run.seenLightAlerts.has(alert.key)) {
+        run.seenLightAlerts.add(alert.key);
+        return queueSensoryAlert(alert.text, 'hot');
+      }
+    }
+    return false;
+  }
+
+  function maybeQueueMentalAlert() {
+    if (!run || run.pendingEvent || run.moving || run.mental <= 0) return false;
+    for (const alert of MENTAL_ALERTS) {
+      if (run.mental <= alert.value && !run.seenMentalAlerts.has(alert.key)) {
+        run.seenMentalAlerts.add(alert.key);
+        return queueSensoryAlert(alert.text, alert.value <= 15 ? 'hot' : '');
+      }
+    }
+    return false;
+  }
+
+  function maybeQueueBagAlert() {
+    if (!run || run.pendingEvent || run.moving) return false;
+    const slots = usedSlots();
+    const cap = bagCap();
+    if (slots >= cap && !run.seenBagAlerts.has('full')) {
+      run.seenBagAlerts.add('full');
+      return queueSensoryAlert(BAG_ALERTS.full, 'hot');
+    }
+    if (slots >= Math.max(1, cap - 1) && !run.seenBagAlerts.has('heavy')) {
+      run.seenBagAlerts.add('heavy');
+      return queueSensoryAlert(BAG_ALERTS.heavy, 'hot');
+    }
+    return false;
+  }
+
+  function maybeQueueRunAlerts() {
+    if (!run || run.dialogue || run.pendingEvent || run.moving) return false;
+    return maybeQueueLightAlert() || maybeQueueMentalAlert() || maybeQueueBagAlert();
+  }
+
+  function maybeQueueExtractionTutorial() {
+    if (!run || meta.extractionCueSeen) return false;
+    meta.extractionCueSeen = true;
+    saveMeta();
+    return queueSensoryAlert(EXTRACTION_TUTORIAL_CUE, '');
+  }
+
   /* ---------------- 틱 루프 ---------------- */
 
   function startTick() { stopTick(); timer = setInterval(tick, TICK_MS); }
@@ -839,6 +925,7 @@
     updateMentalByLight();
     if (run.mentalGraceTicks > 0) run.mentalGraceTicks -= 1;
     if (maybeTriggerMentalBreak()) return;
+    if (maybeQueueRunAlerts()) { render(); return; }
 
     // 추격 중에만 위험이 오른다. 어둠붙이를 정면으로 마주친 위기 선택 중에는
     // 먼저 한 번 대응하게 두고, 선택 없이 틱으로 바로 실패시키지 않는다.
@@ -854,6 +941,7 @@
         return;
       }
     }
+    if (maybeQueueRunAlerts()) { render(); return; }
     render();
   }
 
@@ -907,6 +995,7 @@
     run.lastAction = `${f.n}층 진입. ${FLOOR_OPEN_CUE[floor - 1] || ''}`.trim();
     log(`${f.n}층. ${FLOOR_OPEN_CUE[floor - 1] || ''}`);
     showDialogue(run.lastAction);
+    if (floor === 1) maybeQueueExtractionTutorial();
   }
 
   function startNewRun() {
@@ -1214,6 +1303,7 @@
       if (run.pendingEvent) return;
     }
     if (maybeTriggerMentalBreak()) return;
+    if (maybeQueueRunAlerts()) { render(); return; }
     render();
   }
 
@@ -1409,11 +1499,21 @@
     const evNode = nodeById(ev.node);
     if (evNode) evNode.monsterResolved = true;
     run.holdEvent = null;
+    maybeQueueLightAlert();
+    maybeQueueMentalAlert();
     render();
   }
 
   function grab() {
-    if (run.dialogue || run.pendingEvent || !run.currentItem || !roomFor(run.currentItem)) return;
+    if (!run || run.dialogue || run.pendingEvent || !run.currentItem) return;
+    if (!roomFor(run.currentItem)) {
+      run.seenBagAlerts.add('blocked');
+      run.lastAction = BAG_ALERTS.blocked;
+      log(BAG_ALERTS.blocked, 'hot');
+      showDialogue(BAG_ALERTS.blocked, 'hot');
+      render();
+      return;
+    }
     clearDialogue();
     const node = currentNode();
     const item = run.currentItem;
@@ -1438,6 +1538,9 @@
       log(`${item.name}까지 챙겼다. ${cue}`, 'hot');
       showDialogue(run.lastAction, 'hot');
     }
+    maybeQueueBagAlert();
+    maybeQueueLightAlert();
+    maybeQueueMentalAlert();
     render();
   }
 
@@ -1858,9 +1961,11 @@
       el['dock'].classList.toggle('hidden', !!(run.moving || dialogueOpen));
       el['dock'].setAttribute('aria-hidden', dialogueOpen ? 'true' : 'false');
     }
-    const canGrab = !!(run.currentItem && roomFor(run.currentItem) && !run.pendingEvent && !dialogueOpen);
-    el['btn-grab'].classList.toggle('hidden', !(run.currentItem && !run.moving && !run.pendingEvent && !dialogueOpen));
-    el['btn-grab'].disabled = !canGrab;
+    const canTouchGrab = !!(run.currentItem && !run.moving && !run.pendingEvent && !dialogueOpen);
+    const canGrab = !!(canTouchGrab && roomFor(run.currentItem));
+    el['btn-grab'].classList.toggle('hidden', !canTouchGrab);
+    el['btn-grab'].disabled = !canTouchGrab;
+    el['btn-grab'].classList.toggle('danger', !!(canTouchGrab && !canGrab));
     el['btn-grab'].textContent = run.currentItem ? (canGrab ? '줍기' : '가방 가득') : '';
 
     const showDrop = run.chasing && run.bag.length > 0;
