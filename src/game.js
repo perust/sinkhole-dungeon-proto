@@ -20,7 +20,7 @@
     // dangerBase는 150ms 틱마다 오르는 값이다. 1층은 첫 성공을 보장할 만큼 느리게 둔다.
     { n: 1, name: '무너진 도시 시설',   drain: 0.18, dangerBase: 0.18 },
     { n: 2, name: '변질된 연구 구역',   drain: 0.35, dangerBase: 0.35 },
-    { n: 3, name: '시공간이 접힌 구역', drain: 0.55, dangerBase: 0.60 },
+    { n: 3, name: '뒤틀린 지하 구역', drain: 0.55, dangerBase: 0.60 },
   ];
 
   // 회수물 6종 — 층이 깊을수록 무겁고(칸) 비싸다(RP).
@@ -68,28 +68,28 @@
   const FLOOR_OPEN_CUE = [
     '아래에서 찬바람이 올라온다.',
     '벽이 미세하게 떨린다.',
-    '공간이 접힌 듯 어긋나 있다.',
+    '복도 폭이 조금씩 어긋나 있다.',
   ];
 
-  const EXTRACTION_TUTORIAL_CUE = '쓸 만한 것은 위로 가져가야 값이 된다. 살아서 계단을 되짚어야 한다.';
+  const EXTRACTION_TUTORIAL_CUE = '쓸 만한 것은 위로 가져가야 값이 된다. 왔던 길을 표시해 두는 게 좋다.';
 
   const LIGHT_ALERTS = [
-    { key: 'dim70', pct: 70, text: '손전등 원이 얇아진다. 벽 끝이 먼저 흐려진다.' },
-    { key: 'dim45', pct: 45, text: '빛 가장자리가 닳는다. 복도 끝이 한 칸 안쪽으로 접힌다.' },
-    { key: 'dim25', pct: 25, text: '빛이 두 번 끊긴다. 어둠 쪽에서 젖은 숨이 웃음처럼 샌다.' },
-    { key: 'dim10', pct: 10, text: '빛이 바닥에 붙어 떨린다. 보이지 않는 발끝이 가까워진다.' },
+    { key: 'dim70', pct: 70, text: '손전등의 동그란 빛이 끝부터 흐려진다.' },
+    { key: 'dim45', pct: 45, text: '빛 가장자리가 흐려진다. 복도 끝이 제대로 보이지 않는다.' },
+    { key: 'dim25', pct: 25, text: '빛이 두 번 끊긴다. 어둠 속에서 젖은 숨소리가 샌다.' },
+    { key: 'dim10', pct: 10, text: '빛이 바닥에 붙어 떨린다. 어둠 속 발소리가 가까워진다.' },
   ];
 
   const MENTAL_ALERTS = [
-    { key: 'uneasy60', value: 60, text: '숨이 목 아래에서 짧게 끊긴다. 바닥이 조금 기운다.' },
-    { key: 'shaken35', value: 35, text: '생각이 한 박자 늦게 따라온다. 돌아갈 길이 아직 남아 있다.' },
-    { key: 'fraying15', value: 15, text: '손전등을 쥔 손바닥이 남의 것처럼 차다.' },
+    { key: 'uneasy60', value: 60, text: '숨이 차서 호흡이 짧아진다. 바닥이 기울어진 것처럼 느껴진다.' },
+    { key: 'shaken35', value: 35, text: '판단이 느려지고 있다. 생각이 흐려지는 것을 붙잡기 힘들다.' },
+    { key: 'fraying15', value: 15, text: '손전등을 쥔 손이 차갑게 굳는다.' },
   ];
 
   const BAG_ALERTS = {
-    heavy: '가방 끈이 어깨뼈를 누른다. 뛰면 끈이 먼저 비명을 지를 것이다.',
-    full: '가방 속이 더는 내려앉지 않는다. 천이 팽팽하게 떤다.',
-    blocked: '가방 입구가 벌어진 채 버틴다. 더 넣으면 찢어진다.',
+    heavy: '가방 끈이 어깨를 세게 누른다. 뛰면 금방 균형을 잃을 것 같다.',
+    full: '가방이 꽉 찼다. 천이 팽팽하게 당겨져 있다.',
+    blocked: '가방 입구가 벌어져 있다. 더 넣으면 찢어질 것 같다.',
   };
 
   function itemIcon(index) {
@@ -130,17 +130,17 @@
 
   const MONSTER_ARCHETYPES = {
     longFace: {
-      name: '길게 접힌 형체',
+      name: '길게 구부러진 형체',
       tag: '빛에 굳는 것',
       title: '조명 끝에 걸린 얼굴',
       reasons: {
         sight: {
-          known: (dir) => `${dir} 어둠에서 젖은 쇳소리가 멎는다. 조명 끝에 길게 접힌 윤곽이 걸린다.`,
-          unknown: '젖은 쇳소리가 멎는다. 조명 끝에 길게 접힌 윤곽이 걸린다.',
+          known: (dir) => `${dir} 어둠에서 젖은 쇳소리가 멎는다. 조명 끝에 길게 구부러진 윤곽이 보인다.`,
+          unknown: '젖은 쇳소리가 멎는다. 조명 끝에 길게 구부러진 윤곽이 보인다.',
         },
-        cross: '갈림길을 지나던 검은 윤곽이 허리를 접는다. 고개만 이쪽으로 늦게 돌아온다.',
-        ambush: '문 옆 빈틈에서 접힌 몸이 펴진다. 조명 원 가장자리를 손끝이 더듬는다.',
-        critical: '젖은 쇳소리가 등 뒤에서 끊긴다. 빛이 닿지 않는 높이에서 무언가 숙인다.',
+        cross: '갈림길을 지나던 검은 윤곽이 허리를 숙인다. 고개가 이쪽으로 천천히 돌아온다.',
+        ambush: '문 옆 빈틈에서 구부러진 몸이 펴진다. 손끝이 조명 가장자리를 더듬는다.',
+        critical: '젖은 쇳소리가 등 뒤에서 끊긴다. 빛이 닿지 않는 곳에서 놈이 몸을 숙인다.',
       },
       choices: (ctx) => [
         ctx.canLight && eventChoice('shine', '조명을 정면으로 비추며 물러난다', '', ctx.lightStrong ? 'good' : 'danger'),
@@ -151,15 +151,15 @@
     wetFeet: {
       name: '젖은 발소리',
       tag: '소리와 발자국을 좇는 것',
-      title: '거꾸로 찍히는 물자국',
+      title: '젖은 발자국',
       reasons: {
         sight: {
-          known: (dir) => `${dir} 바닥에 물자국이 거꾸로 생긴다. 젖은 박자가 내 발보다 반 박자 늦다.`,
-          unknown: '바닥에 물자국이 거꾸로 생긴다. 젖은 박자가 내 발보다 반 박자 늦다.',
+          known: (dir) => `${dir} 바닥에 젖은 발자국이 따라 찍힌다. 내 발소리보다 반 박자 늦게 들린다.`,
+          unknown: '바닥에 젖은 발자국이 따라 찍힌다. 내 발소리보다 반 박자 늦게 들린다.',
         },
-        cross: '갈림길 바닥에 젖은 자국이 겹겹이 번진다. 보이지 않는 무게가 소리 쪽으로 돈다.',
-        ambush: '바로 옆 물웅덩이에 새 자국이 찍힌다. 숨보다 발소리를 먼저 듣는다.',
-        critical: '등 뒤 물 밟는 소리가 내 걸음과 같은 박자로 붙었다.',
+        cross: '갈림길 바닥에 젖은 자국이 번진다. 보이지 않는 발소리가 이쪽으로 방향을 튼다.',
+        ambush: '바로 옆 물웅덩이에 새 발자국이 찍힌다. 놈은 숨소리보다 발소리에 먼저 반응한다.',
+        critical: '등 뒤에서 물 밟는 소리가 들린다. 내 걸음에 맞춰 따라온다.',
       },
       choices: (ctx) => [
         eventChoice('hold', '발을 멈추고 숨을 죽인다', '', ctx.mentalOk ? 'good' : 'danger'),
@@ -173,11 +173,11 @@
       title: '문틈 안쪽의 손가락',
       reasons: {
         sight: {
-          known: (dir) => `${dir} 문틈이 안쪽에서 벌어진다. 길고 얇은 것들이 문틀을 짚고 기다린다.`,
-          unknown: '문틈이 안쪽에서 벌어진다. 길고 얇은 것들이 문틀을 짚고 기다린다.',
+          known: (dir) => `${dir} 문틈이 서서히 벌어진다. 길고 얇은 손가락들이 문을 열고 있었다.`,
+          unknown: '문틈이 서서히 벌어진다. 길고 얇은 손가락들이 문을 열고 있었다.',
         },
-        cross: '갈림길 옆 문틈에서 마디들이 먼저 나온다. 지나갈 폭이 손바닥만큼 줄어든다.',
-        ambush: '어깨 옆 문틈에서 손목 같은 것이 튀어나와 가방 끈을 움켜쥔다. 너무 가깝다.',
+        cross: '갈림길 옆 문틈에서 손가락 마디들이 먼저 나온다. 지나갈 틈이 손바닥만큼 좁아진다.',
+        ambush: '문 사이 빈틈에서 구부러진 몸이 천천히 펴지며 나온다. 손목 같은 것이 가방 끈을 움켜쥔다.',
         critical: '등 뒤 문틀이 비틀린다. 길고 차가운 마디들이 바로 등에 닿는다.',
       },
       choices: (ctx) => [
@@ -194,7 +194,7 @@
     {
       elapsed: '1시간 후',
       title: '다른 조사자에게 발견됐다.',
-      body: '낯선 조사자가 비상등 하나를 흔들며 당신을 끌어냈다.',
+      body: '낯선 조사자가 비상등 하나를 흔들며 나를 끌어냈다.',
       rpRate: 0.35,
       suspDelta: 4,
       loss: '가방은 찢겼지만 작은 조각 몇 개는 건졌다.',
@@ -218,7 +218,7 @@
     {
       elapsed: '2시간 후',
       title: '암시장 수거꾼에게 끌려 나왔다.',
-      body: '치료비는 말없이 계산됐다. 누가 당신을 맡겼는지는 모른다.',
+      body: '치료비는 말없이 계산됐다. 누가 나를 맡겼는지는 모른다.',
       rpRate: 0.25,
       suspDelta: 7,
       loss: '쓸 만한 회수품 일부가 치료비로 사라졌다.',
@@ -264,7 +264,7 @@
           }
         }
       },
-      after: '손끝의 떨림이 늦게 가라앉는다.',
+      after: '손끝의 떨림이 천천히 멈춘다.',
     },
   ];
 
@@ -1037,11 +1037,11 @@
       ev = {
         type: 'cabinet',
         title: '잠긴 캐비닛',
-        cue: '찌그러진 캐비닛 문이 반쯤 벌어져 있다. 안쪽에서 먼지가 느리게 샌다.',
+        cue: '찌그러진 캐비닛 문이 반쯤 벌어져 있다. 안쪽에 희끄무레한 먼지들이 보인다.',
         choices: [
-          eventChoice('open', '조심히 연다', '경첩을 달랜다', 'good'),
+          eventChoice('open', '조심히 연다', '경첩을 조심한다', 'good'),
           eventChoice('skip', '그냥 지나간다', '손대지 않는다'),
-          eventChoice('noise', '소리를 내서 확인한다', '어둠에 물어본다', 'danger'),
+          eventChoice('noise', '소리를 내서 확인한다', '반응을 확인한다', 'danger'),
         ],
       };
     } else if (node.kind === 'crack' || node.kind === 'corridor' || node.kind === 'hall') {
@@ -1050,18 +1050,18 @@
         title: node.kind === 'crack' ? '젖은 발자국' : '짙은 복도',
         cue: node.kind === 'crack' ? '젖은 자국이 방금 생긴 듯 반짝인다.' : '앞쪽 어둠이 무릎 높이로 낮게 깔려 있다.',
         choices: [
-          eventChoice('hold', '숨을 죽인다', '박자를 지운다', 'good'),
+          eventChoice('hold', '숨을 죽인다', '발소리를 멈춘다', 'good'),
           eventChoice('rush', '빠르게 지난다', '빛을 아낀다', 'danger'),
         ],
       };
-      if (run.bag.length > 0) ev.choices.push(eventChoice('bait', '미끼를 던진다', '무게를 떼어낸다', 'good'));
+      if (run.bag.length > 0) ev.choices.push(eventChoice('bait', '미끼를 던진다', '짐을 하나 버린다', 'good'));
     } else if (node.kind === 'vent') {
       ev = {
         type: 'vent',
         title: '낮은 환풍구',
-        cue: '사람 하나 겨우 지날 낮은 틈이 벌어져 있다. 찬 바람이 팔꿈치를 핥는다.',
+        cue: '사람 하나 겨우 지날 낮은 틈이 벌어져 있다. 찬 바람이 팔꿈치를 스친다.',
         choices: [
-          eventChoice('crawl', '기어서 통과한다', '먼지를 삼킨다', 'good'),
+          eventChoice('crawl', '기어서 통과한다', '낮게 지나간다', 'good'),
           eventChoice('turn', '돌아선다', '틈을 등진다'),
         ],
       };
@@ -1071,10 +1071,10 @@
         title: node.kind === 'storage' ? '비상 배터리' : '벽 비상등',
         cue: node.kind === 'storage'
           ? '선반 아래 배터리가 아직 아주 작게 깜빡인다.'
-          : '깨진 비상등 안쪽에 남은 빛이 파리하게 고여 있다.',
+          : '깨진 비상등 안쪽에 약한 빛이 남아 있다.',
         choices: [
-          eventChoice('charge', '조명에 연결한다', '빛을 빌린다', 'good'),
-          eventChoice('wipe', '렌즈만 닦는다', '앞을 닦아낸다', 'good'),
+          eventChoice('charge', '조명에 연결한다', '배터리를 연결한다', 'good'),
+          eventChoice('wipe', '렌즈만 닦는다', '시야를 확보한다', 'good'),
           eventChoice('skip', '그냥 둔다', '건드리지 않는다'),
         ],
       };
@@ -1106,7 +1106,7 @@
         if (enoughLight) {
           run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 30);
           run.mental = clamp(run.mental + 2, 0, 100);
-          msg = '빛을 정면에 고정했다. 접힌 목이 딱 멎는다. 팔이 눈을 가리는 사이 벽 틈으로 빠져나왔다.';
+          msg = '빛을 정면에 고정했다. 구부러진 목이 멈춘다. 놈이 팔로 눈을 가리는 사이 벽 틈으로 빠져나왔다.';
         } else {
           run.danger = Math.min(100, run.danger + 14);
           msg = '빛이 힘없이 튄다. 검은 팔이 깜빡인 방향으로 먼저 뻗는다.';
@@ -1116,10 +1116,10 @@
         run.light = Math.max(0, run.light - 4);
         if (run.danger < 90 || run.mental >= 18) {
           run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 14);
-          msg = '접히는 박자에 맞춰 몸을 뺐다. 손끝이 벽만 길게 긁고 지나간다.';
+          msg = '놈이 몸을 접는 틈에 옆으로 빠져나왔다. 손끝이 벽만 길게 긁고 지나간다.';
         } else {
           run.danger = Math.min(100, run.danger + 10);
-          msg = '비키려는 순간 발이 엉킨다. 접힌 팔이 퇴로를 가로막는다.';
+          msg = '비키려는 순간 발이 엉킨다. 길게 뻗은 팔이 퇴로를 가로막는다.';
           knockedOut = run.danger >= 100;
         }
       } else {
@@ -1140,11 +1140,11 @@
         if (bait) {
           run.droppedCount += 1;
           run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 36);
-          msg = `${bait.name}${objectParticle(bait.name)} 물웅덩이 건너로 던졌다. 젖은 박자가 새 무게를 따라 꺾인다.`;
+          msg = `${bait.name}${objectParticle(bait.name)} 물웅덩이 건너로 던졌다. 물 밟는 소리가 던진 물건 쪽으로 멀어진다.`;
           if (run.bag.length === 0 && run.danger < 35) run.chasing = false;
         } else {
           run.danger = Math.min(100, run.danger + 10);
-          msg = '던질 게 없다. 빈 가방 끈이 철벅이고, 뒤의 박자가 그 소리에 맞춰 빨라진다.';
+          msg = '던질 게 없다. 빈 가방 끈이 철벅이고, 뒤의 발소리가 그 소리에 맞춰 빨라진다.';
           knockedOut = run.danger >= 100;
         }
       } else if (choiceId === 'hold') {
@@ -1152,16 +1152,16 @@
         run.mental = Math.max(0, run.mental - 10);
         if (steady) {
           run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 24);
-          msg = '발을 바닥에서 떼고 숨까지 멈췄다. 젖은 박자가 사라진 박자를 찾아 맴돈다.';
+          msg = '발을 바닥에서 떼고 숨까지 멈췄다. 내 발소리가 멈추자, 젖은 발자국이 제자리에서 맴돈다.';
         } else {
           run.danger = Math.min(100, run.danger + 12);
-          msg = '다리가 떨려 물이 한 번 울린다. 젖은 박자가 정확히 따라붙는다.';
+          msg = '다리가 떨려 물웅덩이가 한 번 울린다. 젖은 발소리가 정확히 따라붙는다.';
           knockedOut = run.danger >= 100 || run.mental <= 0;
         }
       } else {
         run.light = Math.max(0, run.light - 5);
         run.danger = Math.min(100, run.danger + 22);
-        msg = '뛰자 내 발소리가 길게 남는다. 뒤의 젖은 박자가 더 빠르다.';
+        msg = '뛰자 내 발소리가 길게 울린다. 뒤에서 젖은 발소리가 더 빠르게 따라온다.';
         knockedOut = run.danger >= 100;
       }
     } else if (ev.monsterKind === 'doorHand') {
@@ -1171,7 +1171,7 @@
         const relief = 24 + Math.min(10, (meta.weaponLevel - 1) * 4);
         if (steady) {
           run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - relief);
-          msg = '마디가 접히는 곳을 후려쳤다. 얇은 것들이 물러나고, 문짝과 벽 사이가 벌어진다.';
+          msg = '손가락 마디를 후려쳤다. 얇은 손가락들이 물러나고, 문짝과 벽 사이가 벌어진다.';
         } else {
           run.danger = Math.min(100, run.danger + 12);
           msg = '팔은 휘둘렀지만 힘이 빠졌다. 문틈의 마디들이 가방 끈을 더 세게 감는다.';
@@ -1188,12 +1188,12 @@
         msg = '빛을 들이대자 얇은 마디들이 떤다. 움켜쥔 힘이 잠깐 느슨해진다.';
       } else {
         run.danger = Math.min(100, run.danger + 18);
-        msg = '몸을 빼 달렸지만 너무 가까웠다. 문 안쪽의 것들이 팔꿈치와 가방 끈을 낚아챈다.';
+        msg = '몸을 빼 달렸지만 너무 가까웠다. 문 안쪽의 손가락들이 팔꿈치와 가방 끈을 낚아챈다.';
         knockedOut = run.danger >= 100;
       }
     } else {
       run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 10);
-      msg = '그것이 잠깐 물러난 틈에 빠져나왔다.';
+      msg = '놈이 잠깐 물러난 틈에 빠져나왔다.';
     }
 
     if (knockedOut) run.failContext = msg;
@@ -1224,14 +1224,14 @@
         if (!run.currentItem && !node.itemTaken) {
           node.item = node.item || pickFloorItem(run.floor, node);
           run.currentItem = node.item;
-          msg = `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 안쪽에서 둔하게 굴러 나왔다.`;
+          msg = `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 안쪽에서 굴러 떨어졌다.`;
         } else {
           run.danger = Math.max(0, run.danger - 2);
           msg = '문을 천천히 닫았다. 철판 속의 빈 소리가 가라앉는다.';
         }
       } else if (choiceId === 'noise') {
         run.danger = Math.min(100, run.danger + 7);
-        msg = '금속음이 울렸다. 먼 곳에서 같은 박자가 한 번 늦게 돌아온다.';
+        msg = '금속음이 울렸다. 먼 곳에서 비슷한 소리가 한 번 늦게 돌아온다.';
       } else {
         run.danger = Math.max(0, run.danger - 1);
         msg = '캐비닛은 그대로 둔다. 열린 틈이 등 뒤에서 오래 남는다.';
@@ -1240,28 +1240,28 @@
       if (choiceId === 'hold') {
         run.light = Math.max(0, run.light - 2);
         run.danger = Math.max(0, run.danger - 5);
-        msg = '숨을 죽이자 젖은 자국의 빛이 천천히 죽는다.';
+        msg = '숨을 죽이자 젖은 발자국 소리가 천천히 멀어진다.';
       } else if (choiceId === 'bait') {
         const bait = takeCheapestBagItem();
         if (bait) {
           run.droppedCount += 1;
           run.danger = Math.max(0, run.danger - 12);
           if (run.bag.length === 0) run.chasing = false;
-          msg = `${bait.name}${objectParticle(bait.name)} 미끼로 던졌다. 젖은 소리가 그쪽으로 기어간다.`;
+          msg = `${bait.name}${objectParticle(bait.name)} 미끼로 던졌다. 물 밟는 소리가 그쪽으로 멀어진다.`;
         } else {
           run.danger = Math.min(100, run.danger + 4);
-          msg = '던질 게 없다. 빈손만 어둠 속에서 하얗게 떤다.';
+          msg = '던질 게 없다. 빈손만 어둠 속에서 떨린다.';
         }
       } else {
         run.light = Math.max(0, run.light - 1);
         run.danger = Math.min(100, run.danger + 5);
-        msg = '빠르게 지나쳤다. 뒤에서 물 밟는 소리가 한 박자 늦게 따라온다.';
+        msg = '빠르게 지나쳤다. 뒤에서 물 밟는 소리가 조금 늦게 따라온다.';
       }
     } else if (ev.type === 'vent') {
       if (choiceId === 'crawl') {
         run.light = Math.max(0, run.light - 4);
         run.danger = Math.max(0, run.danger - 3);
-        msg = '낮게 기어 통과했다. 먼지가 혀끝에 달라붙고, 길의 냉기가 손에 잡힌다.';
+        msg = '낮게 기어 통과했다. 먼지가 입안으로 들어오고, 찬 바람이 손등을 스친다.';
       } else {
         run.danger = Math.max(0, run.danger - 1);
         msg = '좁은 틈은 등졌다. 안쪽 바람이 한동안 발목을 따라온다.';
@@ -1272,7 +1272,7 @@
         run.light = clamp(run.light + gain, 0, maxLight());
         run.mental = clamp(run.mental + 3, 0, 100);
         msg = node && node.kind === 'storage'
-          ? '비상 배터리를 물렸다. 조명 원이 천천히 살을 되찾는다.'
+          ? '비상 배터리를 연결했다. 손전등 빛이 조금 밝아진다.'
           : '비상등의 남은 빛을 끌어왔다. 앞쪽 윤곽이 잠깐 선명해진다.';
       } else if (choiceId === 'wipe') {
         run.light = clamp(run.light + 7, 0, maxLight());
@@ -1617,7 +1617,7 @@
   function cleanReturnText(risk) {
     if (risk.path <= 1 && risk.slots === 0) return '입구의 찬 공기를 따라 곧장 지상으로 돌아왔다.';
     if (risk.slots > 0) return '내려온 자국을 더듬어 짐을 끌어올렸다. 지상의 소음이 천천히 돌아온다.';
-    return '표시해 둔 벽 흠집을 거꾸로 밟아 지상으로 올라왔다.';
+    return '표시해 둔 벽의 흠집을 따라 지상으로 올라왔다.';
   }
 
   function makeReturnEvent(risk) {
@@ -1626,14 +1626,14 @@
     if (has('pursuit')) {
       const choices = [
         choice('lights-out', '조명을 끈다', '어둠에 숨는다', 'good'),
-        choice('sprint', '그냥 뛴다', '숨을 태운다', risk.score >= 90 ? 'danger' : ''),
+        choice('sprint', '그냥 뛴다', '숨이 차오른다', risk.score >= 90 ? 'danger' : ''),
       ];
-      if (run.bag.length > 0) choices.splice(1, 0, choice('bait', '미끼를 던진다', '가벼운 무게를 떼낸다', 'good'));
+      if (run.bag.length > 0) choices.splice(1, 0, choice('bait', '미끼를 던진다', '짐을 하나 버린다', 'good'));
       return {
         type: 'return-attempt',
         variant: 'pursuit',
         title: '따라오는 발소리',
-        cue: '올라가는 계단 밑에서 젖은 박자가 내 발과 겹친다.',
+        cue: '올라가는 계단 아래에서 들리는 젖은 발소리가 내 발소리에 겹쳐 들린다.',
         risk,
         choices,
       };
@@ -1641,9 +1641,9 @@
     if (has('light')) {
       const choices = [
         choice('feel-wall', '벽을 짚고 오른다', '금 간 선을 따른다', 'good'),
-        choice('save-light', '빛을 아낀다', '어둠을 남겨 둔다'),
+        choice('save-light', '빛을 아낀다', '조명을 낮춘다'),
       ];
-      if (run.bag.length > 0) choices.push(choice('drop-one', '가방 하나를 버린다', '길의 폭을 되찾는다', 'good'));
+      if (run.bag.length > 0) choices.push(choice('drop-one', '가방 하나를 버린다', '몸을 가볍게 한다', 'good'));
       return {
         type: 'return-attempt',
         variant: 'light',
@@ -1658,7 +1658,7 @@
         type: 'return-attempt',
         variant: 'bag',
         title: '무거운 가방',
-        cue: '가방 끈이 어깨 살을 문다. 내려올 때보다 계단 폭이 좁다.',
+        cue: '가방 끈이 어깨를 파고든다. 내려올 때보다 계단 폭이 좁아 보인다.',
         risk,
         choices: [
           choice('drop-light', '가벼운 것부터 버린다', '작은 무게를 놓는다', 'good'),
@@ -1674,9 +1674,9 @@
       cue: '돌아가는 복도가 한 번 더 늘어난다. 뒤돌아보면 입구 표식이 지워질 것 같다.',
       risk,
       choices: [
-        choice('count-breath', '호흡을 붙잡는다', '박자를 되찾는다', 'good'),
+        choice('count-breath', '호흡을 가다듬는다', '숨을 고른다', 'good'),
         choice('no-look', '뒤돌아보지 않는다', '표식을 믿는다'),
-        choice('run-up', '뛰어 오른다', '접힌 길을 밀친다', risk.score >= 85 ? 'danger' : ''),
+        choice('run-up', '뛰어 오른다', '무너진 길을 오른다', risk.score >= 85 ? 'danger' : ''),
       ],
     };
   }
@@ -1715,22 +1715,22 @@
       if (choiceId === 'lights-out') {
         run.light = Math.max(0, run.light - 4);
         run.danger = Math.max(0, run.danger - 18);
-        msg = '빛을 죽이자 젖은 박자가 한 층 아래에서 헛돈다. 난간을 붙잡고 지상까지 오른다.';
+        msg = '조명을 끄자, 젖은 발소리가 한 층 아래에서 맴돈다. 난간을 붙잡고 지상까지 오른다.';
       } else if (choiceId === 'bait') {
-        msg = `${loseCheapest()} 젖은 박자가 그쪽으로 꺾인 틈에 계단을 빠져나왔다.`;
+        msg = `${loseCheapest()} 젖은 발소리가 그쪽으로 멀어진 틈에 계단을 빠져나왔다.`;
         run.danger = Math.max(0, run.danger - 28);
       } else {
         run.light = Math.max(0, run.light - 10);
         run.mental = Math.max(0, run.mental - 16);
         run.danger = Math.min(100, run.danger + 18);
-        msg = '숨이 터질 때까지 뛰었다. 젖은 박자가 마지막 계단까지 따라붙는다.';
+        msg = '숨이 터질 때까지 뛰었다. 젖은 발소리가 마지막 계단까지 따라붙는다.';
         knockedOut = veryRisky || run.danger >= 100 || run.mental <= 0;
       }
     } else if (ev.variant === 'light') {
       if (choiceId === 'feel-wall') {
         run.mental = Math.max(0, run.mental - 8);
         run.danger = Math.max(0, run.danger - 4);
-        msg = '벽의 금 간 선을 손끝으로 세며 올랐다. 손바닥이 젖었지만 길은 잃지 않았다.';
+        msg = '벽의 금 간 선을 손끝으로 짚으며 올랐다. 손바닥이 젖었지만 길은 잃지 않았다.';
       } else if (choiceId === 'drop-one') {
         msg = `${loseCheapest()} 가방이 가벼워지자 어둠 속 계단 폭이 다시 맞아떨어진다.`;
         run.danger = Math.max(0, run.danger - 10);
@@ -1741,7 +1741,7 @@
       }
     } else if (ev.variant === 'bag') {
       if (choiceId === 'drop-light') {
-        msg = `${loseCheapest()} 끈이 덜 비명을 지른다. 남은 짐을 안고 지상으로 나왔다.`;
+        msg = `${loseCheapest()} 어깨에 걸린 무게가 줄었다. 남은 짐을 안고 지상으로 나왔다.`;
         run.danger = Math.max(0, run.danger - 8);
       } else if (choiceId === 'retie') {
         run.light = Math.max(0, run.light - 5);
@@ -2104,7 +2104,7 @@
         dock.classList.add('event-choices');
         dock.innerHTML = run.pendingEvent.choices.map((choice) => {
           const tone = choice.tone ? ` ${choice.tone}` : '';
-          const sub = choice.sub ? `<span>${choice.sub}</span>` : '';
+          const sub = '';
           return `<button class="btn room-btn event-btn${tone}" data-act="event" data-choice="${choice.id}"><i class="dir-glyph">?</i><span class="choice-text"><b>${choice.label}</b>${sub}</span></button>`;
         }).join('');
         dock.dataset.choiceSig = sig;
