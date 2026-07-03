@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/pixel/player-delver.png" />
   <title>Unlit Halls</title>
-  <link rel="stylesheet" href="styles.css?v=16" />
+  <link rel="stylesheet" href="styles.css?v=17" />
 </head>
 <body>
   <div id="app" class="phone">
@@ -36,6 +36,18 @@
 
       <h1 class="title">Unlit Halls</h1>
       <p class="tagline">지하로 가라앉은 도시<br />무언가 사라지고 있다</p>
+
+      <div id="intro-panel" class="intro-panel" hidden aria-live="polite">
+        <p>살아남기 위해서는 저 곳으로 들어가보는 수밖에 없어</p>
+        <p>꼭 산다고는 할 수 없지만 어쩔 수 없지 …</p>
+      </div>
+
+      <div id="intro-door-fx" class="intro-door-fx" hidden aria-hidden="true">
+        <div class="intro-door">
+          <span class="intro-door-gap"></span>
+          <span class="intro-walker"></span>
+        </div>
+      </div>
 
       <div class="pixel-preview" aria-label="싱크홀 탐사 장비 미리보기">
         <img src="assets/pixel/player-delver.png" alt="탐사자 도트 캐릭터" />
@@ -207,6 +219,6 @@
 
   </div>
 
-  <script src="src/game.js?v=14"></script>
+  <script src="src/game.js?v=15"></script>
 </body>
 </html>

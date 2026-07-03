@@ -295,6 +295,7 @@
   // SAVE_VERSION을 올리면 이전 구조의 저장값은 무시되고 기본값으로 새로 시작한다.
 
   const SAVE_KEY = 'sinkhole-dungeon-save';
+  const INTRO_KEY = 'unlit-halls-intro-seen';
   const SAVE_VERSION = 1;
 
   // 알려진 진실 조각 이름 집합 — 깨진/오래된 truths 값을 거를 때 쓴다.
@@ -398,6 +399,7 @@
 
   let run = null;
   let timer = null;
+  let introMode = 'normal';
 
   // 파생값
   const maxLight   = () => 100 + (meta.lightLevel  - 1) * 35;
@@ -706,7 +708,7 @@
   const el = {};
   const IDS = [
     'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail',
-    'btn-enter', 'btn-reset', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-contract', 'start-goal',
+    'btn-enter', 'btn-reset', 'intro-panel', 'intro-door-fx', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-contract', 'start-goal',
     'btn-meta', 'meta-panel', 'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
@@ -1007,6 +1009,63 @@
     show('screen-dungeon');
     render();
     startTick();
+  }
+
+  function introSeen() {
+    if (!storageOk) return true;
+    try {
+      return window.localStorage.getItem(INTRO_KEY) === '1' || !!window.localStorage.getItem(SAVE_KEY);
+    } catch (e) { return true; }
+  }
+
+  function markIntroSeen() {
+    if (!storageOk) return;
+    try { window.localStorage.setItem(INTRO_KEY, '1'); }
+    catch (e) { /* 인트로 저장 실패는 진행을 막지 않는다. */ }
+  }
+
+  function setupFirstStartIntro() {
+    introMode = introSeen() ? 'normal' : 'start';
+    if (el['intro-panel']) el['intro-panel'].hidden = true;
+    if (el['intro-door-fx']) {
+      el['intro-door-fx'].hidden = true;
+      el['intro-door-fx'].classList.remove('walking');
+    }
+    if (el['btn-enter']) {
+      el['btn-enter'].disabled = false;
+      el['btn-enter'].textContent = introMode === 'start' ? '시작하기' : '들어가기';
+      el['btn-enter'].setAttribute('aria-label', introMode === 'start' ? '첫 시작 인트로 보기' : '던전 들어가기');
+    }
+  }
+
+  function handleStartButton() {
+    if (introMode === 'start') {
+      introMode = 'dialogue';
+      if (el['intro-panel']) el['intro-panel'].hidden = false;
+      el['btn-enter'].textContent = '들어간다';
+      el['btn-enter'].setAttribute('aria-label', '큰 문으로 들어간다');
+      return;
+    }
+    if (introMode === 'dialogue') {
+      introMode = 'walking';
+      markIntroSeen();
+      if (el['btn-enter']) el['btn-enter'].disabled = true;
+      if (el['intro-door-fx']) {
+        el['intro-door-fx'].hidden = false;
+        el['intro-door-fx'].classList.remove('walking');
+        void el['intro-door-fx'].offsetWidth;
+        el['intro-door-fx'].classList.add('walking');
+      }
+      window.setTimeout(() => {
+        if (el['intro-door-fx']) {
+          el['intro-door-fx'].hidden = true;
+          el['intro-door-fx'].classList.remove('walking');
+        }
+        startNewRun();
+      }, 1120);
+      return;
+    }
+    startNewRun();
   }
 
   // 노드 도착: 환경 효과 1회 적용 → 아이템 노출 → 몬스터 이벤트 발동.
@@ -2371,7 +2430,7 @@
   }
 
   function bind() {
-    el['btn-enter'].addEventListener('click', startNewRun);
+    el['btn-enter'].addEventListener('click', handleStartButton);
     if (el['btn-meta']) el['btn-meta'].addEventListener('click', (event) => {
       if (run && run.dialogue) {
         event.preventDefault();
@@ -2411,6 +2470,7 @@
     cacheDom();
     bind();
     loadMeta(); // 저장된 진행도 복원 (없거나 깨졌으면 기본값 유지)
+    setupFirstStartIntro();
     renderStartScreen();
   }
 
