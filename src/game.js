@@ -709,7 +709,7 @@
   const el = {};
   const IDS = [
     'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail',
-    'btn-enter', 'btn-reset', 'start-art', 'intro-panel', 'intro-line', 'enter-fade', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-contract', 'start-goal',
+    'btn-enter', 'btn-reset', 'start-art', 'intro-panel', 'intro-line', 'intro-hint', 'enter-fade', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-contract', 'start-goal',
     'btn-meta', 'meta-panel', 'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
@@ -1025,7 +1025,7 @@
     catch (e) { /* 인트로 저장 실패는 진행을 막지 않는다. */ }
   }
 
-  // 첫 시작 인트로 대사 3줄. 마지막 줄에서 '들어가기' 버튼이 드러난다.
+  // 첫 시작 인트로 대사 3줄. 마지막 줄에서는 별도 버튼 없이 화면 탭으로 던전에 들어간다.
   const INTRO_LINES = [
     '살아남기 위해서는 저 곳으로 들어가보는 수밖에 없어',
     '꼭 산다고는 할 수 없지만 어쩔 수 없지 …',
@@ -1040,24 +1040,28 @@
     el['btn-enter'].setAttribute('aria-label', label);
   }
 
-  // 현재 introLine 대사를 패널에 그린다. 마지막 줄이면 탭 힌트를 숨기고 진입 버튼을 노출한다.
+  // 현재 introLine 대사를 패널에 그린다. 마지막 줄이면 힌트를 '탭해서 들어가기'로 바꾸고 진입 대기(ready) 상태로 둔다.
   function renderIntroLine() {
     if (el['intro-panel']) el['intro-panel'].hidden = false;
     if (el['intro-line']) el['intro-line'].textContent = INTRO_LINES[introLine] || '';
     const last = introLine >= INTRO_LINES.length - 1;
-    if (el['intro-panel']) el['intro-panel'].classList.toggle('done', last);
-    if (last) {
-      introMode = 'ready';
-      setEnterButton('들어가기', '던전 들어가기');
+    if (el['intro-panel']) {
+      el['intro-panel'].classList.toggle('done', last);
+      el['intro-panel'].setAttribute('aria-label', last ? '탭해서 던전에 들어가기' : '탭해서 다음 이야기 보기');
     }
+    if (el['intro-hint']) el['intro-hint'].textContent = last ? '탭해서 들어가기' : '탭해서 계속';
+    if (last) introMode = 'ready';
   }
 
-  // 인트로 패널 탭: line1 → line2 → line3 으로만 진행한다.
-  function advanceIntroLine() {
-    if (introMode !== 'dialogue') return;
-    if (introLine >= INTRO_LINES.length - 1) return;
-    introLine += 1;
-    renderIntroLine();
+  // 인트로 진행: 대사가 남았으면 다음 줄로, 마지막 줄(ready)에서는 던전 진입 연출을 시작한다.
+  function advanceIntro() {
+    if (introMode === 'dialogue') {
+      if (introLine >= INTRO_LINES.length - 1) return;
+      introLine += 1;
+      renderIntroLine();
+      return;
+    }
+    if (introMode === 'ready') beginEntering();
   }
 
   function setupFirstStartIntro() {
@@ -1079,37 +1083,55 @@
     );
   }
 
-  function handleStartButton() {
+  // 던전 진입 연출: 배경이 커지며 화면이 어두워진 뒤 새 런을 시작한다.
+  function beginEntering() {
+    introMode = 'entering';
+    markIntroSeen();
+    if (el['btn-enter']) el['btn-enter'].disabled = true;
+    if (el['start-art']) el['start-art'].classList.add('entering');
+    if (el['enter-fade']) {
+      el['enter-fade'].hidden = false;
+      void el['enter-fade'].offsetWidth;
+      el['enter-fade'].classList.add('active');
+    }
+    window.setTimeout(() => {
+      if (el['start-art']) el['start-art'].classList.remove('entering');
+      if (el['enter-fade']) {
+        el['enter-fade'].hidden = true;
+        el['enter-fade'].classList.remove('active');
+      }
+      startNewRun();
+    }, 1200);
+  }
+
+  function handleStartButton(event) {
     if (introMode === 'start') {
-      // 첫 시작: 버튼을 숨기고 인트로 대사 첫 줄을 연다.
+      // 첫 시작: 버튼을 숨기고 인트로 대사 첫 줄을 연다. 이후 진행은 화면 어디든 탭.
+      // 이 클릭이 화면 탭 핸들러로 버블링돼 곧바로 다음 줄로 넘어가는 이중 진행을 막는다.
+      if (event) event.stopPropagation();
       introMode = 'dialogue';
       introLine = 0;
       if (el['btn-enter']) el['btn-enter'].hidden = true;
       renderIntroLine();
       return;
     }
+    // 재시작·기존 세이브: '들어가기' 버튼을 그대로 눌러 새 런을 시작한다.
     if (introMode === 'ready') {
-      // 마지막 줄 이후 '들어가기': 진입 연출 후 새 런 시작.
-      introMode = 'entering';
-      markIntroSeen();
-      if (el['btn-enter']) el['btn-enter'].disabled = true;
-      if (el['start-art']) el['start-art'].classList.add('entering');
-      if (el['enter-fade']) {
-        el['enter-fade'].hidden = false;
-        void el['enter-fade'].offsetWidth;
-        el['enter-fade'].classList.add('active');
-      }
-      window.setTimeout(() => {
-        if (el['start-art']) el['start-art'].classList.remove('entering');
-        if (el['enter-fade']) {
-          el['enter-fade'].hidden = true;
-          el['enter-fade'].classList.remove('active');
-        }
-        startNewRun();
-      }, 1200);
+      beginEntering();
       return;
     }
     startNewRun();
+  }
+
+  // 시작 화면 어디든 탭하면 인트로를 진행한다(첫 시작 대사·진입 대기 상태에서만).
+  function handleStartScreenTap(event) {
+    if (introMode !== 'dialogue' && introMode !== 'ready') return;
+    if (!el['screen-start'] || !el['screen-start'].classList.contains('active')) return;
+    // 자체 동작이 있는 버튼(기록 초기화·진입 버튼) 탭은 인트로를 진행시키지 않는다.
+    if (event && event.target && event.target.closest &&
+        (event.target.closest('#btn-reset') || event.target.closest('#btn-enter'))) return;
+    if (event) event.preventDefault();
+    advanceIntro();
   }
 
   // 노드 도착: 환경 효과 1회 적용 → 아이템 노출 → 몬스터 이벤트 발동.
@@ -2475,7 +2497,7 @@
 
   function bind() {
     el['btn-enter'].addEventListener('click', handleStartButton);
-    if (el['intro-panel']) el['intro-panel'].addEventListener('click', advanceIntroLine);
+    if (el['screen-start']) el['screen-start'].addEventListener('click', handleStartScreenTap);
     if (el['btn-meta']) el['btn-meta'].addEventListener('click', (event) => {
       if (run && run.dialogue) {
         event.preventDefault();
