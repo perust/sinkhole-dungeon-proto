@@ -438,6 +438,7 @@
       currentNodeId: 0,    // 현재 위치한 노드 id
       holdEvent: null,     // 활성 몬스터 대기 이벤트({type:'cross'|'ambush', node})
       pendingEvent: null,  // 방 도착 후 플레이어가 고르는 짧은 환경 이벤트
+      returnWalk: false,   // 귀환 걷기 연출 진행 중(마지막 탭에서 지상으로 나간다)
       monsterCrisisCount: 0,
       previousNodeId: null,
       failContext: '',
@@ -836,6 +837,12 @@
     const queue = run.dialogueQueue || [];
     run.dialogue = queue.shift() || null;
     run.dialogueQueue = queue;
+    // 귀환 걷기의 마지막 줄을 넘기면 그제서야 지상으로 나간다(순간이동 대신).
+    if (!run.dialogue && run.returnWalk) {
+      run.returnWalk = false;
+      returnToSurface();
+      return;
+    }
     render();
   }
 
@@ -1739,10 +1746,70 @@
     return { score, causes, path, lightPct, slots };
   }
 
-  function cleanReturnText(risk) {
-    if (risk.path <= 1 && risk.slots === 0) return '입구의 찬 공기를 따라 곧장 지상으로 돌아왔다.';
-    if (risk.slots > 0) return '내려온 자국을 더듬어 짐을 끌어올렸다. 지상의 소음이 천천히 돌아온다.';
-    return '표시해 둔 벽의 흠집을 따라 지상으로 올라왔다.';
+  // 귀환 걷기 연출용 대사 풀. 시적 표현 대신 방/표식/계단을 구체적으로 되짚는다.
+  const RETURN_WALK_RETRACE = [
+    '표시해 둔 벽의 흠집을 따라 왔던 방을 되짚는다.',
+    '지나온 갈림길에서 계단 쪽으로 꺾어 붙는다.',
+    '바닥에 남긴 표식을 하나씩 밟으며 걷는다.',
+    '무너진 선반 옆을 지나 입구 방향으로 향한다.',
+    '젖은 복도를 되돌아 나가며 짐을 고쳐 멘다.',
+    '갈라진 계단참을 딛고 한 층을 더 올라선다.',
+  ];
+  const RETURN_WALK_CLIMB = [
+    '표식이 끝나는 지점에서 위쪽 계단의 빛이 보인다.',
+    '난간을 짚고 마지막 계단을 하나씩 오른다.',
+  ];
+  const RETURN_WALK_PURSUIT = [
+    '뒤쪽 어둠에서 젖은 발소리가 한 박자 늦게 따라붙는다.',
+    '따라오던 발소리가 계단참 아래에서 멈췄다가 다시 움직인다.',
+  ];
+  const RETURN_WALK_FINAL = '마지막 계단을 올라 지상의 소음 속으로 나왔다.';
+
+  function returnWalkPursuit(risk, opts) {
+    return !!((opts && opts.pursuit)
+      || (risk && risk.causes && risk.causes.includes('pursuit'))
+      || (run && (run.chasing || run.danger >= 55)));
+  }
+
+  // 방문한 방/표식 수(returnPathLength)에 비례해 걷는 줄 수를 정하되 2~6줄로 묶어 지치지 않게 한다.
+  function buildReturnWalkLines(risk, opts) {
+    opts = opts || {};
+    const pursuit = returnWalkPursuit(risk, opts);
+    const offset = Math.max(0, Math.floor((risk && risk.path) || 0));
+    if (opts.resolved) {
+      // 위험 대응(선택)을 이미 끝낸 뒤라 방 되짚기는 생략하고 마지막 계단만 짧게 오른다(2~3줄).
+      const lines = [];
+      if (pursuit) lines.push(RETURN_WALK_PURSUIT[offset % RETURN_WALK_PURSUIT.length]);
+      lines.push(RETURN_WALK_CLIMB[offset % RETURN_WALK_CLIMB.length]);
+      lines.push(RETURN_WALK_FINAL);
+      return lines;
+    }
+    // 안전 귀환: 왔던 방을 되짚는 줄 + 마지막 도착 줄.
+    const path = (risk && risk.path) || returnPathLength();
+    const n = clamp(2 + Math.round(path / 3), 2, 6);
+    const lines = [];
+    for (let i = 0; i < n - 1; i++) lines.push(RETURN_WALK_RETRACE[(offset + i) % RETURN_WALK_RETRACE.length]);
+    // 추격 중이면 도착 직전 한 줄을 발소리 비트로 바꿔 긴장을 유지한다.
+    if (pursuit && lines.length) lines[lines.length - 1] = RETURN_WALK_PURSUIT[offset % RETURN_WALK_PURSUIT.length];
+    lines.push(RETURN_WALK_FINAL);
+    return lines;
+  }
+
+  // 걷기 시퀀스를 대사 큐로 쌓는다. 큐가 비는 마지막 탭에서 dismissDialogue가 returnToSurface를 호출한다.
+  function startReturnWalk(risk, opts) {
+    opts = opts || {};
+    clearDialogue();
+    run.pendingEvent = null;
+    run.returnWalk = true;
+    if (opts.lead) showDialogue(opts.lead, opts.leadTone || '');
+    else log('왔던 길을 되짚어 지상으로 향한다.', 'win');
+    const walk = buildReturnWalkLines(risk, opts);
+    const pursuitSet = new Set(RETURN_WALK_PURSUIT);
+    walk.forEach((text) => {
+      const tone = pursuitSet.has(text) ? 'hot' : (text === RETURN_WALK_FINAL ? 'win' : '');
+      showDialogue(text, tone);
+    });
+    render();
   }
 
   function makeReturnEvent(risk) {
@@ -1811,9 +1878,8 @@
     clearDialogue();
     const risk = returnRisk();
     if (risk.score < 42) {
-      run.lastAction = cleanReturnText(risk);
-      log(run.lastAction, 'win');
-      returnToSurface();
+      // 안전 귀환도 즉시 순간이동하지 않고, 던전 화면에서 짧은 걷기 시퀀스를 탭으로 넘긴다.
+      startReturnWalk(risk);
       return;
     }
     const ev = makeReturnEvent(risk);
@@ -1840,9 +1906,9 @@
       if (choiceId === 'lights-out') {
         run.light = Math.max(0, run.light - 4);
         run.danger = Math.max(0, run.danger - 18);
-        msg = '조명을 끄자, 젖은 발소리가 한 층 아래에서 맴돈다. 난간을 붙잡고 지상까지 오른다.';
+        msg = '조명을 끄자, 젖은 발소리가 한 층 아래에서 맴돈다. 난간을 붙잡고 위쪽 계단으로 붙는다.';
       } else if (choiceId === 'bait') {
-        msg = `${loseCheapest()} 젖은 발소리가 그쪽으로 멀어진 틈에 계단을 빠져나왔다.`;
+        msg = `${loseCheapest()} 젖은 발소리가 그쪽으로 멀어진 틈에 계단으로 붙는다.`;
         run.danger = Math.max(0, run.danger - 28);
       } else {
         run.light = Math.max(0, run.light - 10);
@@ -1855,27 +1921,27 @@
       if (choiceId === 'feel-wall') {
         run.mental = Math.max(0, run.mental - 8);
         run.danger = Math.max(0, run.danger - 4);
-        msg = '벽의 금 간 선을 손끝으로 짚으며 올랐다. 손바닥이 젖었지만 길은 잃지 않았다.';
+        msg = '벽의 금 간 선을 손끝으로 짚으며 오른다. 손바닥이 젖었지만 길은 잃지 않았다.';
       } else if (choiceId === 'drop-one') {
         msg = `${loseCheapest()} 가방이 가벼워지자 어둠 속 계단 폭이 다시 맞아떨어진다.`;
         run.danger = Math.max(0, run.danger - 10);
       } else {
         run.danger = Math.min(100, run.danger + 12);
-        msg = '빛을 아끼자 계단참의 윤곽이 지워진다. 젖은 난간만 따라 겨우 올라왔다.';
+        msg = '빛을 아끼자 계단참의 윤곽이 지워진다. 젖은 난간만 따라 겨우 짚어 나간다.';
         knockedOut = veryRisky && run.mental < 18;
       }
     } else if (ev.variant === 'bag') {
       if (choiceId === 'drop-light') {
-        msg = `${loseCheapest()} 어깨에 걸린 무게가 줄었다. 남은 짐을 안고 지상으로 나왔다.`;
+        msg = `${loseCheapest()} 어깨에 걸린 무게가 줄었다. 남은 짐을 안고 계단으로 붙는다.`;
         run.danger = Math.max(0, run.danger - 8);
       } else if (choiceId === 'retie') {
         run.light = Math.max(0, run.light - 5);
         run.mental = clamp(run.mental + 3, 0, 100);
-        msg = '끈을 짧게 묶자 무게가 등 가운데로 붙는다. 느리지만 흔들리지 않고 올라왔다.';
+        msg = '끈을 짧게 묶자 무게가 등 가운데로 붙는다. 느리지만 흔들리지 않고 오른다.';
       } else {
         run.mental = Math.max(0, run.mental - 14);
         run.danger = Math.min(100, run.danger + 10);
-        msg = '가방이 계단 모서리에 계속 걸린다. 마지막에는 거의 끌고 올라왔다.';
+        msg = '가방이 계단 모서리에 계속 걸린다. 마지막에는 거의 끌다시피 오른다.';
         knockedOut = veryRisky && (usedSlots() >= bagCap() || run.mental <= 0);
       }
     } else {
@@ -1886,7 +1952,7 @@
       } else if (choiceId === 'no-look') {
         run.mental = Math.max(0, run.mental - 6);
         run.danger = Math.max(0, run.danger - 3);
-        msg = '뒤를 보지 않았다. 사라지는 표식 대신 발밑 경사만 믿고 올랐다.';
+        msg = '뒤를 보지 않았다. 사라지는 표식 대신 발밑 경사만 믿고 오른다.';
       } else {
         run.mental = Math.max(0, run.mental - 18);
         run.danger = Math.min(100, run.danger + 12);
@@ -1908,8 +1974,9 @@
     run.lastAction = msg;
     const returnTone = /발소리|사라진다|끊어질/.test(msg) ? 'hot' : 'win';
     log(msg, returnTone);
-    showDialogue(msg, returnTone);
-    returnToSurface();
+    // 위험 대응을 끝냈어도 곧장 지상으로 순간이동하지 않는다. 결과 문장을 먼저 보여준 뒤,
+    // 마지막 계단을 오르는 짧은 걷기 시퀀스를 재생하고 마지막 탭에서 지상으로 나간다.
+    startReturnWalk(ev.risk, { lead: msg, leadTone: returnTone, pursuit: ev.variant === 'pursuit', resolved: true });
   }
 
   function returnToSurface() {
@@ -2076,6 +2143,7 @@
       el['stage'].classList.toggle('moving', !!run.moving);
       el['stage'].classList.toggle('has-loot', !!run.currentItem);
       el['stage'].classList.toggle('monster-encounter', monsterCrisisOpen);
+      el['stage'].classList.toggle('returning', !!run.returnWalk);
     }
     renderStage();
     renderDepthRail();
@@ -2506,9 +2574,9 @@
       toggleMetaPanel();
     });
     if (el['screen-dungeon']) el['screen-dungeon'].addEventListener('click', handleDungeonDialogueTap);
-    el['btn-grab'].addEventListener('click', grab);
-    el['btn-drop'].addEventListener('click', dropAndFlee);
-    el['btn-return'].addEventListener('click', attemptReturnToSurface);
+    el['btn-grab'].addEventListener('click', (event) => { event.stopPropagation(); grab(); });
+    el['btn-drop'].addEventListener('click', (event) => { event.stopPropagation(); dropAndFlee(); });
+    el['btn-return'].addEventListener('click', (event) => { event.stopPropagation(); attemptReturnToSurface(); });
     if (el['dialogue-card']) el['dialogue-card'].addEventListener('click', handleDialogueCardClick);
     el['buy-committee'].addEventListener('click', () => chooseBuyer('committee'));
     el['buy-black'].addEventListener('click', () => chooseBuyer('black'));
