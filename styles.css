@@ -158,70 +158,74 @@ body {
 }
 .tagline { margin: 0; color: var(--accent); font-weight: 700; letter-spacing: .5px; }
 .intro-panel {
+  display: block;
   width: min(100%, 338px);
   margin-top: 12px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border: 1px solid rgba(87,224,200,.26);
   border-radius: 16px;
-  background: linear-gradient(180deg, rgba(12,16,32,.88), rgba(5,7,12,.9));
+  background: linear-gradient(180deg, rgba(12,16,32,.9), rgba(5,7,12,.92));
   box-shadow: inset 0 1px rgba(255,255,255,.05), 0 10px 24px rgba(0,0,0,.22);
   color: #d9e1ef;
+  font: inherit;
   font-size: 14px;
   line-height: 1.48;
   letter-spacing: -.2px;
+  text-align: center;
+  cursor: pointer;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .35s ease, transform .06s ease;
 }
 .intro-panel[hidden] { display: none; }
-.intro-panel p { margin: 0; }
-.intro-panel p + p { margin-top: 7px; color: #aeb8cc; }
-.intro-door-fx {
+.intro-panel:active { transform: translateY(1px) scale(.995); }
+.intro-panel.fading { opacity: .3; }
+.intro-line { display: block; min-height: 1.48em; }
+.intro-hint {
+  display: block;
+  margin-top: 9px;
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  opacity: .5;
+  animation: introHintPulse 1.8s ease-in-out infinite;
+}
+.intro-panel.done .intro-hint { display: none; }
+@keyframes introHintPulse { 0%,100% { opacity: .3; } 50% { opacity: .8; } }
+
+/* 진입 연출 — 사람이 터널로 걸어 들어가듯 배경이 위아래로 미세하게 흔들리며 커진다 */
+.start-art.entering { z-index: 2; }
+.start-art.entering .title-splash-img {
+  transform-origin: 50% 44%;
+  animation: walkIntoTunnel 1.2s cubic-bezier(.42,0,.4,1) forwards;
+}
+@keyframes walkIntoTunnel {
+  0%   { transform: scale(1)    translateY(0);     }
+  16%  { transform: scale(1.08) translateY(-1.4%); }
+  32%  { transform: scale(1.16) translateY(1.1%);  }
+  48%  { transform: scale(1.28) translateY(-1.1%); }
+  64%  { transform: scale(1.42) translateY(.9%);   }
+  82%  { transform: scale(1.58) translateY(-.7%);  }
+  100% { transform: scale(1.82) translateY(0);     }
+}
+
+/* 화면 전체가 서서히 어두워지며 터널 안으로 빨려 들어간다 */
+.enter-fade {
   position: absolute;
   inset: 0;
-  z-index: 8;
-  display: grid;
-  place-items: center;
-  background: radial-gradient(circle at 50% 42%, rgba(87,224,200,.12), transparent 28%), rgba(5,7,12,.78);
-  pointer-events: none;
+  z-index: 30;
+  background: radial-gradient(circle at 50% 44%, rgba(0,0,0,.12), rgba(2,3,6,.97) 78%);
   opacity: 0;
+  pointer-events: none;
 }
-.intro-door-fx[hidden] { display: none; }
-.intro-door-fx.walking { animation: introFadeIn 1.15s ease forwards; }
-.intro-door {
-  position: relative;
-  width: min(64vw, 230px);
-  height: min(54dvh, 430px);
-  max-height: 430px;
-  border: 2px solid rgba(87,224,200,.32);
-  border-radius: 18px 18px 8px 8px;
-  background:
-    linear-gradient(90deg, rgba(0,0,0,.5), transparent 18% 82%, rgba(0,0,0,.55)),
-    linear-gradient(180deg, #12182a, #05070c 72%);
-  box-shadow: 0 0 0 999px rgba(0,0,0,.24), 0 0 42px rgba(87,224,200,.15), inset 0 0 44px rgba(0,0,0,.72);
-  overflow: hidden;
-}
-.intro-door-gap {
-  position: absolute;
-  left: 50%; top: 0; bottom: 0;
-  width: 9%;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, rgba(87,224,200,.38), rgba(87,224,200,.04) 42%, #020305 86%);
-  box-shadow: 0 0 26px rgba(87,224,200,.44);
-}
-.intro-walker {
-  position: absolute;
-  left: 50%; bottom: 8%;
-  width: 42px; height: 42px;
-  transform: translateX(-50%);
-  border-radius: 10px;
-  background: var(--pixel-player) center/cover no-repeat;
-  image-rendering: pixelated;
-  filter: drop-shadow(0 0 12px rgba(255,209,102,.22));
-}
-.intro-door-fx.walking .intro-walker { animation: walkIntoDoor 1.05s ease-in forwards; }
-@keyframes introFadeIn { 0% { opacity: 0; } 18%, 82% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes walkIntoDoor {
-  0% { bottom: 8%; transform: translateX(-50%) scale(1); opacity: 1; }
-  72% { opacity: 1; }
-  100% { bottom: 58%; transform: translateX(-50%) scale(.22); opacity: 0; }
+.enter-fade[hidden] { display: none; }
+.enter-fade.active { animation: enterFadeIn 1.2s ease-in forwards; }
+@keyframes enterFadeIn { 0% { opacity: 0; } 55% { opacity: .25; } 100% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .start-art.entering .title-splash-img { animation: none; transform: scale(1.2); }
+  .enter-fade.active { animation-duration: .5s; }
+  .intro-hint { animation: none; }
 }
 .prologue {
   margin: 11px 0 0;
@@ -604,6 +608,7 @@ body {
   pointer-events: none;
 }
 .pixel-splash > :not(.title-splash-img) { z-index: 1; }
+.tunnel-img { object-position: center 44%; }
 
 .pixel-preview {
   display: grid;
@@ -944,7 +949,7 @@ html, body { touch-action: manipulation; }
   padding: max(12px, env(safe-area-inset-top)) 16px max(18px, env(safe-area-inset-bottom));
 }
 #screen-start .start-art {
-  height: clamp(188px, 34dvh, 300px);
+  height: clamp(210px, 40dvh, 340px);
   margin-top: 8px;
 }
 #screen-start .title { margin-top: 12px; font-size: clamp(27px, 7.6vw, 34px); }

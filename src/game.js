@@ -400,6 +400,7 @@
   let run = null;
   let timer = null;
   let introMode = 'normal';
+  let introLine = 0;
 
   // 파생값
   const maxLight   = () => 100 + (meta.lightLevel  - 1) * 35;
@@ -708,7 +709,7 @@
   const el = {};
   const IDS = [
     'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail',
-    'btn-enter', 'btn-reset', 'intro-panel', 'intro-door-fx', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-contract', 'start-goal',
+    'btn-enter', 'btn-reset', 'start-art', 'intro-panel', 'intro-line', 'enter-fade', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-contract', 'start-goal',
     'btn-meta', 'meta-panel', 'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
@@ -1024,45 +1025,88 @@
     catch (e) { /* 인트로 저장 실패는 진행을 막지 않는다. */ }
   }
 
+  // 첫 시작 인트로 대사 3줄. 마지막 줄에서 '들어가기' 버튼이 드러난다.
+  const INTRO_LINES = [
+    '살아남기 위해서는 저 곳으로 들어가보는 수밖에 없어',
+    '꼭 산다고는 할 수 없지만 어쩔 수 없지 …',
+    '들어가보자 ..',
+  ];
+
+  function setEnterButton(text, label) {
+    if (!el['btn-enter']) return;
+    el['btn-enter'].hidden = false;
+    el['btn-enter'].disabled = false;
+    el['btn-enter'].textContent = text;
+    el['btn-enter'].setAttribute('aria-label', label);
+  }
+
+  // 현재 introLine 대사를 패널에 그린다. 마지막 줄이면 탭 힌트를 숨기고 진입 버튼을 노출한다.
+  function renderIntroLine() {
+    if (el['intro-panel']) el['intro-panel'].hidden = false;
+    if (el['intro-line']) el['intro-line'].textContent = INTRO_LINES[introLine] || '';
+    const last = introLine >= INTRO_LINES.length - 1;
+    if (el['intro-panel']) el['intro-panel'].classList.toggle('done', last);
+    if (last) {
+      introMode = 'ready';
+      setEnterButton('들어가기', '던전 들어가기');
+    }
+  }
+
+  // 인트로 패널 탭: line1 → line2 → line3 으로만 진행한다.
+  function advanceIntroLine() {
+    if (introMode !== 'dialogue') return;
+    if (introLine >= INTRO_LINES.length - 1) return;
+    introLine += 1;
+    renderIntroLine();
+  }
+
   function setupFirstStartIntro() {
     introMode = introSeen() ? 'normal' : 'start';
-    if (el['intro-panel']) el['intro-panel'].hidden = true;
-    if (el['intro-door-fx']) {
-      el['intro-door-fx'].hidden = true;
-      el['intro-door-fx'].classList.remove('walking');
+    introLine = 0;
+    if (el['intro-panel']) {
+      el['intro-panel'].hidden = true;
+      el['intro-panel'].classList.remove('done');
     }
-    if (el['btn-enter']) {
-      el['btn-enter'].disabled = false;
-      el['btn-enter'].textContent = introMode === 'start' ? '시작하기' : '들어가기';
-      el['btn-enter'].setAttribute('aria-label', introMode === 'start' ? '첫 시작 인트로 보기' : '던전 들어가기');
+    if (el['intro-line']) el['intro-line'].textContent = '';
+    if (el['enter-fade']) {
+      el['enter-fade'].hidden = true;
+      el['enter-fade'].classList.remove('active');
     }
+    if (el['start-art']) el['start-art'].classList.remove('entering');
+    setEnterButton(
+      introMode === 'start' ? '시작하기' : '들어가기',
+      introMode === 'start' ? '첫 시작 인트로 보기' : '던전 들어가기',
+    );
   }
 
   function handleStartButton() {
     if (introMode === 'start') {
+      // 첫 시작: 버튼을 숨기고 인트로 대사 첫 줄을 연다.
       introMode = 'dialogue';
-      if (el['intro-panel']) el['intro-panel'].hidden = false;
-      el['btn-enter'].textContent = '들어간다';
-      el['btn-enter'].setAttribute('aria-label', '큰 문으로 들어간다');
+      introLine = 0;
+      if (el['btn-enter']) el['btn-enter'].hidden = true;
+      renderIntroLine();
       return;
     }
-    if (introMode === 'dialogue') {
-      introMode = 'walking';
+    if (introMode === 'ready') {
+      // 마지막 줄 이후 '들어가기': 진입 연출 후 새 런 시작.
+      introMode = 'entering';
       markIntroSeen();
       if (el['btn-enter']) el['btn-enter'].disabled = true;
-      if (el['intro-door-fx']) {
-        el['intro-door-fx'].hidden = false;
-        el['intro-door-fx'].classList.remove('walking');
-        void el['intro-door-fx'].offsetWidth;
-        el['intro-door-fx'].classList.add('walking');
+      if (el['start-art']) el['start-art'].classList.add('entering');
+      if (el['enter-fade']) {
+        el['enter-fade'].hidden = false;
+        void el['enter-fade'].offsetWidth;
+        el['enter-fade'].classList.add('active');
       }
       window.setTimeout(() => {
-        if (el['intro-door-fx']) {
-          el['intro-door-fx'].hidden = true;
-          el['intro-door-fx'].classList.remove('walking');
+        if (el['start-art']) el['start-art'].classList.remove('entering');
+        if (el['enter-fade']) {
+          el['enter-fade'].hidden = true;
+          el['enter-fade'].classList.remove('active');
         }
         startNewRun();
-      }, 1120);
+      }, 1200);
       return;
     }
     startNewRun();
@@ -2431,6 +2475,7 @@
 
   function bind() {
     el['btn-enter'].addEventListener('click', handleStartButton);
+    if (el['intro-panel']) el['intro-panel'].addEventListener('click', advanceIntroLine);
     if (el['btn-meta']) el['btn-meta'].addEventListener('click', (event) => {
       if (run && run.dialogue) {
         event.preventDefault();
