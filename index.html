@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/pixel/player-delver.png" />
   <title>Unlit Halls</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=18" />
 </head>
 <body>
   <div id="app" class="phone">
@@ -19,35 +19,19 @@
     <!-- ===================== 시작 화면 ===================== -->
     <section id="screen-start" class="screen active">
       <div class="app-chip">1F</div>
-      <div class="start-art pixel-splash" aria-hidden="true">
-        <img src="assets/pixel/title-splash.png" alt="" class="title-splash-img" />
-        <div class="skyline"></div>
-        <div class="sinkhole">
-          <div class="ring r1"></div>
-          <div class="ring r2"></div>
-          <div class="ring r3"></div>
-          <div class="hole-glow"></div>
-        </div>
-        <div class="permit-desk">
-          <span class="permit-stamp">던전관리위원회 · 허가소</span>
-          <div class="queue"><i></i><i></i><i></i><i></i></div>
-        </div>
+      <div id="start-art" class="start-art pixel-splash tunnel-art" aria-hidden="true">
+        <img src="assets/pixel/tunnel-entrance.png?v=1" alt="" class="title-splash-img tunnel-img" />
       </div>
 
       <h1 class="title">Unlit Halls</h1>
       <p class="tagline">지하로 가라앉은 도시<br />무언가 사라지고 있다</p>
 
-      <div id="intro-panel" class="intro-panel" hidden aria-live="polite">
-        <p>살아남기 위해서는 저 곳으로 들어가보는 수밖에 없어</p>
-        <p>꼭 산다고는 할 수 없지만 어쩔 수 없지 …</p>
-      </div>
+      <button id="intro-panel" class="intro-panel" type="button" hidden aria-live="polite" aria-label="탭해서 다음 이야기 보기">
+        <span id="intro-line" class="intro-line"></span>
+        <span class="intro-hint">탭해서 계속</span>
+      </button>
 
-      <div id="intro-door-fx" class="intro-door-fx" hidden aria-hidden="true">
-        <div class="intro-door">
-          <span class="intro-door-gap"></span>
-          <span class="intro-walker"></span>
-        </div>
-      </div>
+      <div id="enter-fade" class="enter-fade" hidden aria-hidden="true"></div>
 
       <div class="pixel-preview" aria-label="싱크홀 탐사 장비 미리보기">
         <img src="assets/pixel/player-delver.png" alt="탐사자 도트 캐릭터" />
@@ -219,6 +203,6 @@
 
   </div>
 
-  <script src="src/game.js?v=15"></script>
+  <script src="src/game.js?v=16"></script>
 </body>
 </html>
