@@ -1378,6 +1378,15 @@ html, body { touch-action: manipulation; }
 }
 @keyframes moveWipe { 0% { opacity: 0; } 100% { opacity: 1; } }
 
+/* 귀환 걷기: 순간이동 대신 왔던 길을 되짚어 오르는 동안 시야가 천천히 걸음처럼 흔들린다. */
+.stage.returning .fp-view { animation: returnBob 1.4s ease-in-out infinite; will-change: transform; }
+@keyframes returnBob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+.stage.returning .stage-floor { animation: returnFloor 1.4s ease-in-out infinite; }
+@keyframes returnFloor { 0%, 100% { opacity: .28; } 50% { opacity: .42; } }
+
 /* 하단 dock: 동적 갈림길 + 보조 행동을 한 패널에 모은다 */
 #dock {
   position: absolute;
