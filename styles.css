@@ -190,7 +190,8 @@ body {
   opacity: .5;
   animation: introHintPulse 1.8s ease-in-out infinite;
 }
-.intro-panel.done .intro-hint { display: none; }
+.intro-panel.done { border-color: rgba(87,224,200,.5); }
+.intro-panel.done .intro-hint { opacity: .85; color: var(--accent); }
 @keyframes introHintPulse { 0%,100% { opacity: .3; } 50% { opacity: .8; } }
 
 /* 진입 연출 — 사람이 터널로 걸어 들어가듯 배경이 위아래로 미세하게 흔들리며 커진다 */
