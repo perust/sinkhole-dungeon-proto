@@ -902,6 +902,22 @@ body {
 .room-btn.good { border-color: rgba(90,209,127,.35); background: rgba(90,209,127,.06); }
 .room-btn.good b { color: var(--good); }
 
+/* 기척이 가까운 출구 — 몬스터를 드러내지 않고 경로 판단만 돕는 절제된 경고 표시. */
+.room-btn.toward-threat {
+  border-color: rgba(255,82,110,.4);
+  background: rgba(255,82,110,.05);
+  box-shadow: inset 0 0 0 1px rgba(255,82,110,.18), 0 0 10px rgba(255,82,110,.12);
+  animation: threat-pulse 2.6s ease-in-out infinite;
+}
+.room-btn.toward-threat .dir-glyph { color: rgba(255,82,110,.72); }
+@keyframes threat-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,82,110,.14), 0 0 8px rgba(255,82,110,.08); }
+  50%      { box-shadow: inset 0 0 0 1px rgba(255,82,110,.26), 0 0 13px rgba(255,82,110,.2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .room-btn.toward-threat { animation: none; }
+}
+
 /* ===================== Mobile app shell pass ===================== */
 html, body { touch-action: manipulation; }
 .phone {

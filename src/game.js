@@ -71,7 +71,7 @@
     '복도 폭이 조금씩 어긋나 있다.',
   ];
 
-  const EXTRACTION_TUTORIAL_CUE = '쓸 만한게 있으면 챙겨놓자. 왔던 길은 표시해둬야겠지.';
+  const EXTRACTION_TUTORIAL_CUE = '쓸 만한 게 있으면 챙겨놓자. 왔던 길은 표시해둬야겠지.';
 
   const LIGHT_ALERTS = [
     { key: 'dim70', pct: 70, text: '손전등의 동그란 빛이 끝부터 흐려진다.' },
@@ -749,6 +749,18 @@
     return d <= 1
       ? `${from}에서 젖은 숨소리가 가까이 붙었다.`
       : `${from}에서 물 밟는 소리가 가까워진다.`;
+  }
+
+  // 깨어 가까이(거리 ≤2) 붙은 추격자 쪽으로 향하는 현재 노드의 출구 이웃 id.
+  // 이동 패드에서 그 출구만 조용히 표시하기 위한 값이며, 정확한 위치는 드러내지 않는다.
+  // 조건이 안 맞거나 다음 걸음이 실제 출구가 아니면 null.
+  function stalkerTowardExit() {
+    const s = stalker();
+    if (!s || !run || !run.floorMap || !stalkerAwake()) return null;
+    if (stalkerDistance() > 2) return null;
+    const step = pathNextStep(run.currentNodeId, s.nodeId);
+    if (step == null) return null;
+    return currentNode().exits.includes(step) ? step : null;
   }
 
   // 미끼를 던져 추격자의 관심을 인접한 칸으로 돌린다(가능할 때).
@@ -2636,8 +2648,9 @@
     }
 
     const s = stalker();
+    const towardId = stalkerTowardExit(); // 깨어 가까이 붙은 추격자 쪽 출구(없으면 null) — 서 있는 동안에도 갱신되게 서명에 포함한다.
     const waitSig = `wait:${stalkerAwake() ? 1 : 0}:${s ? s.quietSteps : 0}`;
-    const moveSig = `move:${run.currentNodeId}:${waitSig}:${node.exits.join(',')}`;
+    const moveSig = `move:${run.currentNodeId}:${waitSig}:${node.exits.join(',')}:t${towardId == null ? '-' : towardId}`;
     if (dock.dataset.choiceSig === moveSig) {
       if (el['choice-cue']) el['choice-cue'].textContent = cue;
       return;
@@ -2661,7 +2674,10 @@
       const dir = directionForExit(node, t, index, usedDirs);
       const copy = movementChoiceCopy(dir, t);
       cues.push(`${dir.glyph} ${copy.label}`);
-      exitsByDir.set(dir.key, `<button class="btn room-btn ${dir.cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${copy.aria}"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${copy.label}</b></span></button>`);
+      const toward = towardId != null && nid === towardId; // 최대 한 개 출구만 표시된다(다음 걸음은 유일하므로).
+      const cls = toward ? `${dir.cls} toward-threat` : dir.cls;
+      const aria = toward ? `${copy.aria} · 기척이 가까운 쪽` : copy.aria;
+      exitsByDir.set(dir.key, `<button class="btn room-btn ${cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${aria}"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${copy.label}</b></span></button>`);
     });
 
     const out = DIR_SLOTS.map((dir) => exitsByDir.get(dir.key) || `<div class="room-pad-empty ${dir.cls}" aria-hidden="true"><i class="dir-glyph">${dir.glyph}</i></div>`);
