@@ -704,6 +704,10 @@
     s.quietSteps = 0;
     run.chasing = true;
     if (loud) moveStalkerOneStep({ silent: true });
+    // 새로 들린 소음은 이동 주기를 처음부터 다시 센다. 잠든 동안 쌓인 stepCounter를
+    // 그대로 두면 다음 틱에 곧바로 한 칸 움직여 조심히 주운 뒤에도 즉시 조우가 열린다.
+    // 큰 소리의 즉시 한 걸음 뒤에도 리셋해 그다음 예약 이동이 바로 오지 않게 한다.
+    s.stepCounter = 0;
   }
 
   // 위기 탈출 성공 뒤: 추격자를 플레이어에게서 minDist 엣지 이상 떨어뜨린다.
