@@ -272,7 +272,7 @@
   const UPGRADES = {
     bag:    { label: '가방',  cost: lv => 8  * lv },
     light:  { label: '조명',  cost: lv => 5  * lv },
-    weapon: { label: '무기',  cost: lv => 10 * lv },
+    weapon: { label: '장비',  cost: lv => 10 * lv },
   };
 
   /* ---------------- 상태 ---------------- */
@@ -1179,7 +1179,7 @@
     if (node.kind === 'crack' || node.style === 'danger') {
       threat = '바로 옆 어둠에서 물 밟는 소리가 얕게 인다. 집으려면 소리를 죽여야 한다.';
     } else if (node.kind === 'hall' || node.kind === 'corridor') {
-      threat = '앞쪽 어둠이 낮게 깔렸다. 손을 뻗는 순간의 소리가 마음에 걸린다.';
+      threat = '어둠이 낮게 깔렸다. 손을 뻗는 순간의 소리가 마음에 걸린다.';
     } else {
       threat = '주변은 조용하지만, 물건을 드는 순간의 소리가 신경 쓰인다.';
     }
@@ -1219,7 +1219,7 @@
         title: node.kind === 'crack' ? '젖은 발자국' : '다가오는 발소리',
         cue: node.kind === 'crack'
           ? '방금 찍힌 듯한 젖은 발자국이 앞쪽으로 이어진다. 그 끝 어둠에서 물 밟는 소리가 얕게 다가온다.'
-          : '앞쪽 어둠이 낮게 깔렸다. 그 안에서 느릿한 발소리가 이쪽으로 다가온다. 아직 들키진 않았다.',
+          : '어둠이 낮게 깔렸다. 그 안에서 느릿한 발소리가 이쪽으로 다가온다. 아직 들키진 않았다.',
         choices: [
           eventChoice('hold', '숨을 죽인다', '발소리를 멈춘다', 'good'),
           eventChoice('rush', '빠르게 지난다', '빛을 아낀다', 'danger'),
@@ -2151,7 +2151,7 @@
     meta[lvKey] += 1;
     run.bought = true;
     saveMeta(); // 강화 구매 후 자동 저장
-    log(`${UPGRADES[type].label}을 손봤다. 다음엔 더 버틴다.`, 'win');
+    log(`${UPGRADES[type].label}${objectParticle(UPGRADES[type].label)} 손봤다. 다음엔 더 버틴다.`, 'win');
     renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
   }
 
@@ -2160,7 +2160,7 @@
     if (run.danger >= 85) return { key: 'critical', label: '숨소리', copy: '' };
     if (run.danger >= 65) return { key: 'danger', label: '금속음', copy: '' };
     if (run.danger >= 35) return { key: 'warn', label: '잡음', copy: '' };
-    return { key: 'safe', label: '먼 소리', copy: '' };
+    return { key: 'safe', label: '먼곳에서', copy: '' };
   }
 
   /* ---------------- 렌더링 ---------------- */
@@ -2614,7 +2614,7 @@
     const defs = [
       ['up-bag',    'bag',    `가방 넓히기`,  `${bagCap()}칸 → ${bagCap() + 2}칸`],
       ['up-light',  'light',  `조명 손보기`,  `최대 조명 +35`],
-      ['up-weapon', 'weapon', `무기 손보기`,  `추격 속도 -25%`],
+      ['up-weapon', 'weapon', `장비 개조`,  `들키는 속도 -25%`],
     ];
     defs.forEach(([id, type, title, sub]) => {
       const lvKey = type + 'Level';
