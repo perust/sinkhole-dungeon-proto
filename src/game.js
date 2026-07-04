@@ -1197,8 +1197,8 @@
         title: '눈앞의 회수물',
         cue: itemEncounterCue(node, item),
         choices: [
-          eventChoice('careful', '조심히 집는다', '소리를 죽인다', 'good'),
-          eventChoice('grab', '재빨리 챙기고 지난다', '소리가 난다', 'danger'),
+          eventChoice('careful', '조심히 집는다', '조용하지만 시간이 걸린다', 'good'),
+          eventChoice('grab', '재빨리 챙긴다', '빠르지만 소리가 난다', 'danger'),
           eventChoice('skip', '그냥 지나간다', '건드리지 않는다'),
         ],
       };
