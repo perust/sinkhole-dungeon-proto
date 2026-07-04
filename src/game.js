@@ -128,6 +128,17 @@
   const MOVE_MS            = 420; // 전진 연출은 짧게, 상황 문구는 상단 패널에 지속
   const DESCEND_MS         = 560; // 층 이동 연출도 조작감을 해치지 않게 짧게 유지
 
+  /* ---------------- 숨은 이동 추격자(스토커) ---------------- */
+  // 각 층에는 보이지 않는 추격자 하나가 돌아다닌다. 플레이어의 소음을 좇아
+  // BFS로 한 칸씩 다가오고, 조용하면 다시 잠든다. 위험도는 추격자와의 거리로만 오르내린다.
+  const DORMANT_AFTER = 3;             // quietSteps가 이 값 이상이면 잠듦(비추격)
+  const STALKER_STEP_TICKS = { 1: 16, 2: 11, 3: 8 }; // 층별 이동 주기(1층이 가장 느림)
+  const DORMANT_WANDER_CHANCE = 0.12;  // 잠든 추격자가 아주 가끔 한 칸 배회
+  const DORMANT_DANGER_CAP = 15;       // 잠들어 가까이 있어도 위험은 낮게 묶는다
+  const DANGER_RISE = 0.30;            // 거리 기반 목표치로 오를 때(빠르게)
+  const DANGER_DECAY = 0.10;           // 목표치로 내릴 때(느리게)
+  const stalkerStepTicks = (floor) => STALKER_STEP_TICKS[floor] || 8;
+
   const MONSTER_ARCHETYPES = {
     longFace: {
       name: '길게 구부러진 형체',
@@ -592,6 +603,164 @@
     return dist;
   }
 
+  // 추격자 초기 배치: 입구에서 BFS 거리가 '가장 먼' 비입구/비계단 노드에 둔다(거리 우선).
+  // 최대 거리가 여럿이면 막다른 곳(차수 <= 2)을 선호하되, 거리가 항상 1순위다.
+  // 시작은 잠든 상태(lastHeardId 없음, quietSteps = DORMANT_AFTER, stepCounter 0).
+  function seedStalker(nodes, entryId, stairsId, floor) {
+    const dist = bfs(nodes, entryId);
+    let best = -1, bestD = -1, bestSlim = false;
+    for (let i = 0; i < nodes.length; i++) {
+      if (i === entryId || i === stairsId) continue;
+      if (dist[i] === Infinity) continue; // 도달 불가한 노드는 제외
+      const d = dist[i];
+      const slim = nodes[i].exits.length <= 2;
+      // 거리가 더 멀면 무조건 교체, 동률이면 막다른 곳을 우선.
+      if (d > bestD || (d === bestD && slim && !bestSlim)) { bestD = d; best = i; bestSlim = slim; }
+    }
+    if (best < 0) {
+      // 도달 가능한 대안이 없을 때만 임의의 비입구/비계단 노드로, 그마저 없으면 입구.
+      const cand = [];
+      for (let i = 0; i < nodes.length; i++) if (i !== entryId && i !== stairsId) cand.push(i);
+      best = cand.length ? cand[Math.floor(Math.random() * cand.length)] : entryId;
+    }
+    const kind = monsterKindForEvent('stalk', floor, nodes[best]);
+    return { nodeId: best, kind, lastHeardId: null, quietSteps: DORMANT_AFTER, stepCounter: 0, nearCued: false };
+  }
+
+  /* --- 추격자 조작 헬퍼(그래프 헬퍼 위에 얹는 얇은 층) --- */
+
+  // 현재 층의 추격자 상태(없으면 null).
+  function stalker() {
+    return run && run.floorMap ? run.floorMap.stalker : null;
+  }
+
+  // 추격자가 깨어(추격 중) 있는가. 조용한 걸음이 DORMANT_AFTER 이상 쌓이면 잠든다.
+  function stalkerAwake() {
+    const s = stalker();
+    return !!s && s.quietSteps < DORMANT_AFTER;
+  }
+
+  // 플레이어 현재 노드와 추격자 사이의 그래프 거리(엣지 수). 도달 불가면 Infinity.
+  function stalkerDistance() {
+    const s = stalker();
+    if (!s || !run || !run.floorMap) return Infinity;
+    const dist = bfs(run.floorMap.nodes, run.currentNodeId);
+    const d = dist[s.nodeId];
+    return d == null ? Infinity : d;
+  }
+
+  // from에서 to로 가는 최단경로의 다음 한 칸. 같은 곳이거나 도달 불가면 null.
+  function pathNextStep(from, to) {
+    if (from === to || !run || !run.floorMap) return null;
+    const nodes = run.floorMap.nodes;
+    const dist = bfs(nodes, to); // 목적지에서 역으로 재서 from의 이웃 중 가장 가까운 칸을 고른다.
+    if (dist[from] === Infinity) return null;
+    let best = null, bestD = Infinity;
+    nodes[from].exits.forEach((nb) => {
+      if (dist[nb] < bestD) { bestD = dist[nb]; best = nb; }
+    });
+    return best;
+  }
+
+  // 추격자를 한 칸 이동시킨다. 깨어 있으면 마지막으로 들린 소음(없으면 플레이어) 쪽으로,
+  // 잠들어 있으면 아주 가끔 인접 칸으로 배회한다. silent면 접근 큐를 남기지 않는다.
+  function moveStalkerOneStep(opts) {
+    const s = stalker();
+    if (!s || !run || !run.floorMap) return;
+    const nodes = run.floorMap.nodes;
+    const awake = stalkerAwake();
+    let next = null;
+    if (awake) {
+      const target = s.lastHeardId != null ? s.lastHeardId : run.currentNodeId;
+      next = pathNextStep(s.nodeId, target);
+    } else if (Math.random() < DORMANT_WANDER_CHANCE) {
+      // 잠든 채로 플레이어 칸에 슬며시 올라앉지 않도록, 대안이 있으면 현재 플레이어 노드는 피한다.
+      const exits = nodes[s.nodeId].exits;
+      const avail = exits.filter((nb) => nb !== run.currentNodeId);
+      const pool = avail.length ? avail : exits;
+      if (pool.length) next = pool[Math.floor(Math.random() * pool.length)];
+    }
+    if (next == null) return;
+    s.nodeId = next;
+    // 바로 옆까지 붙으면 한 번만 짧은 큐를 남긴다(소리 없는 이동은 제외).
+    const silent = !!(opts && opts.silent);
+    if (!silent && awake) {
+      const d = stalkerDistance();
+      if (d > 0 && d <= 1) {
+        if (!s.nearCued) { const cue = stalkerCue(); if (cue) log(cue, 'hot'); s.nearCued = true; }
+      } else {
+        s.nearCued = false;
+      }
+    }
+  }
+
+  // 플레이어가 소음을 냈다: 추격자를 깨우고 마지막 소음 위치를 기록한다.
+  // loud면 큰 소리이므로 즉시 한 칸 끌어당긴다. 두 번째 인자는 {loud} 또는 boolean.
+  function emitNoise(nodeId, opts) {
+    const s = stalker();
+    if (!s) return;
+    const loud = opts === true || (opts && opts.loud);
+    s.lastHeardId = nodeId != null ? nodeId : run.currentNodeId;
+    s.quietSteps = 0;
+    run.chasing = true;
+    if (loud) moveStalkerOneStep({ silent: true });
+  }
+
+  // 위기 탈출 성공 뒤: 추격자를 플레이어에게서 minDist 엣지 이상 떨어뜨린다.
+  function teleportStalkerAway(minDist) {
+    const s = stalker();
+    if (!s || !run || !run.floorMap) return;
+    const min = minDist == null ? 2 : minDist;
+    const nodes = run.floorMap.nodes;
+    const dist = bfs(nodes, run.currentNodeId);
+    const far = [];
+    let bestId = s.nodeId, bestD = -1;
+    for (let i = 0; i < nodes.length; i++) {
+      if (i === run.currentNodeId) continue;
+      const d = dist[i] === Infinity ? -1 : dist[i];
+      if (d >= min) far.push(i);
+      if (d > bestD) { bestD = d; bestId = i; }
+    }
+    s.nodeId = far.length ? far[Math.floor(Math.random() * far.length)] : bestId;
+    s.nearCued = false;
+  }
+
+  // 플레이어 → 추격자 방향의 한글 방향 라벨(앞/뒤/왼쪽 앞 …). 없으면 ''.
+  function stalkerDirectionLabel() {
+    const s = stalker();
+    if (!s || !run || !run.floorMap) return '';
+    const step = pathNextStep(run.currentNodeId, s.nodeId);
+    if (step == null) return '';
+    return dirLabelForKey(directionKeyBetween(currentNode(), nodeById(step)));
+  }
+
+  // 추격자가 깨어 가까이(거리 ≤2) 있을 때만 의미 있는, 숫자 없는 방향 큐.
+  function stalkerCue() {
+    const s = stalker();
+    if (!s || !stalkerAwake()) return '';
+    const d = stalkerDistance();
+    if (d > 2) return '';
+    const label = stalkerDirectionLabel();
+    const from = label ? directionSourceLabel(label) : '가까운 어둠';
+    return d <= 1
+      ? `${from}에서 젖은 숨소리가 바로 뒤까지 붙었다.`
+      : `${from} 어둠에서 무언가 느리게 다가온다.`;
+  }
+
+  // 미끼를 던져 추격자의 관심을 인접한 칸으로 돌린다(가능할 때).
+  function divertStalkerToAdjacent() {
+    const s = stalker();
+    if (!s || !run || !run.floorMap) return;
+    const exits = currentNode().exits;
+    if (!exits.length) return;
+    // 추격자 쪽이 아닌 인접 칸을 우선한다 — 미끼가 놈을 내 진로에서 떼어내도록.
+    const toward = pathNextStep(run.currentNodeId, s.nodeId);
+    const away = exits.filter((id) => id !== toward);
+    const pool = away.length ? away : exits;
+    s.lastHeardId = pool[Math.floor(Math.random() * pool.length)];
+    s.nearCued = false;
+  }
+
   // 각 층 진입 시 5~7개 노드짜리 작은 맵을 만든다.
   // - 0번은 입구. 가장 깊은 잎 노드는 계단(다음 층 입구)으로 둔다(마지막 층 제외).
   // - 계단은 항상 차수 1(잎)이라, 계단 직전 노드를 반드시 지나가야 한다.
@@ -656,10 +825,13 @@
     const itemCount = Math.min(itemSlots.length, 2 + (Math.random() < 0.5 ? 1 : 0));
     for (let i = 0; i < itemCount; i++) nodes[itemSlots[i]].item = pickFloorItem(floor, nodes[itemSlots[i]]);
 
-    // 8) 몬스터 이벤트 배치.
+    // 8) 몬스터 이벤트 배치(시딩/분위기용 — 실제 조우는 숨은 추격자가 전담한다).
     placeMonsters(nodes, others, stairsId, floor);
 
-    return { nodes, entryId: 0, stairsId, count, travelledEdges: new Set() };
+    // 9) 숨은 이동 추격자 하나를 배치한다.
+    const stalker = seedStalker(nodes, 0, stairsId, floor);
+
+    return { nodes, entryId: 0, stairsId, count, travelledEdges: new Set(), stalker };
   }
 
   function monsterKindForEvent(type, floor, node) {
@@ -937,16 +1109,48 @@
     if (maybeTriggerMentalBreak()) return;
     if (maybeQueueRunAlerts()) { render(); return; }
 
-    // 추격 중에만 위험이 오른다. 어둠붙이를 정면으로 마주친 위기 선택 중에는
-    // 먼저 한 번 대응하게 두고, 선택 없이 틱으로 바로 실패시키지 않는다.
+    // 어둠붙이를 정면으로 마주친 위기 선택 중에는 먼저 한 번 대응하게 두고,
+    // 선택 없이 틱으로 바로 실패시키지 않는다.
     const pausingEventOpen = run.pendingEvent && (run.pendingEvent.type === 'monster-encounter' || run.pendingEvent.type === 'return-attempt');
-    if (run.chasing && !pausingEventOpen) {
-      let rate = FLOORS[run.floor - 1].dangerBase / weaponFactor();
-      if (run.light <= 0) rate *= 2.2; // 조명 0 → 어둠붙이 광폭화
-      run.danger = Math.min(100, run.danger + rate);
+
+    // 숨은 추격자를 주기적으로 한 칸 움직인다. 대사/이벤트/이동 연출 중에는 멈춘다.
+    const s = stalker();
+    if (s && !run.pendingEvent && !run.dialogue && !run.moving) {
+      s.stepCounter += 1;
+      if (s.stepCounter >= stalkerStepTicks(run.floor)) {
+        s.stepCounter = 0;
+        const wasAwake = stalkerAwake(); // 이동 직전의 상태: 추격(노이즈 추적) 걸음인지 잠든 배회인지 가른다.
+        moveStalkerOneStep();
+        // 추격 중이던 걸음이 플레이어 칸에 올라앉으면 quietSteps로 잠들기 전에 즉시 조우시킨다.
+        // (잠든 배회는 대안이 있으면 플레이어 칸을 피하므로 여기서 불공정한 무음 접촉을 만들지 않는다.)
+        if (wasAwake && s.nodeId === run.currentNodeId && !run.pendingEvent) {
+          if (startMonsterEncounter('critical', currentNode(), s.kind)) return;
+          failRun();
+          return;
+        }
+        s.quietSteps += 1; // 새 소음이 없으면 조용한 걸음이 쌓여 결국 다시 잠든다.
+      }
+    }
+
+    // 추격 여부는 추격자가 깨어 있는지로만 결정한다.
+    run.chasing = stalkerAwake();
+
+    // 위험은 추격자와의 거리로만 오르내린다: 멀면 0, 붙으면(거리 0) 조우.
+    if (!pausingEventOpen) {
+      const dist = stalkerDistance();
+      if (run.chasing && dist <= 0) {
+        if (startMonsterEncounter('critical', currentNode(), s && s.kind)) return;
+        failRun();
+        return;
+      }
+      let target = dist >= 4 ? 0 : dist === 3 ? 30 : dist === 2 ? 55 : dist === 1 ? 80 : 100;
+      if (!run.chasing) target = Math.min(target, DORMANT_DANGER_CAP); // 잠들었으면 가까워도 낮게 묶는다.
+      // 목표치로 이징: 오를 땐 빠르게, 내릴 땐 느리게.
+      if (run.danger < target) run.danger = Math.min(100, run.danger + (target - run.danger) * DANGER_RISE);
+      else run.danger = Math.max(0, run.danger - (run.danger - target) * DANGER_DECAY);
 
       if (run.danger >= 100) {
-        if (startMonsterEncounter('critical', currentNode())) return;
+        if (startMonsterEncounter('critical', currentNode(), s && s.kind)) return;
         failRun();
         return;
       }
@@ -1312,6 +1516,7 @@
         if (bait) {
           run.droppedCount += 1;
           run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 36);
+          divertStalkerToAdjacent(); // 던진 소리가 옆 칸에서 나므로 그쪽을 좇게 한다.
           msg = `${bait.name}${objectParticle(bait.name)} 물웅덩이 건너로 던졌다. 물 밟는 소리가 던진 물건 쪽으로 멀어진다.`;
           if (run.bag.length === 0 && run.danger < 35) run.chasing = false;
         } else {
@@ -1370,6 +1575,13 @@
 
     if (knockedOut) run.failContext = msg;
     if (!knockedOut && run.danger >= 100) run.danger = MONSTER_GRACE_DANGER;
+    if (!knockedOut) {
+      // 위기를 넘기면 추격자를 멀리 보내고 한동안 잠재운다 — 즉시 재조우를 막는다.
+      teleportStalkerAway(2);
+      const s = stalker();
+      if (s) { s.lastHeardId = null; s.quietSteps = DORMANT_AFTER; s.nearCued = false; }
+      if (run.danger < MONSTER_GRACE_DANGER) run.chasing = false;
+    }
     return { msg, knockedOut };
   }
 
@@ -1418,6 +1630,7 @@
         if (bait) {
           run.droppedCount += 1;
           run.danger = Math.max(0, run.danger - 12);
+          divertStalkerToAdjacent(); // 미끼 소리로 추격자의 관심을 옆 칸으로 돌린다.
           if (run.bag.length === 0) run.chasing = false;
           msg = `${bait.name}${objectParticle(bait.name)} 미끼로 던졌다. 물 밟는 소리가 그쪽으로 멀어진다.`;
         } else {
@@ -1465,6 +1678,7 @@
           const cue = dir ? `${dir}에서 발소리가 붙는다.` : '뒤쪽에서 발소리가 붙는다.';
           msg = `${item.name}${objectParticle(item.name)} 재빨리 낚아챘다. ${cue}`;
         }
+        emitNoise(node.id, { loud: choiceId === 'grab' }); // 낚아채면 큰 소리, 조심히 넣으면 작은 소리.
         maybeQueueBagAlert();
         maybeQueueLightAlert();
         maybeQueueMentalAlert();
@@ -1546,13 +1760,19 @@
     return choices.length ? choices : [eventChoice('hold', '버틴다', '', 'danger')];
   }
 
-  function startMonsterEncounter(reason, node) {
+  function startMonsterEncounter(reason, node, kindOverride) {
     if (!run || run.pendingEvent) return false;
     if (reason === 'critical' && run.monsterCrisisCount > 0 && run.light <= 0 && run.mental <= 0) return false;
 
-    const monsterKind = node && node.monster && node.monster.kind
-      ? node.monster.kind
-      : monsterKindForEvent(reason, run.floor, node);
+    // 직접 접촉/치명 조우는 거리 기반 위험도 상승보다 먼저 발화할 수 있어,
+    // 위험 라벨이 '먼곳에서'로 남는 UX 불일치가 생긴다. 조우를 여는 순간 위험도를 끌어올린다.
+    if (reason === 'critical' || stalkerDistance() <= 0) {
+      run.danger = Math.max(run.danger, 85);
+    }
+
+    const monsterKind = kindOverride
+      || (node && node.monster && node.monster.kind)
+      || monsterKindForEvent(reason, run.floor, node);
     const kind = MONSTER_ARCHETYPES[monsterKind] || MONSTER_ARCHETYPES.longFace;
     const choices = monsterChoices(monsterKind);
 
@@ -1577,6 +1797,9 @@
 
   function triggerMonster(node) {
     if (!node || !node.monster || node.monsterResolved) return;
+    // 숨은 추격자가 모든 조우를 전담한다. 노드에 시딩된 몬스터는 분위기용이므로
+    // 도착 시 별도 조우를 열지 않는다(이중 발화 방지).
+    if (run && run.floorMap && run.floorMap.stalker) { node.monsterResolved = true; return; }
     const type = node.monster.type;
     node.monsterResolved = true;
     if (type === 'sight') {
@@ -1683,6 +1906,11 @@
     if (target.kind === 'stairs') { descend(); return; }
 
     const fromId = node.id;
+    // 이미 깨어 있거나 추격 중이거나 짐을 들었을 때만 발소리를 남긴다.
+    // 짐을 집기 전 첫 탐색은 완전히 잠든 추격자를 깨우지 않는다(공정성).
+    if (stalkerAwake() || run.chasing || run.bag.length > 0) {
+      emitNoise(fromId, { loud: false }); // 발을 떼는 소리로 추격자에게 이 칸을 기억시킨다.
+    }
     beginTransition(() => {
       markTravelledEdge(fromId, targetId);
       run.previousNodeId = fromId;
@@ -1691,26 +1919,21 @@
     }, 'move', MOVE_MS);
   }
 
-  // 대기. 지나가는/매복 어둠붙이를 흘려보낸다. 시간이 흘러 조명이 조금 닳는다.
+  // 대기. 발소리를 흘려보낸다. 시간이 흘러 조명이 조금 닳고, 조용한 걸음이 쌓여 추격자는 결국 잠든다.
   function chooseWait() {
-    if (!run || run.dialogue || !run.holdEvent || run.moving || run.pendingEvent) return;
+    if (!run || run.dialogue || run.moving || run.pendingEvent || !stalkerAwake()) return;
     clearDialogue();
-    const ev = run.holdEvent;
     run.light = Math.max(0, run.light - WAIT_LIGHT_COST);
-    if (ev.type === 'cross') {
-      run.danger = Math.max(0, run.danger - 6);
-      run.lastAction = '발소리가 갈림길을 지나갔다.';
-      log('발소리가 갈림길을 지나갔다.');
-      showDialogue(run.lastAction);
-    } else {
-      run.danger = Math.max(0, run.danger - 3);
-      run.lastAction = '숨을 죽였다. 발소리가 멀어진다.';
-      log('숨을 죽였다. 발소리가 멀어진다.');
-      showDialogue(run.lastAction);
+    const s = stalker();
+    if (s) {
+      s.quietSteps += 1 + (Math.random() < 0.5 ? 1 : 0);
+      // 소리 없이 기다리는 동안에도 놈은 마지막 발소리 쪽으로 느리게 걷는다(바로 옆이 아닐 때만).
+      if (stalkerAwake() && stalkerDistance() > 0) moveStalkerOneStep({ silent: true });
     }
-    const evNode = nodeById(ev.node);
-    if (evNode) evNode.monsterResolved = true;
-    run.holdEvent = null;
+    run.chasing = stalkerAwake();
+    run.lastAction = run.chasing ? '발소리가 지나가길 기다렸다.' : '발소리가 멀어진다.';
+    log(run.lastAction);
+    showDialogue(run.lastAction);
     maybeQueueLightAlert();
     maybeQueueMentalAlert();
     render();
@@ -1750,6 +1973,7 @@
       log(`${item.name}까지 챙겼다. ${cue}`, 'hot');
       showDialogue(run.lastAction, 'hot');
     }
+    emitNoise(node.id, { loud: true }); // 물건을 집는 큰 소리 — 추격자를 즉시 한 칸 끌어당긴다.
     maybeQueueBagAlert();
     maybeQueueLightAlert();
     maybeQueueMentalAlert();
@@ -1765,6 +1989,7 @@
       if (run.chasing) run.danger = Math.min(100, run.danger + DESCEND_DANGER_BUMP);
       bumpMaxDepth(run.floor);
       if (run.floor > run.maxFloor) run.maxFloor = run.floor;
+      if (run.floorMap) emitNoise(run.currentNodeId, { loud: true }); // 계단을 밟는 소리 — 새 층으로 넘어가기 직전 현재 층 추격자에게.
       enterFloor(run.floor);
     }, 'descend', DESCEND_MS);
   }
@@ -1778,6 +2003,7 @@
     const dropped = run.bag.splice(idx, 1)[0];
     run.droppedCount += 1;
     run.danger = Math.max(0, run.danger * DROP_DANGER_FACTOR - DROP_DANGER_MINUS);
+    divertStalkerToAdjacent(); // 던진 짐 쪽으로 추격자의 관심을 돌린다.
     const droppedObject = `${dropped.name}${objectParticle(dropped.name)}`;
     if (run.bag.length === 0) {
       run.chasing = false;
@@ -2326,10 +2552,11 @@
     const here = node.kind === 'entry' ? '입구.' : (node.desc ? `${node.desc}.` : '어둠 속 공간.');
     const item = run.currentItem ? ` 눈앞에 ${run.currentItem.name}${subjectParticle(run.currentItem.name)} 있다. ${run.currentItem.slots}칸.` : '';
     const pending = run.pendingEvent ? ` ${run.pendingEvent.title}: ${run.pendingEvent.cue}` : '';
-    const event = run.holdEvent ? (run.holdEvent.type === 'ambush' ? ' 옆 어둠에서 숨소리가 멎었다.' : ' 갈림길 쪽에서 발소리가 스친다.') : '';
-    const chase = run.chasing && !run.holdEvent ? ' 젖은 발소리가 따라붙는다.' : '';
+    // 추격자가 깨어 가까이 있으면 방향 큐를, 없으면 추격 중일 때만 일반 발소리 문구를 붙인다(중복 없음).
+    const cue = stalkerCue();
+    const chase = cue ? ` ${cue}` : (run.chasing ? ' 젖은 발소리가 따라붙는다.' : '');
     const action = run.lastAction && (!run.pendingEvent || run.lastAction !== run.pendingEvent.cue) ? ` ${run.lastAction}` : '';
-    return cleanSituationText(`${here}${item}${pending}${event}${chase}${action}`);
+    return cleanSituationText(`${here}${item}${pending}${chase}${action}`);
   }
 
   function stageSituationCopy() {
@@ -2393,8 +2620,9 @@
       return;
     }
 
-    const holdSig = run.holdEvent ? `${run.holdEvent.type}:${run.holdEvent.node}` : 'none';
-    const moveSig = `move:${run.currentNodeId}:${holdSig}:${node.exits.join(',')}`;
+    const s = stalker();
+    const waitSig = `wait:${stalkerAwake() ? 1 : 0}:${s ? s.quietSteps : 0}`;
+    const moveSig = `move:${run.currentNodeId}:${waitSig}:${node.exits.join(',')}`;
     if (dock.dataset.choiceSig === moveSig) {
       if (el['choice-cue']) el['choice-cue'].textContent = cue;
       return;
@@ -2407,10 +2635,9 @@
     const usedDirs = new Set();
     let waitButton = '';
 
-    if (run.holdEvent) {
-      const waitDesc = run.holdEvent.type === 'ambush' ? '숨을 죽이고 보낸다' : '지나갈 때까지 멈춘다';
+    if (stalkerAwake()) {
       waitButton = `<button class="btn room-btn good dir-wait" data-act="wait"><i class="dir-glyph">•</i><span class="choice-text"><b>멈춤</b></span></button>`;
-      cues.push(`• ${waitDesc}`);
+      cues.push('• 발소리를 보내며 기다린다');
     }
 
     node.exits.forEach((nid, index) => {
