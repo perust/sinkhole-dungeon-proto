@@ -743,8 +743,8 @@
     const label = stalkerDirectionLabel();
     const from = label ? directionSourceLabel(label) : '가까운 어둠';
     return d <= 1
-      ? `${from}에서 젖은 숨소리가 바로 뒤까지 붙었다.`
-      : `${from} 어둠에서 무언가 느리게 다가온다.`;
+      ? `${from}에서 젖은 숨소리가 가까이 붙었다.`
+      : `${from}에서 물 밟는 소리가 가까워진다.`;
   }
 
   // 미끼를 던져 추격자의 관심을 인접한 칸으로 돌린다(가능할 때).
@@ -1899,7 +1899,9 @@
     }
 
     // 어둠붙이가 보이는 방향으로 전진하면 위험이 더 오른다.
-    if (node.dangerExit === targetId) {
+    // 숨은 추격자가 있으면 시딩된 몬스터는 분위기용(triggerMonster 비활성)이므로,
+    // 보이지 않는 dangerExit 세금을 물리지 않는다. 추격자가 없을 때만 옛 동작을 유지한다.
+    if (node.dangerExit === targetId && !(run.floorMap && run.floorMap.stalker)) {
       run.danger = Math.min(100, run.danger + SIGHT_MOVE_DANGER);
     }
 
@@ -1927,11 +1929,18 @@
     const s = stalker();
     if (s) {
       s.quietSteps += 1 + (Math.random() < 0.5 ? 1 : 0);
-      // 소리 없이 기다리는 동안에도 놈은 마지막 발소리 쪽으로 느리게 걷는다(바로 옆이 아닐 때만).
-      if (stalkerAwake() && stalkerDistance() > 0) moveStalkerOneStep({ silent: true });
+      // 소리 없이 기다리는 동안에도 놈은 마지막 발소리 쪽으로 느리게 걷는다.
+      // 단, 이미 바로 옆(거리 1)이면 무음 걸음으로 플레이어 칸에 올라앉지 않도록 움직이지 않는다.
+      if (stalkerAwake() && stalkerDistance() > 1) moveStalkerOneStep({ silent: true });
     }
     run.chasing = stalkerAwake();
-    run.lastAction = run.chasing ? '발소리가 지나가길 기다렸다.' : '발소리가 멀어진다.';
+    if (!run.chasing) {
+      run.lastAction = '젖은 발소리가 멀어진다.';
+    } else if (stalkerDistance() <= 1) {
+      run.lastAction = '숨을 죽였지만 가까운 어둠은 물러나지 않는다.';
+    } else {
+      run.lastAction = '발소리가 잠시 멀어진 듯하다.';
+    }
     log(run.lastAction);
     showDialogue(run.lastAction);
     maybeQueueLightAlert();
@@ -1973,7 +1982,9 @@
       log(`${item.name}까지 챙겼다. ${cue}`, 'hot');
       showDialogue(run.lastAction, 'hot');
     }
-    emitNoise(node.id, { loud: true }); // 물건을 집는 큰 소리 — 추격자를 즉시 한 칸 끌어당긴다.
+    // 기본 줍기(대기 이벤트 없는 일반 물건)는 조심스러운 손놀림이다: 추격자를 깨워 이 칸을
+    // 기억시키되, 낚아채기처럼 즉시 한 칸 끌어당기지는 않는다(작은 소리).
+    emitNoise(node.id, { loud: false });
     maybeQueueBagAlert();
     maybeQueueLightAlert();
     maybeQueueMentalAlert();
