@@ -1151,21 +1151,52 @@
       else if (node.danger < 0) run.danger = Math.max(0, run.danger + node.danger);
     }
     run.currentItem = node.item && !node.itemTaken ? node.item : null;
+    maybeStartRoomEvent(node);
+    if (run.pendingEvent) {
+      // 방 이벤트가 상황(cue)을 이어받는다 — 별도 도착 대사로 끊지 않고 선택지와 함께 보여준다.
+      return;
+    }
     run.lastAction = run.currentItem ? `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 눈에 들어온다.` : '새 구역에 도착했다.';
     if (run.currentItem) log(`${run.currentItem.name}.`, node.style === 'danger' ? 'hot' : undefined);
     showDialogue(run.lastAction, node.style === 'danger' ? 'hot' : '');
-    maybeStartRoomEvent(node);
-    if (!run.pendingEvent) triggerMonster(node);
+    triggerMonster(node);
   }
 
   function eventChoice(id, label, sub, tone = '') {
     return { id, label, sub, tone };
   }
 
+  // 물건이 놓인 구역의 조우 큐: 물건과 주변 위협을 한 문장에 함께 묘사한다.
+  function itemEncounterCue(node, item) {
+    const stat = `${item.slots}칸, ${item.value}RP`;
+    let threat;
+    if (node.kind === 'crack' || node.style === 'danger') {
+      threat = '바로 옆 어둠에서 물 밟는 소리가 얕게 인다. 집으려면 소리를 죽여야 한다.';
+    } else if (node.kind === 'hall' || node.kind === 'corridor') {
+      threat = '앞쪽 어둠이 낮게 깔렸다. 손을 뻗는 순간의 소리가 마음에 걸린다.';
+    } else {
+      threat = '주변은 조용하지만, 물건을 드는 순간의 소리가 신경 쓰인다.';
+    }
+    return `${item.name}${subjectParticle(item.name)} 발치에 떨어져 있다 — ${stat}. ${threat}`;
+  }
+
   function maybeStartRoomEvent(node) {
     if (!node || node.roomEventResolved || node.kind === 'entry' || node.kind === 'stairs') return;
     let ev = null;
-    if (node.kind === 'office') {
+    if (run.currentItem) {
+      // 물건이 보이면 선택지를 '집기/지나치기'로 물건에 묶는다 → 뒤따르는 별도 줍기 버튼이 없다.
+      const item = run.currentItem;
+      ev = {
+        type: 'item-encounter',
+        title: '눈앞의 회수물',
+        cue: itemEncounterCue(node, item),
+        choices: [
+          eventChoice('careful', '조심히 집는다', '소리를 죽인다', 'good'),
+          eventChoice('grab', '재빨리 챙기고 지난다', '소리가 난다', 'danger'),
+          eventChoice('skip', '그냥 지나간다', '건드리지 않는다'),
+        ],
+      };
+    } else if (node.kind === 'office') {
       ev = {
         type: 'cabinet',
         title: '잠긴 캐비닛',
@@ -1179,8 +1210,10 @@
     } else if (node.kind === 'crack' || node.kind === 'corridor' || node.kind === 'hall') {
       ev = {
         type: 'footprints',
-        title: node.kind === 'crack' ? '젖은 발자국' : '짙은 복도',
-        cue: node.kind === 'crack' ? '젖은 자국이 방금 생긴 듯 반짝인다.' : '앞쪽에 칠흑같은 어둠이 낮게 깔려있다.',
+        title: node.kind === 'crack' ? '젖은 발자국' : '다가오는 발소리',
+        cue: node.kind === 'crack'
+          ? '방금 찍힌 듯한 젖은 발자국이 앞쪽으로 이어진다. 그 끝 어둠에서 물 밟는 소리가 얕게 다가온다.'
+          : '앞쪽 어둠이 낮게 깔렸다. 그 안에서 느릿한 발소리가 이쪽으로 다가온다. 아직 들키진 않았다.',
         choices: [
           eventChoice('hold', '숨을 죽인다', '발소리를 멈춘다', 'good'),
           eventChoice('rush', '빠르게 지난다', '빛을 아낀다', 'danger'),
@@ -1213,10 +1246,11 @@
     }
     if (!ev) return;
     node.roomEventResolved = true;
-    run.pendingEvent = { ...ev, node: node.id };
+    const tense = ev.type === 'footprints' || ev.type === 'item-encounter';
+    run.pendingEvent = { ...ev, node: node.id, tone: tense ? 'hot' : '' };
     run.lastAction = ev.cue;
-    log(ev.cue, ev.type === 'footprints' ? 'hot' : undefined);
-    showDialogue(ev.cue, ev.type === 'footprints' ? 'hot' : '');
+    log(ev.cue, tense ? 'hot' : undefined);
+    // 큐는 tap-through 대사가 아니라 선택지와 함께 남는 sticky 카드로 보여준다(renderSituationLayer).
   }
 
   function takeCheapestBagItem() {
@@ -1389,6 +1423,46 @@
         run.danger = Math.min(100, run.danger + 5);
         msg = '빠르게 지나쳤다. 뒤에서 물 밟는 소리가 조금 늦게 따라온다.';
       }
+    } else if (ev.type === 'item-encounter') {
+      const item = run.currentItem;
+      if (!item) {
+        msg = '물건은 이미 챙겼다.';
+      } else if (choiceId === 'skip') {
+        // 지금은 지나친다. 자국은 남아, 다시 이 방을 지날 때 조용히 집을 수 있다.
+        run.currentItem = null;
+        run.danger = Math.max(0, run.danger - 2);
+        msg = `${item.name}${objectParticle(item.name)} 그대로 두고 지나쳤다. 발소리를 죽인 채 물러난다.`;
+      } else if (!roomFor(item)) {
+        // 가방이 가득 차 집을 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
+        run.seenBagAlerts.add('blocked');
+        run.lastAction = BAG_ALERTS.blocked;
+        log(BAG_ALERTS.blocked, 'hot');
+        showDialogue(BAG_ALERTS.blocked, 'hot');
+        render();
+        return;
+      } else {
+        const cautious = choiceId === 'careful';
+        run.bag.push(item);
+        node.itemTaken = true;
+        run.grabbedCount += 1;
+        run.currentItem = null;
+        run.light = Math.max(0, run.light - (cautious ? GRAB_LIGHT_COST : Math.max(2, GRAB_LIGHT_COST - 3)));
+        playGrabFx();
+        const firstGrab = !run.chasing;
+        run.chasing = true;
+        if (cautious) {
+          run.danger = firstGrab ? Math.max(run.danger, GRAB_DANGER_BUMP) : Math.min(100, run.danger + GRAB_DANGER_BUMP);
+          msg = `숨을 죽이고 ${item.name}${objectParticle(item.name)} 천천히 가방에 넣었다.`;
+        } else {
+          run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP + 4);
+          const dir = reversePathDirection(node);
+          const cue = dir ? `${dir}에서 발소리가 붙는다.` : '뒤쪽에서 발소리가 붙는다.';
+          msg = `${item.name}${objectParticle(item.name)} 재빨리 낚아챘다. ${cue}`;
+        }
+        maybeQueueBagAlert();
+        maybeQueueLightAlert();
+        maybeQueueMentalAlert();
+      }
     } else if (ev.type === 'vent') {
       if (choiceId === 'crawl') {
         run.light = Math.max(0, run.light - 4);
@@ -1427,7 +1501,7 @@
     }
     run.pendingEvent = null;
     run.lastAction = msg || '상황을 정리했다.';
-    const actionTone = /울렸다|따라온다|없다|어둠붙이|젖은 발소리|손가락|얼굴/.test(run.lastAction) ? 'hot' : undefined;
+    const actionTone = /울렸다|따라온다|없다|어둠붙이|젖은 발소리|손가락|얼굴|붙는다/.test(run.lastAction) ? 'hot' : undefined;
     log(run.lastAction, actionTone);
     showDialogue(run.lastAction, actionTone || (ev.type === 'mental-break' ? 'good' : ''));
     if (ev.type !== 'monster-encounter' && ev.type !== 'mental-break' && node && node.monster && !node.monsterResolved) {
@@ -2264,10 +2338,11 @@
     if (el['stage-situation']) el['stage-situation'].textContent = recent || '아래가 열린다.';
     if (!el['dialogue-card'] || !el['dialogue-copy']) return;
     const card = el['dialogue-card'];
-    const monsterChoiceCue = !run.dialogue && run.pendingEvent && run.pendingEvent.type === 'monster-encounter'
-      ? { text: run.pendingEvent.cue, tone: 'hot', sticky: true }
+    // 대사 큐가 비면, 대기 중인 이벤트의 큐를 선택지 위 sticky 카드로 계속 보여준다(탭으로 사라지지 않음).
+    const pendingCue = !run.dialogue && run.pendingEvent && run.pendingEvent.cue
+      ? { text: run.pendingEvent.cue, tone: run.pendingEvent.tone !== undefined ? run.pendingEvent.tone : 'hot', sticky: true }
       : null;
-    const dialogue = run.dialogue || monsterChoiceCue;
+    const dialogue = run.dialogue || pendingCue;
     card.className = 'dialogue-card' + (dialogue ? '' : ' hidden') + (dialogue && dialogue.tone ? ` ${dialogue.tone}` : '') + (dialogue && dialogue.sticky ? ' sticky' : '');
     if (dialogue) el['dialogue-copy'].textContent = dialogue.text;
     if (dialogue) card.setAttribute('aria-label', dialogue.sticky ? '조우 상황' : '상황 대화 계속');
@@ -2297,7 +2372,7 @@
         dock.classList.add('event-choices');
         dock.innerHTML = run.pendingEvent.choices.map((choice) => {
           const tone = choice.tone ? ` ${choice.tone}` : '';
-          const sub = '';
+          const sub = choice.sub ? `<span>${choice.sub}</span>` : '';
           return `<button class="btn room-btn event-btn${tone}" data-act="event" data-choice="${choice.id}"><i class="dir-glyph">?</i><span class="choice-text"><b>${choice.label}</b>${sub}</span></button>`;
         }).join('');
         dock.dataset.choiceSig = sig;

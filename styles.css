@@ -1471,6 +1471,11 @@ html, body { touch-action: manipulation; }
   background: rgba(255,209,102,.12);
   border-color: rgba(255,209,102,.32);
 }
+#screen-dungeon #dock #room-choices.event-choices .event-btn .choice-text > span {
+  font-size: 12px;
+  opacity: .66;
+  margin-top: 1px;
+}
 #screen-dungeon #dock .room-pad-empty,
 #screen-dungeon #dock .room-pad-center {
   min-height: 52px;
