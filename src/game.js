@@ -71,7 +71,7 @@
     '복도 폭이 조금씩 어긋나 있다.',
   ];
 
-  const EXTRACTION_TUTORIAL_CUE = '쓸 만한 것은 위로 가져가야 값이 된다. 왔던 길을 표시해 두는 게 좋다.';
+  const EXTRACTION_TUTORIAL_CUE = '쓸 만한게 있으면 챙겨놓자. 왔던 길은 표시해둬야겠지.';
 
   const LIGHT_ALERTS = [
     { key: 'dim70', pct: 70, text: '손전등의 동그란 빛이 끝부터 흐려진다.' },
