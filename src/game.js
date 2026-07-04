@@ -1144,6 +1144,7 @@
   // 노드 도착: 환경 효과 1회 적용 → 아이템 노출 → 몬스터 이벤트 발동.
   function arriveAtNode() {
     const node = currentNode();
+    const firstVisit = !node.entered;
     if (!node.entered) {
       node.entered = true;
       if (node.light) run.light = Math.max(0, Math.min(maxLight(), run.light + node.light));
@@ -1156,9 +1157,14 @@
       // 방 이벤트가 상황(cue)을 이어받는다 — 별도 도착 대사로 끊지 않고 선택지와 함께 보여준다.
       return;
     }
-    run.lastAction = run.currentItem ? `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 눈에 들어온다.` : '새 구역에 도착했다.';
-    if (run.currentItem) log(`${run.currentItem.name}.`, node.style === 'danger' ? 'hot' : undefined);
-    showDialogue(run.lastAction, node.style === 'danger' ? 'hot' : '');
+    if (firstVisit) {
+      run.lastAction = run.currentItem ? `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 눈에 들어온다.` : '새 구역에 도착했다.';
+      if (run.currentItem) log(`${run.currentItem.name}.`, node.style === 'danger' ? 'hot' : undefined);
+      showDialogue(run.lastAction, node.style === 'danger' ? 'hot' : '');
+    } else {
+      // 이미 지나온 구역으로 되돌아옴 — '새 구역 도착' 대사 없이 현재 상황(situationCopy)만 조용히 반영한다.
+      run.lastAction = '';
+    }
     triggerMonster(node);
   }
 
@@ -1168,7 +1174,7 @@
 
   // 물건이 놓인 구역의 조우 큐: 물건과 주변 위협을 한 문장에 함께 묘사한다.
   function itemEncounterCue(node, item) {
-    const stat = `${item.slots}칸, ${item.value}RP`;
+    const stat = `${item.slots}칸`;
     let threat;
     if (node.kind === 'crack' || node.style === 'danger') {
       threat = '바로 옆 어둠에서 물 밟는 소리가 얕게 인다. 집으려면 소리를 죽여야 한다.';
@@ -2318,7 +2324,7 @@
 
   function situationCopy(node) {
     const here = node.kind === 'entry' ? '입구.' : (node.desc ? `${node.desc}.` : '어둠 속 공간.');
-    const item = run.currentItem ? ` 눈앞에 ${run.currentItem.name}${subjectParticle(run.currentItem.name)} 있다. ${run.currentItem.slots}칸, ${run.currentItem.value}RP.` : '';
+    const item = run.currentItem ? ` 눈앞에 ${run.currentItem.name}${subjectParticle(run.currentItem.name)} 있다. ${run.currentItem.slots}칸.` : '';
     const pending = run.pendingEvent ? ` ${run.pendingEvent.title}: ${run.pendingEvent.cue}` : '';
     const event = run.holdEvent ? (run.holdEvent.type === 'ambush' ? ' 옆 어둠에서 숨소리가 멎었다.' : ' 갈림길 쪽에서 발소리가 스친다.') : '';
     const chase = run.chasing && !run.holdEvent ? ' 젖은 발소리가 따라붙는다.' : '';
