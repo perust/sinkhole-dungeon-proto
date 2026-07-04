@@ -1180,7 +1180,7 @@
       ev = {
         type: 'footprints',
         title: node.kind === 'crack' ? '젖은 발자국' : '짙은 복도',
-        cue: node.kind === 'crack' ? '젖은 자국이 방금 생긴 듯 반짝인다.' : '앞쪽 어둠이 무릎 높이로 낮게 깔려 있다.',
+        cue: node.kind === 'crack' ? '젖은 자국이 방금 생긴 듯 반짝인다.' : '앞쪽에 칠흑같은 어둠이 낮게 깔려있다.',
         choices: [
           eventChoice('hold', '숨을 죽인다', '발소리를 멈춘다', 'good'),
           eventChoice('rush', '빠르게 지난다', '빛을 아낀다', 'danger'),
