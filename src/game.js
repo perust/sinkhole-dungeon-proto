@@ -391,6 +391,37 @@
   const SURVIVOR_ABANDON_SUSPICION = 1;  // 등진 기록 하나당 다음 런에서 오르는 의심도(한 번만)
   const SURVIVOR_STREET_RUMOR = '거리 소문: 어젯밤 누군가 두드리는 소리가 멈췄다.';
 
+  /* ---------------- 왜곡 변이 v1 ---------------- */
+  // 아주 뜨거운 유물을 들고 지상으로 나오면 몸에 남는 영구 흔적. 런을 넘어 유지되며(meta.mutations),
+  // 하나가 이득과 대가를 함께 준다. v1은 둘뿐이고, 더 큰 변이 트리는 후속으로 남긴다.
+  //  - fissure-sight(균열 시야): 앞쪽 틈/계단/물건 방향을 낮은 정밀도로 짚어 주지만,
+  //    균열 출구에서 길을 더 잘못 짚어 파손되기 쉬운 짐이 조금 더 긁힌다.
+  //  - black-hand(검은 손): 캐비닛을 더 쉽게 열지만, 공식 출구 검문에서 손이 눈에 띄어 의심도가 조금 더 오른다.
+  const MUTATIONS = {
+    'fissure-sight': {
+      id: 'fissure-sight',
+      name: '균열 시야',
+      gainLog: '벽 틈이 더 선명하게 보인다. 어느 쪽에 무언가 있는지 어렴풋이 짚인다.',
+    },
+    'black-hand': {
+      id: 'black-hand',
+      name: '검은 손',
+      gainLog: '손등에 검은 얼룩이 남았다. 손가락이 전보다 쉽게 틈을 비집는다.',
+    },
+  };
+  // 지급은 이 순서대로 첫 번째 미보유 변이를 준다(무작위 없음 — 테스트 결정성).
+  const MUTATION_ORDER = ['fissure-sight', 'black-hand'];
+  const KNOWN_MUTATIONS = new Set(MUTATION_ORDER);
+
+  const MUTATION_TRIGGER_HEAT = 15;    // 이 이상 뜨거운 유물을 하나라도 들고 나오면 변이 후보(안정화 코어·봉인 유물)
+  const MUTATION_TRIGGER_ROOMS = 3;    // 이번 런에서 이만큼 방을 밟았거나
+  const MUTATION_TRIGGER_FLOOR = 2;    // 이 층 이상 내려갔으면 트리거 조건 충족(둘 중 하나)
+  const FISSURE_SCRATCH_RATE = 0.20;   // 균열 시야가 있으면 균열 출구 긁힘 비율이 조금 커진다(기본 0.15 → 0.20)
+  const FISSURE_EXIT_NOTE = '벽 틈이 너무 많이 보여 빠져나오는 길을 한번 잘못 짚었다.';
+  const BLACKHAND_CHECKPOINT_SUSP = 1; // 검은 손이 있으면 공식 출구 검문에서 의심도가 1 더 오른다(과하지 않게)
+  const BLACKHAND_CHECKPOINT_NOTE = '검은 손이 드러나 검문관이 손등을 한 번 더 훑어봤다.';
+  const BLACKHAND_CABINET_NOTE = '휘어진 손잡이가 검은 손에 너무 쉽게 딸려 온다.';
+
   /* ---------------- 상태 ---------------- */
 
   const meta = {
@@ -410,9 +441,11 @@
     // outcome: 'marked'|'abandoned'. reported: abandoned의 뒤늦은 대가를 이미 치렀는지.
     // 여기에 있어도 meta.survivors에는 없으므로, 후속 런에서 다시 나타나 구출할 수 있다.
     survivorNotes: {},
+    mutations: [],   // 몸에 남은 왜곡 변이 id 목록(런을 넘어 유지). 알려진 id만, MUTATION_ORDER 순.
   };
 
   const hasSurvivor = (id) => meta.survivors.includes(id);
+  const hasMutation = (id) => meta.mutations.includes(id);
   // 구출하지 않고 남겨 둔 생존자를 기록한다. 같은 사람은 마지막 선택으로 덮어쓴다.
   function noteSurvivor(id, outcome) {
     if (!KNOWN_SURVIVORS.has(id) || !SURVIVOR_OUTCOMES.has(outcome)) return;
@@ -436,6 +469,24 @@
       return Math.max(1, Math.round(base * (1 - MECHANIC_DISCOUNT)));
     }
     return base;
+  }
+
+  // 지상 귀환 시 왜곡 변이 지급(런당 한 번). 조건이 맞으면 아직 없는 변이 중 MUTATION_ORDER 순으로
+  // 첫 번째를 준다. 무작위 없음(테스트 결정성). 빈 가방이거나 조건 미달이면 아무것도 주지 않는다.
+  function grantMutationOnReturn() {
+    if (!run || run.mutationChecked) return null;
+    run.mutationChecked = true; // 이 런에서는 다시 판정하지 않는다
+    if (!run.bag.length) return null; // 빈손 귀환에서는 발동하지 않는다
+    // 아주 뜨거운 유물(heat>=15)을 하나라도 들고 나와야 한다.
+    if (!run.bag.some((it) => itemHeat(it) >= MUTATION_TRIGGER_HEAT)) return null;
+    // 충분히 깊이 내려갔거나 방을 여럿 밟았어야 한다.
+    const deepEnough = run.maxFloor >= MUTATION_TRIGGER_FLOOR || run.roomsEntered >= MUTATION_TRIGGER_ROOMS;
+    if (!deepEnough) return null;
+    const nextId = MUTATION_ORDER.find((id) => !hasMutation(id));
+    if (!nextId) return null; // 이미 v1 변이를 모두 가짐
+    meta.mutations.push(nextId);
+    saveMeta(); // 지급 즉시 저장 — 이번 런 결과와 무관하게 몸에 남는다
+    return MUTATIONS[nextId];
   }
 
   /* ---------------- 저장 / 이어하기 ---------------- */
@@ -487,6 +538,7 @@
         endingSeen: !!meta.endingSeen,
         survivors: meta.survivors,
         survivorNotes: meta.survivorNotes,
+        mutations: meta.mutations,
       };
       window.localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -541,6 +593,12 @@
         }
       }
     }
+    // mutations: 구버전 저장값에는 없다 → 기본 []. 알려진 id만 남기고 중복 제거,
+    // 표시·지급 순서가 흔들리지 않게 MUTATION_ORDER 순으로 정렬한다. SAVE_VERSION은 올리지 않는다.
+    if (Array.isArray(data.mutations)) {
+      const known = new Set(data.mutations.filter((id) => KNOWN_MUTATIONS.has(id)));
+      meta.mutations = MUTATION_ORDER.filter((id) => known.has(id));
+    }
   }
 
   function clearSave() {
@@ -550,12 +608,12 @@
 
   // '기록 초기화' — 저장값을 지우고 meta를 출고 상태로 되돌린다.
   function resetProgress() {
-    if (!window.confirm('모든 기록(RP·강화·깊이·의심도·진실 조각·생존자)을 지울까요?')) return;
+    if (!window.confirm('모든 기록(RP·강화·깊이·의심도·진실 조각·생존자·변이)을 지울까요?')) return;
     clearSave();
     Object.assign(meta, {
       rp: 0, bagLevel: 1, lightLevel: 1, weaponLevel: 1,
       maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0, extractionCueSeen: false,
-      endingSeen: false, survivors: [], survivorNotes: {},
+      endingSeen: false, survivors: [], survivorNotes: {}, mutations: [],
     });
     renderStartScreen();
   }
@@ -627,6 +685,9 @@
       seenMentalAlerts: new Set(),
       seenBagAlerts: new Set(),
       maxFloor: 1,
+      roomsEntered: 0,   // 이번 런에서 처음 밟은 방 수(왜곡 변이 트리거 판정용)
+      mutationChecked: false, // 이번 귀환에서 변이 지급을 이미 판정했는가(런당 한 번)
+      mutationNote: '',  // 이번 런에서 새로 얻은 변이 안내 문구(강화 화면 요약에 노출)
       grabbedCount: 0,
       droppedCount: 0,
       bought: false,     // 이번 귀환에서 강화를 샀는가
@@ -1155,7 +1216,7 @@
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
     'buy-committee', 'buy-black', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
-    'start-survivors',
+    'start-survivors', 'start-mutations',
     'up-bag', 'up-light', 'up-weapon', 'btn-again',
     'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
     'ending-truth-count', 'ending-continue', 'ending-reset',
@@ -1644,6 +1705,7 @@
     const firstVisit = !node.entered;
     if (!node.entered) {
       node.entered = true;
+      run.roomsEntered += 1; // 처음 밟은 방만 센다(왜곡 변이 트리거 판정용)
       if (node.light) run.light = Math.max(0, Math.min(maxLight(), run.light + node.light));
       if (node.danger > 0) run.danger = Math.min(100, run.danger + node.danger);
       else if (node.danger < 0) run.danger = Math.max(0, run.danger + node.danger);
@@ -1997,7 +2059,9 @@
       else msg = outcome ? outcome.after : '간신히 정신을 붙잡았다.';
     } else if (ev.type === 'cabinet') {
       if (choiceId === 'open') {
-        run.light = Math.max(0, run.light - 3);
+        // 검은 손 변이: 휘어진 손잡이가 너무 쉽게 딸려 와 조명 소모가 준다(결정적).
+        const blackHand = hasMutation('black-hand');
+        run.light = Math.max(0, run.light - (blackHand ? 1 : 3));
         if (!run.currentItem && !node.itemTaken) {
           node.item = node.item || pickFloorItem(run.floor, node);
           run.currentItem = node.item;
@@ -2006,6 +2070,7 @@
           run.danger = Math.max(0, run.danger - 2);
           msg = '문을 천천히 닫았다. 철판 속의 빈 소리가 가라앉는다.';
         }
+        if (blackHand) msg = `${msg} ${BLACKHAND_CABINET_NOTE}`;
       } else if (choiceId === 'noise') {
         run.danger = Math.min(100, run.danger + 7);
         msg = '금속음이 울렸다. 먼 곳에서 비슷한 소리가 한 번 늦게 돌아온다.';
@@ -2824,6 +2889,12 @@
     run.lastSale = run.bag.slice();
     run.chasing = false;
     run.bought = false;
+    // 판매 전에 왜곡 변이 지급을 판정한다(런당 한 번). 뜨거운 유물을 들고 나왔으면 몸에 흔적이 남는다.
+    const gainedMutation = grantMutationOnReturn();
+    if (gainedMutation) {
+      run.mutationNote = gainedMutation.gainLog;
+      log(gainedMutation.gainLog, 'hot'); // 강화 화면 요약과 함께 던전 로그에도 남긴다
+    }
     // 빈손 귀환도 판매 화면을 거친다: 출구 경로를 고르고 판매처(위원회/암시장)를 눌러야 강화로 넘어간다.
     // chooseBuyer가 raw 0을 안전 처리하므로 빈 가방이어도 문제없이 진행된다.
     renderReturnScreen();
@@ -2836,15 +2907,19 @@
     const route = run.exitRoute || 'official';
     if (route === 'crack') {
       const fragileValue = run.bag.reduce((s, it) => s + (itemFragile(it) ? it.value : 0), 0);
-      const scratch = Math.round(fragileValue * EXIT_SCRATCH_RATE);
+      // 균열 시야 변이: 틈이 너무 많이 보여 빠져나오는 길을 잘못 짚어 긁힘 비율이 조금 커진다(결정적).
+      const fissure = hasMutation('fissure-sight');
+      const scratch = Math.round(fragileValue * (fissure ? FISSURE_SCRATCH_RATE : EXIT_SCRATCH_RATE));
+      let note = scratch > 0
+        ? `균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번 짐은 -${scratch} RP.`
+        : '균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번엔 긁힐 게 없었다.';
+      if (fissure && scratch > 0) note = `${note} ${FISSURE_EXIT_NOTE}`;
       return {
         route,
         suspDelta: -EXIT_CRACK_SUSP_RELIEF,
         gainDelta: -scratch,
         blackSuspRelief: 0,
-        note: scratch > 0
-          ? `균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번 짐은 -${scratch} RP.`
-          : '균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번엔 긁힐 게 없었다.',
+        note,
       };
     }
     if (route === 'blackpass') {
@@ -2861,7 +2936,11 @@
       };
     }
     const heatTotal = run.bag.reduce((s, it) => s + itemHeat(it), 0);
-    const checkpoint = heatTotal >= EXIT_CHECKPOINT_HEAT || meta.suspicion >= EXIT_CHECKPOINT_SUSP;
+    // 검문이 걸리는 이유를 둘로 나눠 둔다 — 안내 문구가 실제 사유와 맞아야 한다.
+    // (뜨거운 짐 때문인지, 이름이 검문 명단에 올랐는지, 혹은 둘 다인지)
+    const dueHeat = heatTotal >= EXIT_CHECKPOINT_HEAT;
+    const dueSusp = meta.suspicion >= EXIT_CHECKPOINT_SUSP;
+    const checkpoint = dueHeat || dueSusp;
     const insider = hasSurvivor('insider');
     let suspAdd = checkpoint ? EXIT_CHECKPOINT_SUSP_ADD : 0;
     let note;
@@ -2873,8 +2952,17 @@
         note = suspAdd > 0
           ? '공식 출구 — 검문에 걸렸지만, 전 직원이 준비해 둔 통행 암구호로 검문대가 한풀 눅었다.'
           : '공식 출구 — 검문에 걸렸지만, 전 직원의 통행 암구호에 검문대가 그냥 손을 저었다.';
-      } else {
+      } else if (dueHeat) {
+        // 뜨거운 짐 때문(둘 다인 경우도 포함) — 짐을 걸고 넘어진 게 맞다.
         note = '공식 출구 — 안전하지만 검문이 있다. 짐이 뜨거워 검문대가 의심도를 조금 올렸다.';
+      } else {
+        // 짐은 뜨겁지 않은데 의심도만 높은 경우 — 이름이 검문 명단에 올라 걸린 것이다.
+        note = '공식 출구 — 안전하지만 검문이 있다. 이름이 검문 명단에 올라 검문대가 의심도를 조금 올렸다.';
+      }
+      // 검은 손 변이: 검문에 걸리면 손이 눈에 띄어 의심도가 조금 더 오른다(과하지 않게 +1).
+      if (hasMutation('black-hand')) {
+        suspAdd += BLACKHAND_CHECKPOINT_SUSP;
+        note = `${note} ${BLACKHAND_CHECKPOINT_NOTE}`;
       }
     } else {
       note = insider
@@ -3178,6 +3266,27 @@
     return parts.length ? `지도공 표시: ${parts.join(' · ')}` : '';
   }
 
+  // 균열 시야 변이: 지도공을 쓰지 않을 때만, 앞쪽 출구 중 틈/계단/아직 안 집은 물건이 있는 방향을
+  // 방향 기호와 함께 아주 짧게 짚어 준다. 정확한 전리품·RP·좌표·추격자 위치는 절대 드러내지 않는다.
+  // 지도공이 있으면 그쪽 표시가 더 자세하므로 이 줄은 붙이지 않는다(문구가 길어지지 않게).
+  function fissureCueLine(node) {
+    if (!hasMutation('fissure-sight') || hasSurvivor('mapper')) return '';
+    if (!node || !node.exits || !node.exits.length) return '';
+    const used = new Set();
+    const parts = [];
+    node.exits.forEach((nid, index) => {
+      const t = nodeById(nid);
+      if (!t) return;
+      const dir = directionForExit(node, t, index, used);
+      let hint = '';
+      if (t.kind === 'stairs') hint = '계단';
+      else if (t.item && !t.itemTaken) hint = '물건';
+      else if (t.kind === 'crack') hint = '틈';
+      if (hint) parts.push(`${dir.glyph} ${hint}`);
+    });
+    return parts.length ? `균열 시야: ${parts.join(' / ')}` : '';
+  }
+
   const GENERIC_SITUATION_SENTENCES = new Set();
 
   function cleanSituationText(text) {
@@ -3262,9 +3371,10 @@
       return;
     }
 
-    // 지도공을 구출했으면 이동 큐에 앞쪽 방 미리보기 한 줄을 덧붙인다(이동 선택지일 때만).
-    const mapperLine = mapperCueLine(node);
-    const moveCue = mapperLine ? `${cue}  ${mapperLine}` : cue;
+    // 지도공을 구출했으면 앞쪽 방 미리보기를, 아니면 균열 시야 변이의 짧은 방향 단서를 이동 큐에 덧붙인다.
+    // (둘은 겹치지 않는다 — fissureCueLine이 지도공이 있으면 빈 문자열을 돌려준다.)
+    const previewLine = mapperCueLine(node) || fissureCueLine(node);
+    const moveCue = previewLine ? `${cue}  ${previewLine}` : cue;
 
     const s = stalker();
     const towardId = stalkerTowardExit(); // 깨어 가까이 붙은 추격자 쪽 출구(없으면 null) — 서 있는 동안에도 갱신되게 서명에 포함한다.
@@ -3491,7 +3601,11 @@
       }
       el['sale-gain'].textContent = '+' + gained;
     }
-    if (el['run-summary']) el['run-summary'].textContent = run.exitNote || '';
+    // 출구 결과와, 이번 런에서 새로 얻은 변이 안내를 한 요약 영역에 함께 보여준다(둘 다 고정 문구).
+    if (el['run-summary']) {
+      const summaryLines = [run.exitNote, run.mutationNote].filter(Boolean);
+      el['run-summary'].innerHTML = summaryLines.join('<br>');
+    }
     el['sale-balance'].textContent = meta.rp;
     el['sale-susp'].textContent = meta.suspicion;
     renderGoals();
@@ -3622,6 +3736,16 @@
     line.innerHTML = parts.join(' / ');
   }
 
+  // 몸에 남은 왜곡 변이를 시작 화면에 짧게 표시한다(없으면 줄을 숨긴다).
+  function renderStartMutations() {
+    const line = el['start-mutations'];
+    if (!line) return;
+    const names = meta.mutations.map((id) => MUTATIONS[id] && MUTATIONS[id].name).filter(Boolean);
+    if (!names.length) { line.hidden = true; line.textContent = ''; return; }
+    line.hidden = false;
+    line.innerHTML = `몸에 남은 흔적 · <b>${names.join(', ')}</b>`;
+  }
+
   // 시작 화면 메타 표시를 한곳에서 갱신한다(초기 진입 + 기록 초기화 공용).
   function renderStartScreen() {
     el['start-rp'].textContent = meta.rp;
@@ -3629,6 +3753,7 @@
     el['start-susp'].textContent = meta.suspicion;
     renderCodex();
     renderStartSurvivors();
+    renderStartMutations();
     renderGoals();
     renderContractCards();
   }
