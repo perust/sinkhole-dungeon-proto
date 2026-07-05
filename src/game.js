@@ -308,6 +308,7 @@
     truths: [],
     contractIndex: 0,
     extractionCueSeen: false,
+    endingSeen: false,
   };
 
   /* ---------------- 저장 / 이어하기 ---------------- */
@@ -356,6 +357,7 @@
         truths: meta.truths,
         contractIndex: meta.contractIndex,
         extractionCueSeen: !!meta.extractionCueSeen,
+        endingSeen: !!meta.endingSeen,
       };
       window.localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -387,6 +389,8 @@
     meta.suspicion   = safeInt(data.suspicion,   0, 0, 99);
     meta.contractIndex = safeInt(data.contractIndex, 0, 0);
     meta.extractionCueSeen = !!data.extractionCueSeen;
+    // endingSeen: 구버전 저장값에는 없다 → 기본 false. 하위호환이라 SAVE_VERSION은 올리지 않는다.
+    meta.endingSeen = !!data.endingSeen;
     // truths: 배열이면서 현재 회수물에 실제로 존재하는 이름만 남기고 중복 제거.
     if (Array.isArray(data.truths)) {
       meta.truths = [...new Set(data.truths.filter((t) => KNOWN_TRUTHS.has(t)))];
@@ -405,6 +409,7 @@
     Object.assign(meta, {
       rp: 0, bagLevel: 1, lightLevel: 1, weaponLevel: 1,
       maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0, extractionCueSeen: false,
+      endingSeen: false,
     });
     renderStartScreen();
   }
@@ -414,7 +419,8 @@
   function nextGoal() {
     if (meta.maxDepth < FLOORS.length) return `${meta.maxDepth + 1}층 도달`;
     if (meta.truths.length < TRUTH_TOTAL) return '진실 조각 더 찾기';
-    return '3층에서 더 많이 들고 나오기';
+    if (!meta.endingSeen) return '진실 확인하기';
+    return '심층 루프 계속';
   }
 
   let run = null;
@@ -928,8 +934,8 @@
 
   const el = {};
   const IDS = [
-    'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail',
-    'btn-enter', 'btn-reset', 'start-art', 'intro-panel', 'intro-line', 'intro-hint', 'enter-fade', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-contract', 'start-goal',
+    'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail', 'screen-ending',
+    'btn-enter', 'btn-reset', 'start-art', 'intro-panel', 'intro-line', 'intro-hint', 'enter-fade', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-codex-tail', 'start-contract', 'start-goal',
     'btn-meta', 'meta-panel', 'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
@@ -940,6 +946,7 @@
     'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
     'up-bag', 'up-light', 'up-weapon', 'btn-again',
     'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
+    'ending-truth-count', 'ending-continue', 'ending-reset',
   ];
   function cacheDom() { IDS.forEach((id) => { el[id] = document.getElementById(id); }); }
 
@@ -1376,6 +1383,12 @@
     // 재시작·기존 세이브: '들어가기' 버튼을 그대로 눌러 새 런을 시작한다.
     if (introMode === 'ready') {
       beginEntering();
+      return;
+    }
+    // 진실을 다 모았지만 엔딩을 아직 확인하지 않았다면, 새 런 대신 엔딩을 먼저 보여준다.
+    if (meta.truths.length >= TRUTH_TOTAL && !meta.endingSeen) {
+      renderEndingScreen();
+      show('screen-ending');
       return;
     }
     startNewRun();
@@ -2411,11 +2424,23 @@
     if (previousTruthCount !== meta.truths.length) {
       log('암시장 정보상이 진실 조각 하나를 넘겼다.', 'win');
     }
+    // 마지막 진실 조각이 이번 판매로 처음 채워졌는가(아래→가득). 매 런 반복 발동을 막는다.
+    const endingUnlocked =
+      previousTruthCount < TRUTH_TOTAL &&
+      meta.truths.length >= TRUTH_TOTAL &&
+      !meta.endingSeen;
+
     resolveContract(buyer);
     saveMeta(); // 판매처 선택 후 자동 저장 (RP·의심도·진실 조각 반영)
     run.streetNews = makeStreetNews(buyer, quote);
+    // RP/의심도/의뢰/저장은 그대로 반영하고, 강화 화면도 미리 렌더한다(계속 버튼이 곧장 보여줄 수 있게).
     renderUpgradeScreen(quote.gained);
-    show('screen-upgrade');
+    if (endingUnlocked) {
+      renderEndingScreen();
+      show('screen-ending');
+    } else {
+      show('screen-upgrade');
+    }
   }
 
   function failRun() {
@@ -2481,8 +2506,7 @@
     el['start-rp'].textContent = meta.rp;
     el['start-depth'].textContent = meta.maxDepth;
     el['start-susp'].textContent = meta.suspicion;
-    el['start-truth-count'].textContent = meta.truths.length;
-    el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
+    renderCodex();
     renderGoals();
     renderContractCards();
 
@@ -2941,6 +2965,24 @@
     });
   }
 
+  // 진실 6/6 엔딩 화면. 조각 개수만 갱신하면 되므로 run 없이도 안전하게 재표시할 수 있다.
+  function renderEndingScreen() {
+    if (el['ending-truth-count']) el['ending-truth-count'].textContent = meta.truths.length;
+  }
+
+  // 엔딩을 '확인함'으로 표시하고, 강화 루프로 돌아가 계속 플레이한다.
+  function acknowledgeEnding() {
+    meta.endingSeen = true;
+    saveMeta();
+    if (run) {
+      renderUpgradeScreen(null); // 판매 내역은 유지하고 목표 문구만 '심층 루프 계속'으로 갱신.
+      show('screen-upgrade');
+    } else {
+      renderStartScreen(); // 시작 화면에서 다시 열어본 경우엔 시작 화면으로 돌아간다.
+      show('screen-start');
+    }
+  }
+
   /* ---------------- 이벤트 배선 ---------------- */
 
   function setMetaPanel(open) {
@@ -2977,17 +3019,33 @@
     el['btn-again'].addEventListener('click', startNewRun);
     el['btn-retry'].addEventListener('click', startNewRun);
     if (el['btn-reset']) el['btn-reset'].addEventListener('click', resetProgress);
+    if (el['ending-continue']) el['ending-continue'].addEventListener('click', acknowledgeEnding);
+    if (el['ending-reset']) el['ending-reset'].addEventListener('click', resetProgress);
   }
 
   /* ---------------- 시작 ---------------- */
+
+  // 진실 조각 진행 상태에 맞춘 코덱스 문구(개수/완성/엔딩 확인 여부에 따라 달라진다).
+  function codexTail() {
+    const n = meta.truths.length;
+    if (n <= 0) return '아직 아무것도 모른다.';
+    if (n < TRUTH_TOTAL) return '조각이 맞지 않는다.';
+    return meta.endingSeen ? '이제 안다.' : '확인해야 한다.';
+  }
+
+  // 시작 화면 코덱스 줄(개수 + 상태 문구 + 완성 표시)을 한곳에서 갱신한다.
+  function renderCodex() {
+    el['start-truth-count'].textContent = meta.truths.length;
+    el['start-codex-tail'].textContent = codexTail();
+    el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
+  }
 
   // 시작 화면 메타 표시를 한곳에서 갱신한다(초기 진입 + 기록 초기화 공용).
   function renderStartScreen() {
     el['start-rp'].textContent = meta.rp;
     el['start-depth'].textContent = meta.maxDepth;
     el['start-susp'].textContent = meta.suspicion;
-    el['start-truth-count'].textContent = meta.truths.length;
-    el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
+    renderCodex();
     renderGoals();
     renderContractCards();
   }
