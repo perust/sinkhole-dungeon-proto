@@ -24,23 +24,32 @@
   ];
 
   // 회수물 6종 — 층이 깊을수록 무겁고(칸) 비싸다(RP).
+  // 아이템 태그 v1:
+  //   heat   — 암시장 판매 시 물건 하나가 더하는 의심도(등급이 아니라 물건별로 다르다).
+  //   noise  — 집는 순간의 소음 압박('low'|'medium'|'high'). 조심/재빨리와 함께 추격 압박을 정한다.
+  //   fragile— 버리고 도망 시 깨져 값이 거의 남지 않는 물건(true).
   const ITEM_TABLE = {
     1: [
-      { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0, truth: '배터리에는 위원회 마크가 지워진 흔적이 있다.' },
-      { name: '배관 부품',     slots: 1, value: 5,  tier: 'common', icon: 1, truth: '도시 배관은 사고 전부터 아래로 이어져 있었다.' },
+      { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0, heat: 3,  noise: 'medium', fragile: false, truth: '배터리에는 위원회 마크가 지워진 흔적이 있다.' },
+      { name: '배관 부품',     slots: 1, value: 5,  tier: 'common', icon: 1, heat: 2,  noise: 'low',    fragile: false, truth: '도시 배관은 사고 전부터 아래로 이어져 있었다.' },
     ],
     2: [
-      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, truth: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
-      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, truth: '연구 노트에는 ‘어둠붙이’가 빛과 소리에 다르게 반응한다고 적혀 있다.' },
+      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, heat: 9,  noise: 'low',    fragile: true,  truth: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
+      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, heat: 7,  noise: 'medium', fragile: true,  truth: '연구 노트에는 ‘어둠붙이’가 빛과 소리에 다르게 반응한다고 적혀 있다.' },
     ],
     3: [
-      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4, truth: '코어는 싱크홀을 막는 장치가 아니라 더 깊게 여는 열쇠다.' },
-      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5, truth: '봉인 유물의 문양은 지상 허가증의 직인과 같다.' },
+      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4, heat: 15, noise: 'high',   fragile: false, truth: '코어는 싱크홀을 막는 장치가 아니라 더 깊게 여는 열쇠다.' },
+      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5, heat: 20, noise: 'high',   fragile: true,  truth: '봉인 유물의 문양은 지상 허가증의 직인과 같다.' },
     ],
   };
 
   const TIER_COLOR = { common: '#7fb0ff', rare: '#b98bff', epic: '#ffd166' };
   const TIER_HEAT = { common: 4, rare: 8, epic: 14 };
+  // 태그 누락 시(오래된 저장/외부 생성 물건) 등급 기준으로 안전하게 보정한다.
+  const TIER_NOISE = { common: 'low', rare: 'medium', epic: 'high' };
+  function itemHeat(it)  { return it && Number.isFinite(it.heat) ? it.heat : (TIER_HEAT[it && it.tier] || 4); }
+  function itemNoise(it) { return it && it.noise ? it.noise : (TIER_NOISE[it && it.tier] || 'medium'); }
+  function itemFragile(it) { return !!(it && it.fragile); }
   const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().length;
 
   // 짧은 의뢰는 "한 번 더 내려가기"의 명분과 판매처 선택의 압박을 만든다.
@@ -708,6 +717,28 @@
     // 그대로 두면 다음 틱에 곧바로 한 칸 움직여 조심히 주운 뒤에도 즉시 조우가 열린다.
     // 큰 소리의 즉시 한 걸음 뒤에도 리셋해 그다음 예약 이동이 바로 오지 않게 한다.
     s.stepCounter = 0;
+  }
+
+  // 집기 소음 처리: 아이템 noise와 조심/재빨리에 따라 추격 압박을 다르게 준다.
+  // - careful: 어느 noise든 즉시 한 칸 끌어당기지 않는다(loud=false).
+  //     · low/medium: 깨우고 이 칸을 기억시키는 정도.
+  //     · high: 조용히 다뤄도 티가 난다 — 이미 두 칸 이상 떨어져 있으면 소리 없이 한 칸 좁혀오고
+  //       경고 한 줄을 남긴다. 붙어 있을 때(dist<=1)는 좁히지 않아 부당한 즉살은 없다.
+  // - quick: medium/high는 큰 소리라 즉시 한 칸 끌어당긴다(loud=true).
+  //     low는 재빨라도 즉시 한 칸까지는 아니다(loud=false) — 대신 호출부에서 위험만 더 오른다.
+  // 반환: 상황 문구에 덧붙일 경고(없으면 '').
+  function applyPickupNoise(nodeId, item, cautious) {
+    const noise = itemNoise(item);
+    const loud = !cautious && noise !== 'low';
+    emitNoise(nodeId, { loud });
+    if (cautious && noise === 'high') {
+      // emitNoise가 방금 추격자를 깨웠으므로(quietSteps=0) 여기서 stalkerAwake는 항상 참 —
+      // 다시 확인하지 않는다. 두 칸 이상 떨어져 있을 때만 소리 없이 한 칸 좁힌다.
+      // 붙어 있을 때(dist<=1)는 좁히지 않으므로 조심히 주웠는데 즉살당하는 일은 없다.
+      if (stalkerDistance() > 1) moveStalkerOneStep({ silent: true });
+      return '금속이 부딪치는 둔탁한 소리가 어둠에 퍼졌다.';
+    }
+    return '';
   }
 
   // 위기 탈출 성공 뒤: 추격자를 플레이어에게서 minDist 엣지 이상 떨어뜨린다.
@@ -1392,6 +1423,14 @@
     return { id, label, sub, tone };
   }
 
+  // 인던 물건 힌트: RP·수치는 감추고 '소리가 클 것 같다 / 깨질 것 같다'만 짧게 흘린다.
+  function itemTraitHint(item) {
+    const bits = [];
+    if (itemNoise(item) === 'high') bits.push('금속이 부딪치면 소리가 클 것 같다');
+    if (itemFragile(item)) bits.push('모서리가 금 가 있다');
+    return bits.join('. ');
+  }
+
   // 물건이 놓인 구역의 조우 큐: 물건과 주변 위협을 한 문장에 함께 묘사한다.
   function itemEncounterCue(node, item) {
     const stat = `${item.slots}칸`;
@@ -1403,7 +1442,9 @@
     } else {
       threat = '주변은 조용하지만, 물건을 드는 순간의 소리가 신경 쓰인다.';
     }
-    return `${item.name}${subjectParticle(item.name)} 발치에 떨어져 있다 — ${stat}. ${threat}`;
+    const hint = itemTraitHint(item);
+    const hintPart = hint ? ` ${hint}.` : '';
+    return `${item.name}${subjectParticle(item.name)} 발치에 떨어져 있다 — ${stat}.${hintPart} ${threat}`;
   }
 
   function maybeStartRoomEvent(node) {
@@ -1412,13 +1453,16 @@
     if (run.currentItem) {
       // 물건이 보이면 선택지를 '집기/지나치기'로 물건에 묶는다 → 뒤따르는 별도 줍기 버튼이 없다.
       const item = run.currentItem;
+      // 서브라벨을 물건 성질에 맞춘다: 깨질 물건은 조심히, 소리 큰 물건은 재빨리 챙길 때 크게 울린다.
+      const carefulSub = itemFragile(item) ? '조용히, 깨지지 않게 다룬다' : '조용하지만 시간이 걸린다';
+      const grabSub = itemNoise(item) === 'high' ? '빠르지만 크게 울린다' : '빠르지만 소리가 난다';
       ev = {
         type: 'item-encounter',
         title: '눈앞의 회수물',
         cue: itemEncounterCue(node, item),
         choices: [
-          eventChoice('careful', '조심히 집는다', '조용하지만 시간이 걸린다', 'good'),
-          eventChoice('grab', '재빨리 챙긴다', '빠르지만 소리가 난다', 'danger'),
+          eventChoice('careful', '조심히 집는다', carefulSub, 'good'),
+          eventChoice('grab', '재빨리 챙긴다', grabSub, 'danger'),
           eventChoice('skip', '그냥 지나간다', '건드리지 않는다'),
         ],
       };
@@ -1685,16 +1729,18 @@
         playGrabFx();
         const firstGrab = !run.chasing;
         run.chasing = true;
+        // 소음은 아이템 noise + 조심/재빨리로 결정한다(applyPickupNoise 참고). run.chasing 판정 뒤에 호출.
+        const noiseWarn = applyPickupNoise(node.id, item, cautious);
         if (cautious) {
           run.danger = firstGrab ? Math.max(run.danger, GRAB_DANGER_BUMP) : Math.min(100, run.danger + GRAB_DANGER_BUMP);
           msg = `숨을 죽이고 ${item.name}${objectParticle(item.name)} 천천히 가방에 넣었다.`;
+          if (noiseWarn) msg += ` ${noiseWarn}`; // 소리 큰 물건은 조심해도 티가 난다.
         } else {
           run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP + 4);
           const dir = reversePathDirection(node);
           const cue = dir ? `${dir}에서 발소리가 붙는다.` : '뒤쪽에서 발소리가 붙는다.';
           msg = `${item.name}${objectParticle(item.name)} 재빨리 낚아챘다. ${cue}`;
         }
-        emitNoise(node.id, { loud: choiceId === 'grab' }); // 낚아채면 큰 소리, 조심히 넣으면 작은 소리.
         maybeQueueBagAlert();
         maybeQueueLightAlert();
         maybeQueueMentalAlert();
@@ -1983,24 +2029,27 @@
     run.currentItem = null;
     run.light = Math.max(0, run.light - GRAB_LIGHT_COST);
     playGrabFx();
-    if (!run.chasing) {
+    const firstGrab = !run.chasing;
+    // 기본 줍기(대기 이벤트 없는 일반 물건)는 조심스러운 손놀림이다: 아이템 noise를 반영하되
+    // 낚아채기처럼 즉시 한 칸 끌어당기지는 않는다. 소리 큰 물건이면 경고 한 줄이 붙는다.
+    // run.chasing 판정(firstGrab) 뒤에 호출한다 — emitNoise가 run.chasing을 켜기 때문.
+    const noiseWarn = applyPickupNoise(node.id, item, true);
+    const tail = noiseWarn ? ` ${noiseWarn}` : '';
+    if (firstGrab) {
       run.chasing = true;
       run.danger = Math.max(run.danger, GRAB_DANGER_BUMP);
       const cue = pickupThreatCue(node);
-      run.lastAction = `${item.name}${objectParticle(item.name)} 집었다. ${cue}`;
-      log(`집었다. ${cue}`, 'hot');
+      run.lastAction = `${item.name}${objectParticle(item.name)} 집었다. ${cue}${tail}`;
+      log(`집었다. ${cue}${tail}`, 'hot');
       showDialogue(run.lastAction, 'hot');
     } else {
       run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
       const dir = reversePathDirection(node);
       const cue = dir ? `${dir}에서 발소리가 가까워진다.` : '젖은 발소리가 가까워진다.';
-      run.lastAction = `${item.name}까지 챙겼다. ${cue}`;
-      log(`${item.name}까지 챙겼다. ${cue}`, 'hot');
+      run.lastAction = `${item.name}까지 챙겼다. ${cue}${tail}`;
+      log(`${item.name}까지 챙겼다. ${cue}${tail}`, 'hot');
       showDialogue(run.lastAction, 'hot');
     }
-    // 기본 줍기(대기 이벤트 없는 일반 물건)는 조심스러운 손놀림이다: 추격자를 깨워 이 칸을
-    // 기억시키되, 낚아채기처럼 즉시 한 칸 끌어당기지는 않는다(작은 소리).
-    emitNoise(node.id, { loud: false });
     maybeQueueBagAlert();
     maybeQueueLightAlert();
     maybeQueueMentalAlert();
@@ -2032,14 +2081,16 @@
     run.danger = Math.max(0, run.danger * DROP_DANGER_FACTOR - DROP_DANGER_MINUS);
     divertStalkerToAdjacent(); // 던진 짐 쪽으로 추격자의 관심을 돌린다.
     const droppedObject = `${dropped.name}${objectParticle(dropped.name)}`;
+    // 깨지는 물건을 미끼로 던지면 파손된다 — 되찾는 기능은 없으므로 회수·잔존가치를 암시하지 않는다.
+    const shatter = itemFragile(dropped) ? ' 깨지는 소리가 났다. 온전하게 남지는 않을 것 같다.' : '';
     if (run.bag.length === 0) {
       run.chasing = false;
-      run.lastAction = `${droppedObject} 던졌다. 발소리가 멀어진다.`;
-      log(`${droppedObject} 던졌다. 발소리가 멀어진다.`);
+      run.lastAction = `${droppedObject} 던졌다. 발소리가 멀어진다.${shatter}`;
+      log(`${droppedObject} 던졌다. 발소리가 멀어진다.${shatter}`);
       showDialogue(run.lastAction);
     } else {
-      run.lastAction = `${droppedObject} 미끼로 던졌다. 발소리와 거리가 조금 벌어진다.`;
-      log(`${droppedObject} 미끼로 던졌다. 발소리와 거리가 조금 벌어진다.`);
+      run.lastAction = `${droppedObject} 미끼로 던졌다. 발소리와 거리가 조금 벌어진다.${shatter}`;
+      log(`${droppedObject} 미끼로 던졌다. 발소리와 거리가 조금 벌어진다.${shatter}`);
       showDialogue(run.lastAction);
     }
     render();
@@ -2335,7 +2386,8 @@
     if (buyer === 'committee') {
       return { gained: Math.ceil(raw * 0.72), suspDelta: -Math.min(10, 2 + run.bag.length * 2) };
     }
-    const heat = run.bag.reduce((sum, it) => sum + TIER_HEAT[it.tier], 0);
+    // 암시장 의심도는 물건별 heat 합(등급이 아니라 물건 태그). 태그 없으면 등급으로 보정.
+    const heat = run.bag.reduce((sum, it) => sum + itemHeat(it), 0);
     return { gained: Math.ceil(raw * 1.35), suspDelta: heat };
   }
 
