@@ -316,6 +316,40 @@
     weapon: { label: '장비',  cost: lv => 10 * lv },
   };
 
+  /* ---------------- 생존자 v1 ---------------- */
+  // 던전에서 구출해 지상으로 데려온 사람들. 런을 넘어 유지되며(meta.survivors),
+  // 각자 하나의 영구 효과를 준다. v1은 정비공(장비 강화 할인)·의무병(기절 후유증 완화) 둘.
+  const SURVIVORS = {
+    mechanic: {
+      id: 'mechanic',
+      name: '정비공',
+      // 방에서 뜨는 이벤트 문구 — 시적이지 않고 구체적으로.
+      eventTitle: '갇힌 사람',
+      eventCue: '휘어진 사물함 뒤에서 둔한 두드림이 반복된다. 좁은 틈으로 흙 묻은 손이 뻗어 나와 허공을 더듬는다.',
+      rescueSub: '사물함을 비틀어 연다',
+      rescueLog: '휘어진 사물함을 비틀어 열었다. 정비공이라던 사람이 기어 나와 숨을 몰아쉰다. 이제부터 장비를 싸게 손봐 준다.',
+    },
+    medic: {
+      id: 'medic',
+      name: '의무병',
+      eventTitle: '깔린 사람',
+      eventCue: '무너진 선반 밑에서 누군가 다리가 눌린 채 낮게 신음한다. 비상등 불빛에 창백한 얼굴이 스친다.',
+      rescueSub: '선반을 들어 다리를 뺀다',
+      rescueLog: '선반을 들어 올려 다리를 빼냈다. 의무병이라던 사람이 절뚝이며 따라붙는다. 다음에 쓰러져도 뒤처리를 도와줄 것이다.',
+    },
+  };
+  const SURVIVOR_IDS = Object.keys(SURVIVORS);
+  const KNOWN_SURVIVORS = new Set(SURVIVOR_IDS);
+
+  const MECHANIC_DISCOUNT = 0.25;        // 정비공: 장비(weapon) 강화 비용을 이 비율만큼 깎는다
+  const MEDIC_SUSPICION_RELIEF = 2;      // 의무병: 기절 시 오르는 의심도를 이만큼 덜어낸다(양수 델타에만)
+  const MEDIC_CONSOLATION_RATE = 0.15;   // 의무병: 잃은 짐 값의 이 비율만큼 위로 보상을 더 챙겨준다
+
+  const SURVIVOR_EVENT_CHANCE = 0.16;    // 방 도착 시 생존자 조우가 열릴 확률(드물게)
+  const SURVIVOR_RESCUE_LIGHT = 8;       // 구출: 끌어내느라 드는 조명
+  const SURVIVOR_RESCUE_MENTAL = 5;      // 구출: 끌어내느라 드는 멘탈
+  const SURVIVOR_RESCUE_DANGER = 6;      // 구출: 소음으로 오르는 위험
+
   /* ---------------- 상태 ---------------- */
 
   const meta = {
@@ -330,7 +364,24 @@
     contractIndex: 0,
     extractionCueSeen: false,
     endingSeen: false,
+    survivors: [],   // 구출해 지상으로 데려온 생존자 id 목록(런을 넘어 유지)
   };
+
+  const hasSurvivor = (id) => meta.survivors.includes(id);
+  // 아직 구출하지 않은 생존자 중 하나를 고른다(중복 방지). 없으면 null.
+  function nextUnrescuedSurvivor() {
+    const pool = SURVIVOR_IDS.filter((id) => !hasSurvivor(id));
+    if (!pool.length) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  // 강화 비용: 정비공을 구출했으면 장비(weapon) 강화가 싸진다(결정적).
+  function upgradeCost(type) {
+    const base = UPGRADES[type].cost(meta[type + 'Level']);
+    if (type === 'weapon' && hasSurvivor('mechanic')) {
+      return Math.max(1, Math.round(base * (1 - MECHANIC_DISCOUNT)));
+    }
+    return base;
+  }
 
   /* ---------------- 저장 / 이어하기 ---------------- */
   // localStorage에 메타(런을 넘는 영구 자산)만 저장한다. 런 상태는 저장하지 않는다.
@@ -379,6 +430,7 @@
         contractIndex: meta.contractIndex,
         extractionCueSeen: !!meta.extractionCueSeen,
         endingSeen: !!meta.endingSeen,
+        survivors: meta.survivors,
       };
       window.localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -416,6 +468,10 @@
     if (Array.isArray(data.truths)) {
       meta.truths = [...new Set(data.truths.filter((t) => KNOWN_TRUTHS.has(t)))];
     }
+    // survivors: 구버전 저장값에는 없다 → 기본 []. 알려진 id만 남기고 중복 제거(하위호환).
+    if (Array.isArray(data.survivors)) {
+      meta.survivors = [...new Set(data.survivors.filter((id) => KNOWN_SURVIVORS.has(id)))];
+    }
   }
 
   function clearSave() {
@@ -425,12 +481,12 @@
 
   // '기록 초기화' — 저장값을 지우고 meta를 출고 상태로 되돌린다.
   function resetProgress() {
-    if (!window.confirm('모든 기록(RP·강화·깊이·의심도·진실 조각)을 지울까요?')) return;
+    if (!window.confirm('모든 기록(RP·강화·깊이·의심도·진실 조각·생존자)을 지울까요?')) return;
     clearSave();
     Object.assign(meta, {
       rp: 0, bagLevel: 1, lightLevel: 1, weaponLevel: 1,
       maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0, extractionCueSeen: false,
-      endingSeen: false,
+      endingSeen: false, survivors: [],
     });
     renderStartScreen();
   }
@@ -1030,6 +1086,7 @@
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
     'buy-committee', 'buy-black', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
+    'start-survivors',
     'up-bag', 'up-light', 'up-weapon', 'btn-again',
     'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
     'ending-truth-count', 'ending-continue', 'ending-reset',
@@ -1554,6 +1611,32 @@
     return loot && node && loot.nodeId === node.id ? loot : null;
   }
 
+  // 생존자 조우: 아직 구출 안 한 사람이 남아 있을 때만, 드물게 이 방에서 열린다.
+  // 물건이 없는 방에서만 호출되므로 회수물 이벤트를 밀어내지 않는다. 열면 true.
+  function maybeStartSurvivorEvent(node) {
+    if (!node || Math.random() >= SURVIVOR_EVENT_CHANCE) return false;
+    const id = nextUnrescuedSurvivor();
+    if (!id) return false; // 둘 다 구출했으면 이벤트 없음
+    const s = SURVIVORS[id];
+    node.roomEventResolved = true;
+    run.pendingEvent = {
+      type: 'survivor',
+      survivorId: id,
+      title: s.eventTitle,
+      cue: s.eventCue,
+      node: node.id,
+      tone: 'hot',
+      choices: [
+        eventChoice('rescue', '꺼내준다', s.rescueSub, 'good'),
+        eventChoice('mark', '위치만 표시한다', '두고 표시만 남긴다'),
+        eventChoice('pass', '그냥 지나간다', '못 본 척 지나친다'),
+      ],
+    };
+    run.lastAction = s.eventCue;
+    log(s.eventCue, 'hot');
+    return true;
+  }
+
   function maybeStartRoomEvent(node) {
     if (!node) return;
     // 버린 물건은 이미 방 이벤트를 끝낸 칸이라도 다시 집을 수 있어야 하므로 roomEventResolved 앞에서 처리한다.
@@ -1577,6 +1660,8 @@
       return;
     }
     if (node.roomEventResolved || node.kind === 'entry' || node.kind === 'stairs') return;
+    // 생존자 조우 v1: 물건이 없는 방에서만 드물게 연다(물건 이벤트를 밀어내지 않는다).
+    if (!run.currentItem && maybeStartSurvivorEvent(node)) return;
     let ev = null;
     if (run.currentItem) {
       // 물건이 보이면 선택지를 '집기/지나치기'로 물건에 묶는다 → 뒤따르는 별도 줍기 버튼이 없다.
@@ -1917,6 +2002,28 @@
       } else {
         run.danger = Math.max(0, run.danger - 1);
         msg = '감시소는 건드리지 않고 지나쳤다. 꺼진 감시등이 등 뒤에 남는다.';
+      }
+    } else if (ev.type === 'survivor') {
+      const s = SURVIVORS[ev.survivorId] || {};
+      if (choiceId === 'rescue') {
+        // 구출: 빛·멘탈을 쓰고 소음이 나지만, 생존자를 지상으로 데려간다(영구 효과 해금).
+        run.light = Math.max(0, run.light - SURVIVOR_RESCUE_LIGHT);
+        run.mental = Math.max(0, run.mental - SURVIVOR_RESCUE_MENTAL);
+        run.danger = Math.min(100, run.danger + SURVIVOR_RESCUE_DANGER);
+        emitNoise(node.id, { loud: false }); // 끌어내는 소리 — 작지 않은 소음
+        if (!hasSurvivor(ev.survivorId)) {
+          meta.survivors.push(ev.survivorId);
+          saveMeta(); // 구출 즉시 저장 — 이번 런이 실패로 끝나도 사람은 남는다
+        }
+        msg = s.rescueLog || '갇혀 있던 사람을 끌어냈다.';
+      } else if (choiceId === 'mark') {
+        // 위치만 표시: 구출하지 않는다. v1은 되돌아와도 이 방에 다시 열리지 않는다.
+        run.mental = Math.max(0, run.mental - 2);
+        run.danger = Math.min(100, run.danger + 2);
+        msg = '지금은 손이 없다. 벽에 표식을 긁어 위치만 남기고 물러났다.';
+      } else {
+        run.danger = Math.max(0, run.danger - 1);
+        msg = '못 본 척 지나쳤다. 두드림 소리가 등 뒤에서 한동안 이어진다.';
       }
     } else if (ev.type === 'item-encounter') {
       const item = run.currentItem;
@@ -2724,11 +2831,19 @@
     stopTick();
     const lost = bagValue();
     const outcome = RECOVERY_OUTCOMES[Math.floor(Math.random() * RECOVERY_OUTCOMES.length)];
-    const consolation = lost > 0 ? Math.max(0, Math.round(lost * outcome.rpRate)) : 0;
+    // 의무병 구출 시: 오르는 의심도를 덜어내고(양수 델타만), 위로 보상을 조금 더 챙겨준다.
+    const medic = hasSurvivor('medic');
+    let consolation = lost > 0 ? Math.max(0, Math.round(lost * outcome.rpRate)) : 0;
+    let suspDelta = outcome.suspDelta;
+    let medicBonus = 0;
+    if (medic) {
+      if (suspDelta > 0) suspDelta = Math.max(0, suspDelta - MEDIC_SUSPICION_RELIEF);
+      if (lost > 0) { medicBonus = Math.max(1, Math.round(lost * MEDIC_CONSOLATION_RATE)); consolation += medicBonus; }
+    }
     const previousSuspicion = meta.suspicion;
     meta.rp += consolation;
     meta.totalEarned += consolation;
-    meta.suspicion = Math.max(0, Math.min(99, meta.suspicion + outcome.suspDelta));
+    meta.suspicion = Math.max(0, Math.min(99, meta.suspicion + suspDelta));
     saveMeta(); // 실패 보상 후 자동 저장
     el['fail-recovery'].innerHTML = `<b>${outcome.elapsed}</b><span>${outcome.title}</span><p>${outcome.body}</p>`;
     const suspChange = meta.suspicion - previousSuspicion;
@@ -2739,6 +2854,7 @@
         ? `잃은 짐 ${lost} RP · 남은 조각 +${consolation} RP`
         : '빈손이라 잃은 회수품은 없었다.',
       outcome.loss,
+      medic ? `의무병이 상처를 감싸고 뒤처리를 도왔다${medicBonus > 0 ? ` (+${medicBonus} RP)` : ''}.` : '',
       `의심도 ${suspText}`,
     ].filter(Boolean).map((line) => `<div>${line}</div>`).join('');
     el['fail-susp'].textContent = meta.suspicion;
@@ -2752,7 +2868,7 @@
   function buyUpgrade(type) {
     if (run.bought) return;
     const lvKey = type + 'Level';
-    const cost = UPGRADES[type].cost(meta[lvKey]);
+    const cost = upgradeCost(type); // 정비공 구출 시 장비 강화는 할인가로 계산된다
     if (meta.rp < cost) return;
     meta.rp -= cost;
     meta[lvKey] += 1;
@@ -3239,15 +3355,16 @@
       el['truth-news'].textContent = '';
     }
 
-    // 강화 버튼 3종
+    // 강화 버튼 3종. 정비공을 구출했으면 장비 설명에 할인을 자연스럽게 덧붙인다.
+    const weaponSub = hasSurvivor('mechanic') ? `들키는 속도 -25% · 정비공 할인` : `들키는 속도 -25%`;
     const defs = [
       ['up-bag',    'bag',    `가방 넓히기`,  `${bagCap()}칸 → ${bagCap() + 2}칸`],
       ['up-light',  'light',  `조명 손보기`,  `최대 조명 +35`],
-      ['up-weapon', 'weapon', `장비 개조`,  `들키는 속도 -25%`],
+      ['up-weapon', 'weapon', `장비 개조`,  weaponSub],
     ];
     defs.forEach(([id, type, title, sub]) => {
       const lvKey = type + 'Level';
-      const cost = UPGRADES[type].cost(meta[lvKey]);
+      const cost = upgradeCost(type);
       const btn = el[id];
       const affordable = meta.rp >= cost && !run.bought;
       btn.disabled = !affordable;
@@ -3338,12 +3455,23 @@
     el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
   }
 
+  // 구출한 생존자를 시작 화면에 짧게 표시한다(없으면 줄을 숨긴다).
+  function renderStartSurvivors() {
+    const line = el['start-survivors'];
+    if (!line) return;
+    const names = meta.survivors.map((id) => SURVIVORS[id] && SURVIVORS[id].name).filter(Boolean);
+    if (!names.length) { line.hidden = true; line.textContent = ''; return; }
+    line.hidden = false;
+    line.innerHTML = `구출한 생존자 <b>${names.length}</b>명 · <b>${names.join(', ')}</b>`;
+  }
+
   // 시작 화면 메타 표시를 한곳에서 갱신한다(초기 진입 + 기록 초기화 공용).
   function renderStartScreen() {
     el['start-rp'].textContent = meta.rp;
     el['start-depth'].textContent = meta.maxDepth;
     el['start-susp'].textContent = meta.suspicion;
     renderCodex();
+    renderStartSurvivors();
     renderGoals();
     renderContractCards();
   }
