@@ -85,6 +85,15 @@
     '명단이 스친다. 회수자 몇 사람 이름 옆에 붉은 표시가 찍혀 있다.',
   ];
 
+  // 출구 선택 v1: 지상으로 나가는 세 갈래 길. 보정값은 결정적(무작위 없음)이라 판매 견적에 그대로 반영된다.
+  const EXIT_CHECKPOINT_HEAT = 12;      // 이 이상 뜨거운 짐이면 공식 출구 검문대가 걸고 넘어진다
+  const EXIT_CHECKPOINT_SUSP = 45;      // 지상 의심도가 이 이상이어도 검문이 깐깐해진다
+  const EXIT_CHECKPOINT_SUSP_ADD = 3;   // 공식 출구 검문에 걸렸을 때 오르는 의심도
+  const EXIT_CRACK_SUSP_RELIEF = 2;     // 균열 출구로 검문을 피해 덜어내는 의심도
+  const EXIT_SCRATCH_RATE = 0.15;       // 균열 출구에서 파손되기 쉬운 물건이 긁혀 깎이는 값 비율
+  const EXIT_PASSAGE_FEE = 8;           // 암시장 통로 통행료(RP)
+  const EXIT_PASSAGE_BLACK_RELIEF = 4;  // 암시장 통로로 뒷골목에 바로 붙어 줄어드는 암시장 의심도
+
   const FLOOR_OPEN_CUE = [
     '아래에서 찬바람이 올라온다.',
     '벽이 미세하게 떨린다.',
@@ -477,6 +486,8 @@
       holdEvent: null,     // 활성 몬스터 대기 이벤트({type:'cross'|'ambush', node})
       pendingEvent: null,  // 방 도착 후 플레이어가 고르는 짧은 환경 이벤트
       returnWalk: false,   // 귀환 걷기 연출 진행 중(마지막 탭에서 지상으로 나간다)
+      exitRoute: 'official', // 지상으로 나가는 길: official|crack|blackpass (판매처 선택 전에 고른다)
+      exitNote: '',        // 선택한 출구의 결과 문구(강화 화면 요약에 노출)
       monsterCrisisCount: 0,
       previousNodeId: null,
       failContext: '',
@@ -1017,7 +1028,8 @@
     'bag-slots', 'choice-cue', 'mini-map', 'recovery-point', 'chaser', 'stage', 'stage-situation', 'dialogue-card', 'dialogue-copy', 'depth-rail', 'log',
     'btn-grab', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
-    'buy-committee', 'buy-black', 'sale-buyer', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
+    'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
+    'buy-committee', 'buy-black', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
     'up-bag', 'up-light', 'up-weapon', 'btn-again',
     'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
     'ending-truth-count', 'ending-continue', 'ending-reset',
@@ -2601,31 +2613,76 @@
     run.lastSale = run.bag.slice();
     run.chasing = false;
     run.bought = false;
-    if (run.lastSale.length === 0) {
-      run.lastBuyer = 'committee';
-      run.lastTruth = null;
-      resolveContract('committee');
-      run.streetNews = '공보: 빈손 귀환자는 빠르게 검문대를 통과했다.';
-      renderUpgradeScreen(0);
-      show('screen-upgrade');
-      return;
-    }
+    // 빈손 귀환도 판매 화면을 거친다: 출구 경로를 고르고 판매처(위원회/암시장)를 눌러야 강화로 넘어간다.
+    // chooseBuyer가 raw 0을 안전 처리하므로 빈 가방이어도 문제없이 진행된다.
     renderReturnScreen();
     show('screen-return');
   }
 
+  // 선택한 출구가 판매 견적에 더하는 결정적 보정. 물건은 파괴하지 않고 값만 조정한다.
+  // gainDelta는 gained에 접어 넣어(통행료·긁힘 포함) chooseBuyer에서 딱 한 번만 반영된다.
+  function routeEffect() {
+    const route = run.exitRoute || 'official';
+    if (route === 'crack') {
+      const fragileValue = run.bag.reduce((s, it) => s + (itemFragile(it) ? it.value : 0), 0);
+      const scratch = Math.round(fragileValue * EXIT_SCRATCH_RATE);
+      return {
+        route,
+        suspDelta: -EXIT_CRACK_SUSP_RELIEF,
+        gainDelta: -scratch,
+        blackSuspRelief: 0,
+        note: scratch > 0
+          ? `균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번 짐은 -${scratch} RP.`
+          : '균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번엔 긁힐 게 없었다.',
+      };
+    }
+    if (route === 'blackpass') {
+      // 빈손이면 통행료를 받지 않는다. 견적에서 깎을 짐값이 없으니 gainDelta도 0으로 둔다.
+      const noCargo = bagValue() <= 0;
+      return {
+        route,
+        suspDelta: 0,
+        gainDelta: noCargo ? 0 : -EXIT_PASSAGE_FEE,
+        blackSuspRelief: EXIT_PASSAGE_BLACK_RELIEF,
+        note: noCargo
+          ? '암시장 통로 — 빈손이라 통행료를 받지 않았다. 바로 뒷골목에 붙어 꼬리가 덜 남는다.'
+          : `암시장 통로 — 통행료 -${EXIT_PASSAGE_FEE} RP로 바로 뒷골목에 붙어 꼬리가 덜 남는다.`,
+      };
+    }
+    const heatTotal = run.bag.reduce((s, it) => s + itemHeat(it), 0);
+    const checkpoint = heatTotal >= EXIT_CHECKPOINT_HEAT || meta.suspicion >= EXIT_CHECKPOINT_SUSP;
+    return {
+      route,
+      suspDelta: checkpoint ? EXIT_CHECKPOINT_SUSP_ADD : 0,
+      gainDelta: 0,
+      blackSuspRelief: 0,
+      note: checkpoint
+        ? '공식 출구 — 안전하지만 검문이 있다. 짐이 뜨거워 검문대가 의심도를 조금 올렸다.'
+        : '공식 출구 — 안전하지만 검문이 있다. 이번엔 무사히 통과했다.',
+    };
+  }
+
   function saleQuote(buyer) {
     const raw = bagValue();
+    const eff = routeEffect();
+    let gained, suspDelta;
     if (buyer === 'committee') {
-      return { gained: Math.ceil(raw * 0.72), suspDelta: -Math.min(10, 2 + run.bag.length * 2) };
+      gained = Math.ceil(raw * 0.72);
+      suspDelta = -Math.min(10, 2 + run.bag.length * 2);
+    } else {
+      // 암시장 의심도는 물건별 heat 합(등급이 아니라 물건 태그). 태그 없으면 등급으로 보정.
+      const heat = run.bag.reduce((sum, it) => sum + itemHeat(it), 0);
+      gained = Math.ceil(raw * 1.35);
+      suspDelta = eff.blackSuspRelief ? Math.max(0, heat - eff.blackSuspRelief) : heat;
     }
-    // 암시장 의심도는 물건별 heat 합(등급이 아니라 물건 태그). 태그 없으면 등급으로 보정.
-    const heat = run.bag.reduce((sum, it) => sum + itemHeat(it), 0);
-    return { gained: Math.ceil(raw * 1.35), suspDelta: heat };
+    gained = Math.max(0, gained + eff.gainDelta);
+    suspDelta += eff.suspDelta;
+    return { gained, suspDelta, note: eff.note, route: eff.route };
   }
 
   function chooseBuyer(buyer) {
     const quote = saleQuote(buyer);
+    run.exitNote = quote.note; // 강화 화면 요약에 출구 결과를 남긴다
     const previousTruthCount = meta.truths.length;
     meta.rp += quote.gained;
     meta.totalEarned += quote.gained;
@@ -3071,6 +3128,7 @@
   }
 
   function renderReturnScreen() {
+    if (!run.exitRoute) run.exitRoute = 'official';
     const list = el['return-list'];
     list.innerHTML = '';
     if (run.lastSale.length === 0) {
@@ -3087,12 +3145,28 @@
     const black = saleQuote('black');
     el['return-susp'].textContent = meta.suspicion;
     el['committee-rp'].textContent = '+' + committee.gained;
-    el['committee-susp'].textContent = committee.suspDelta;
+    el['committee-susp'].textContent = signed(committee.suspDelta);
     el['black-rp'].textContent = '+' + black.gained;
-    el['black-susp'].textContent = '+' + black.suspDelta;
-    el['buy-committee'].disabled = run.lastSale.length === 0;
-    el['buy-black'].disabled = run.lastSale.length === 0;
+    el['black-susp'].textContent = signed(black.suspDelta);
+    // 빈손 귀환이라도 판매처를 골라 계속 진행할 수 있어야 한다(chooseBuyer가 raw 0을 안전 처리).
+    el['buy-committee'].disabled = false;
+    el['buy-black'].disabled = false;
+    renderRouteChoice();
     renderContractCards();
+  }
+
+  function renderRouteChoice() {
+    const routes = [['route-official', 'official'], ['route-crack', 'crack'], ['route-blackpass', 'blackpass']];
+    routes.forEach(([id, route]) => {
+      if (el[id]) el[id].classList.toggle('selected', run.exitRoute === route);
+    });
+    if (el['route-note']) el['route-note'].textContent = routeEffect().note;
+  }
+
+  function chooseRoute(route) {
+    if (!run) return;
+    run.exitRoute = route;
+    renderReturnScreen(); // 견적·의심도·출구 문구를 선택한 길에 맞춰 다시 그린다
   }
 
   function renderStage() {
@@ -3151,6 +3225,7 @@
       }
       el['sale-gain'].textContent = '+' + gained;
     }
+    if (el['run-summary']) el['run-summary'].textContent = run.exitNote || '';
     el['sale-balance'].textContent = meta.rp;
     el['sale-susp'].textContent = meta.suspicion;
     renderGoals();
@@ -3231,6 +3306,9 @@
     el['btn-drop'].addEventListener('click', (event) => { event.stopPropagation(); dropAndFlee(); });
     el['btn-return'].addEventListener('click', (event) => { event.stopPropagation(); attemptReturnToSurface(); });
     if (el['dialogue-card']) el['dialogue-card'].addEventListener('click', handleDialogueCardClick);
+    if (el['route-official']) el['route-official'].addEventListener('click', () => chooseRoute('official'));
+    if (el['route-crack']) el['route-crack'].addEventListener('click', () => chooseRoute('crack'));
+    if (el['route-blackpass']) el['route-blackpass'].addEventListener('click', () => chooseRoute('blackpass'));
     el['buy-committee'].addEventListener('click', () => chooseBuyer('committee'));
     el['buy-black'].addEventListener('click', () => chooseBuyer('black'));
     el['up-bag'].addEventListener('click', () => buyUpgrade('bag'));

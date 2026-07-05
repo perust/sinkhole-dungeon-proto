@@ -782,6 +782,35 @@ body {
 .buyer-sub { color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.35; }
 .buyer-est { color: var(--gold); font-size: 13px; font-weight: 800; }
 .susp-delta { color: var(--warn); }
+
+/* 출구 선택 v1: 판매처 선택 전, 지상으로 나가는 세 갈래 길 */
+.route-choice { margin-top: 12px; }
+.route-hint { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.route-btns { display: flex; gap: 8px; }
+.route-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 6px;
+  border-radius: 12px;
+}
+.route-btn.selected {
+  border-color: rgba(87,224,200,.6);
+  background: rgba(87,224,200,.1);
+  box-shadow: 0 0 14px rgba(87,224,200,.1);
+}
+.route-name { font-size: 13px; font-weight: 800; white-space: nowrap; }
+.route-tag { color: var(--muted); font-size: 11px; font-weight: 600; }
+.route-btn.selected .route-tag { color: var(--accent); }
+.route-note {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
 .sale-buyer {
   margin-bottom: 10px;
   color: var(--accent);

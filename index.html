@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/pixel/player-delver.png" />
   <title>Unlit Halls</title>
-  <link rel="stylesheet" href="styles.css?v=21" />
+  <link rel="stylesheet" href="styles.css?v=22" />
 </head>
 <body>
   <div id="app" class="phone">
@@ -147,6 +147,26 @@
         <div class="sale-list" id="return-list"></div>
         <div class="meta-clock">현재 의심도 <b id="return-susp" class="susp-v">0</b></div>
       </div>
+
+      <div class="route-choice" id="route-choice" aria-label="지상으로 나가는 길">
+        <p class="route-hint">어떻게 지상으로 나갈까?</p>
+        <div class="route-btns">
+          <button id="route-official" class="btn route-btn selected" type="button">
+            <span class="route-name">공식 출구</span>
+            <span class="route-tag">검문 있음</span>
+          </button>
+          <button id="route-crack" class="btn route-btn" type="button">
+            <span class="route-name">균열 출구</span>
+            <span class="route-tag">긁힘 위험</span>
+          </button>
+          <button id="route-blackpass" class="btn route-btn" type="button">
+            <span class="route-name">암시장 통로</span>
+            <span class="route-tag">통행료</span>
+          </button>
+        </div>
+        <div class="route-note" id="route-note">공식 출구 — 안전하지만 검문이 있다. 이번엔 무사히 통과했다.</div>
+      </div>
+
       <div class="contract-card" id="return-contract"></div>
 
       <div class="buyers">
@@ -219,6 +239,6 @@
 
   </div>
 
-  <script src="src/game.js?v=32"></script>
+  <script src="src/game.js?v=33"></script>
 </body>
 </html>
