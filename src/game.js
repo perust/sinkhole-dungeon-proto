@@ -50,7 +50,19 @@
   function itemHeat(it)  { return it && Number.isFinite(it.heat) ? it.heat : (TIER_HEAT[it && it.tier] || 4); }
   function itemNoise(it) { return it && it.noise ? it.noise : (TIER_NOISE[it && it.tier] || 'medium'); }
   function itemFragile(it) { return !!(it && it.fragile); }
+  function itemFamily(it) { return !!(it && it.family); }
   const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().length;
+
+  // 실종자 흔적방 유품 v1: 실종자 방에서만 나오는 가족 keepsake.
+  // ITEM_TABLE 밖에 두어 진실 조각 총량(TRUTH_TOTAL=6)에 영향이 없다. truth 필드가 없어
+  // 암시장에 팔아도 진실 조각을 풀지 않는다(chooseBuyer는 truth 있는 물건만 조각으로 센다).
+  // family:true 태그로 지상 귀환 시 '가족에게 돌려준다' 경로가 열린다. 값·heat는 낮다(개인 유품).
+  const FAMILY_KEEPSAKES = [
+    { name: '가족 사진',     slots: 1, value: 4, tier: 'common', icon: 3, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '사진 뒤에 “아빠 꼭 돌아와”라고 적혀 있다.' },
+    { name: '이름표 목걸이', slots: 1, value: 5, tier: 'common', icon: 0, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '목걸이에 아이 이름과 집 주소가 새겨져 있다.' },
+    { name: '아이 배낭',     slots: 1, value: 3, tier: 'common', icon: 1, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '배낭 안에 반쯤 쓴 색연필과 회수자 출입증이 들어 있다.' },
+  ];
+  function pickFamilyKeepsake() { return { ...FAMILY_KEEPSAKES[Math.floor(Math.random() * FAMILY_KEEPSAKES.length)] }; }
 
   // 짧은 의뢰는 "한 번 더 내려가기"의 명분과 판매처 선택의 압박을 만든다.
   const CONTRACTS = [
@@ -72,6 +84,8 @@
     { key: 'crack',    label: '오른쪽 균열', desc: '젖은 발자국',        style: 'danger', light: -8, danger: 9 },
     // 위원회 감시소: 드물게 등장(uncommon). 의심도가 높으면 단말/기록 조작이 위험해진다.
     { key: 'watchpost',label: '위원회 감시소', desc: '꺼진 감시등',        style: '',       light: -2, danger: 2, uncommon: true },
+    // 실종자 흔적방: 드물게 등장(uncommon). 벽에 붙은 사진/이름표/배낭 — 유품(family) 회수와 가족 반환 루트로 이어진다.
+    { key: 'missing-trace', label: '실종자 흔적', desc: '벽에 붙은 사진',  style: '',       light: -1, danger: 1, uncommon: true },
   ];
   const ENTRY_KIND  = { key: 'entry',  label: '입구',       desc: '',            style: '', light: 0, danger: 0 };
   const STAIRS_KIND = { key: 'stairs', label: '계단 아래로', desc: '더 깊은 냉기', style: '', light: 0, danger: 0 };
@@ -85,6 +99,14 @@
     '명단이 스친다. 회수자 몇 사람 이름 옆에 붉은 표시가 찍혀 있다.',
   ];
 
+  // 실종자 흔적방 튜닝값과 단서 로그. '사진만 확인'하면 단서 한 줄만 흘린다 — 진실 조각은 주지 않는다.
+  const MISSING_TRACE_SPAWN_CHANCE = 0.24;  // 층마다 실종자 흔적방이 나타날 확률(드물게)
+  const MISSING_TRACE_LOGS = [
+    '사진 뒤에 날짜가 적혀 있다 — 싱크홀이 열리기 사흘 전. 이 회수자는 그날 이후로 올라오지 않았다.',
+    '이름표에 “3구역 회수반”이 찍혀 있다. 위원회 실종 명단에서 지워진 번호다.',
+    '편지 한 줄만 읽힌다 — “여보, 이번이 마지막이야.” 다음 줄은 물에 번져 지워졌다.',
+  ];
+
   // 출구 선택 v1: 지상으로 나가는 세 갈래 길. 보정값은 결정적(무작위 없음)이라 판매 견적에 그대로 반영된다.
   const EXIT_CHECKPOINT_HEAT = 12;      // 이 이상 뜨거운 짐이면 공식 출구 검문대가 걸고 넘어진다
   const EXIT_CHECKPOINT_SUSP = 45;      // 지상 의심도가 이 이상이어도 검문이 깐깐해진다
@@ -93,6 +115,10 @@
   const EXIT_SCRATCH_RATE = 0.15;       // 균열 출구에서 파손되기 쉬운 물건이 긁혀 깎이는 값 비율
   const EXIT_PASSAGE_FEE = 8;           // 암시장 통로 통행료(RP)
   const EXIT_PASSAGE_BLACK_RELIEF = 4;  // 암시장 통로로 뒷골목에 바로 붙어 줄어드는 암시장 의심도
+
+  // 가족 반환 v1: 유품(family 태그)을 가족에게 돌려주는 판매 경로. 암시장/위원회보다 값은 낮지만 의심도가 눅는다.
+  const FAMILY_RETURN_RATE = 0.4;        // 유품 값 중 가족이 사례로 돌려주는 비율(암시장 1.35·위원회 0.72보다 낮다)
+  const FAMILY_RETURN_SUSP_RELIEF = 2;   // 유품 하나를 가족에게 돌려줄 때마다 줄어드는 의심도
 
   const FLOOR_OPEN_CUE = [
     '아래에서 찬바람이 올라온다.',
@@ -381,6 +407,7 @@
     hall: '잔해',
     crack: '균열',
     watchpost: '꺼진 감시등',
+    'missing-trace': '벽에 붙은 사진',
   };
 
   const SURVIVOR_EVENT_CHANCE = 0.16;    // 방 도착 시 생존자 조우가 열릴 확률(드물게)
@@ -1144,8 +1171,19 @@
       applyKind(nodes[watchpostId], watchpostKind);
     }
 
-    // 7) 아이템 배치: 입구/계단/감시소를 제외한 노드 중 2~3개(감시소 이벤트가 물건에 가려지지 않게).
-    const itemSlots = shuffle(others.filter((id) => id !== watchpostId));
+    // 실종자 흔적방도 드물게 등장한다: 감시소가 아닌 비입구/비계단 노드 하나를 흔적방으로 바꾼다(층당 최대 하나).
+    let traceId = -1;
+    const traceKind = NODE_KINDS.find((k) => k.key === 'missing-trace');
+    if (traceKind && Math.random() < MISSING_TRACE_SPAWN_CHANCE) {
+      const traceCandidates = others.filter((id) => id !== watchpostId);
+      if (traceCandidates.length) {
+        traceId = traceCandidates[Math.floor(Math.random() * traceCandidates.length)];
+        applyKind(nodes[traceId], traceKind);
+      }
+    }
+
+    // 7) 아이템 배치: 입구/계단/감시소/흔적방을 제외한 노드 중 2~3개(방 이벤트가 물건에 가려지지 않게).
+    const itemSlots = shuffle(others.filter((id) => id !== watchpostId && id !== traceId));
     const itemCount = Math.min(itemSlots.length, 2 + (Math.random() < 0.5 ? 1 : 0));
     for (let i = 0; i < itemCount; i++) nodes[itemSlots[i]].item = pickFloorItem(floor, nodes[itemSlots[i]]);
 
@@ -1215,7 +1253,7 @@
     'btn-grab', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
-    'buy-committee', 'buy-black', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
+    'buy-committee', 'buy-black', 'buy-family', 'family-rp', 'family-susp', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
     'start-survivors', 'start-mutations',
     'up-bag', 'up-light', 'up-weapon', 'btn-again',
     'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
@@ -1259,6 +1297,7 @@
   }
 
   function makeStreetNews(buyer, quote) {
+    if (buyer === 'family') return '거리 소문: 가족에게 돌아간 유품 때문에, 지상 소문이 조금 누그러졌다.';
     const hot = quote.suspDelta > 10 || meta.suspicion >= 55;
     if (buyer === 'black' && hot) return '뉴스: “싱크홀 밀반출 급증”… 검문 드론이 한 블록 가까워졌다.';
     if (buyer === 'black') return '소문: 암시장 매입가가 올랐다. 대신 허가소가 이름을 묻기 시작했다.';
@@ -1872,6 +1911,19 @@
       if (hasSurvivor('insider')) {
         ev.choices.splice(1, 0, eventChoice('seal-code', '봉쇄 코드를 넣는다', '낡은 직원 코드를 쓴다', 'good'));
       }
+    } else if (node.kind === 'missing-trace') {
+      // 실종자 흔적방 v1: 벽의 사진/이름표/배낭/가족 편지. 유품(family)을 조심히 챙기거나, 사진만 확인하거나, 둔다.
+      // 피로가 적고, 선택 큐에 대가(빛·멘탈)를 짧게 드러낸다.
+      ev = {
+        type: 'missing-trace',
+        title: '실종자 흔적',
+        cue: '벽에 사진 몇 장과 이름표가 붙어 있다. 그 아래 작은 배낭이 놓였고, 접힌 가족 편지가 삐져나와 있다. 회수자 한 사람이 여기서 멈춘 것 같다.',
+        choices: [
+          eventChoice('keep', '조심히 챙긴다', '유품을 조용히 챙긴다 · 빛·멘탈 조금', 'good'),
+          eventChoice('photo', '사진만 확인한다', '이름과 날짜만 눈에 담는다'),
+          eventChoice('leave', '그냥 둔다', '건드리지 않고 지나친다'),
+        ],
+      };
     } else if (node.kind === 'crack' || node.kind === 'corridor') {
       ev = {
         type: 'footprints',
@@ -2168,6 +2220,28 @@
       } else {
         run.danger = Math.max(0, run.danger - 1);
         msg = '감시소는 건드리지 않고 지나쳤다. 꺼진 감시등이 등 뒤에 남는다.';
+      }
+    } else if (ev.type === 'missing-trace') {
+      if (choiceId === 'keep') {
+        // 조심히 챙긴다: 빛·멘탈을 조금 쓰고 유품을 드러낸다. 실제 줍기는 일반 줍기 흐름이 맡는다(그때 소음은 low).
+        run.light = Math.max(0, run.light - 3);
+        run.mental = Math.max(0, run.mental - 2);
+        if (!run.currentItem && !node.itemTaken) {
+          const keepsake = pickFamilyKeepsake();
+          node.item = keepsake;
+          run.currentItem = keepsake;
+          msg = `벽에서 ${keepsake.name}${objectParticle(keepsake.name)} 조심히 떼어 냈다. ${keepsake.familyNote}`;
+        } else {
+          msg = '남은 흔적을 조용히 정리했다. 더 가져갈 것은 남지 않았다.';
+        }
+      } else if (choiceId === 'photo') {
+        // 사진만 확인: 단서 한 줄, 물건 없음. 진실 조각은 주지 않는다.
+        run.mental = Math.max(0, run.mental - 1);
+        msg = MISSING_TRACE_LOGS[Math.floor(Math.random() * MISSING_TRACE_LOGS.length)];
+      } else {
+        // 그냥 둔다: 물건 없음, 등을 돌린 작은 대가(멘탈).
+        run.mental = Math.max(0, run.mental - 2);
+        msg = '사진도 배낭도 그대로 두고 등을 돌렸다. 이름을 읽지 않은 게 오래 마음에 남는다.';
       }
     } else if (ev.type === 'survivor') {
       const s = SURVIVORS[ev.survivorId] || {};
@@ -2985,6 +3059,16 @@
     if (buyer === 'committee') {
       gained = Math.ceil(raw * 0.72);
       suspDelta = -Math.min(10, 2 + run.bag.length * 2);
+    } else if (buyer === 'family') {
+      // 유품은 가족에게(사례로 값의 일부만), 나머지는 위원회 반납가로 조용히 넘긴다.
+      const familyItems = run.bag.filter(itemFamily);
+      const otherItems = run.bag.filter((it) => !itemFamily(it));
+      const familyRaw = familyItems.reduce((s, it) => s + it.value, 0);
+      const otherRaw = otherItems.reduce((s, it) => s + it.value, 0);
+      gained = Math.ceil(familyRaw * FAMILY_RETURN_RATE) + Math.ceil(otherRaw * 0.72);
+      // 유품 반환 + 조용한 위원회 반납 → 의심도가 눅는다(유품 개수 + 반납 물건 수 기준).
+      const committeeRelief = otherItems.length ? Math.min(10, 2 + otherItems.length * 2) : 0;
+      suspDelta = -(FAMILY_RETURN_SUSP_RELIEF * familyItems.length + committeeRelief);
     } else {
       // 암시장 의심도는 물건별 heat 합(등급이 아니라 물건 태그). 태그 없으면 등급으로 보정.
       const heat = run.bag.reduce((sum, it) => sum + itemHeat(it), 0);
@@ -3007,7 +3091,8 @@
     run.lastTruth = null;
 
     if (buyer === 'black') {
-      const unknown = run.lastSale.find((it) => !meta.truths.includes(it.name));
+      // truth 있는 회수물만 진실 조각이 된다 — 유품(family, truth 없음)은 팔아도 조각을 늘리지 않는다.
+      const unknown = run.lastSale.find((it) => it.truth && !meta.truths.includes(it.name));
       if (unknown) {
         meta.truths.push(unknown.name);
         run.lastTruth = unknown.truth;
@@ -3524,6 +3609,17 @@
     el['committee-susp'].textContent = signed(committee.suspDelta);
     el['black-rp'].textContent = '+' + black.gained;
     el['black-susp'].textContent = signed(black.suspDelta);
+    // 가족 반환 v1: 가방에 유품(family)이 있을 때만 '가족에게 돌려준다' 버튼을 연다(없으면 숨겨 잡동사니를 줄인다).
+    if (el['buy-family']) {
+      const showFamily = run.lastSale.some(itemFamily);
+      el['buy-family'].hidden = !showFamily;
+      el['buy-family'].disabled = !showFamily;
+      if (showFamily) {
+        const family = saleQuote('family');
+        el['family-rp'].textContent = '+' + family.gained;
+        el['family-susp'].textContent = signed(family.suspDelta);
+      }
+    }
     // 빈손 귀환이라도 판매처를 골라 계속 진행할 수 있어야 한다(chooseBuyer가 raw 0을 안전 처리).
     el['buy-committee'].disabled = false;
     el['buy-black'].disabled = false;
@@ -3586,7 +3682,7 @@
   function renderUpgradeScreen(gained) {
     // 판매 내역
     if (gained !== null) {
-      el['sale-buyer'].textContent = run.lastBuyer === 'black' ? '판매처: 암시장' : '판매처: 위원회';
+      el['sale-buyer'].textContent = run.lastBuyer === 'black' ? '판매처: 암시장' : run.lastBuyer === 'family' ? '판매처: 가족 반환' : '판매처: 위원회';
       const list = el['sale-list'];
       list.innerHTML = '';
       if (run.lastSale.length === 0) {
@@ -3692,6 +3788,7 @@
     if (el['route-blackpass']) el['route-blackpass'].addEventListener('click', () => chooseRoute('blackpass'));
     el['buy-committee'].addEventListener('click', () => chooseBuyer('committee'));
     el['buy-black'].addEventListener('click', () => chooseBuyer('black'));
+    if (el['buy-family']) el['buy-family'].addEventListener('click', () => chooseBuyer('family'));
     el['up-bag'].addEventListener('click', () => buyUpgrade('bag'));
     el['up-light'].addEventListener('click', () => buyUpgrade('light'));
     el['up-weapon'].addEventListener('click', () => buyUpgrade('weapon'));

@@ -778,6 +778,12 @@ body {
   border-color: rgba(255,161,74,.55);
   background: rgba(255,161,74,.08);
 }
+/* .buyer-btn은 display:flex라 기본 [hidden] UA 규칙을 덮어쓴다 — 가족 반환 버튼을 숨길 수 있게 명시한다. */
+.buyer-btn[hidden] { display: none; }
+.buyer-btn.family:not(:disabled) {
+  border-color: rgba(120,170,255,.55);
+  background: rgba(120,170,255,.08);
+}
 .buyer-name { font-size: 17px; font-weight: 900; }
 .buyer-sub { color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.35; }
 .buyer-est { color: var(--gold); font-size: 13px; font-weight: 800; }
