@@ -319,7 +319,7 @@
   /* ---------------- 생존자 v1 ---------------- */
   // 던전에서 구출해 지상으로 데려온 사람들. 런을 넘어 유지되며(meta.survivors),
   // 각자 하나의 영구 효과를 준다. 정비공(장비 강화 할인)·의무병(기절 후유증 완화)·
-  // 지도공(갈림길에서 앞쪽 방 미리보기) 셋.
+  // 지도공(갈림길에서 앞쪽 방 미리보기)·전 위원회 직원(감시소 봉쇄 코드·공식 출구 통행 완화) 넷.
   const SURVIVORS = {
     mechanic: {
       id: 'mechanic',
@@ -346,6 +346,14 @@
       rescueSub: '벽판을 뜯어 끌어낸다',
       rescueLog: '휘어진 벽판을 뜯어 그 사람을 끌어냈다. 지도공이라던 이가 젖은 지도를 접어 넣으며 따라붙는다. 이제부터 갈림길마다 앞쪽 방이 뭔지 짚어 준다.',
     },
+    insider: {
+      id: 'insider',
+      name: '전 위원회 직원',
+      eventTitle: '게이트에 낀 사람',
+      eventCue: '부서진 ID 게이트 사이에 팔이 낀 사람이 몸을 비튼다. 찢어진 끈에 위원회 출입증이 매달려 흔들리고, 갈라진 목소리가 봉쇄 코드를 안다며 꺼내 달라고 한다.',
+      rescueSub: '게이트 틈을 벌려 빼낸다',
+      rescueLog: '뒤틀린 ID 게이트를 벌려 그 사람을 빼냈다. 전 위원회 직원이라던 이가 출입증을 움켜쥔 채 따라붙는다. 이제부터 감시소 단말과 지상 검문에서 낡은 직원 코드가 쓸모가 있다.',
+    },
   };
   const SURVIVOR_IDS = Object.keys(SURVIVORS);
   const KNOWN_SURVIVORS = new Set(SURVIVOR_IDS);
@@ -353,6 +361,12 @@
   const MECHANIC_DISCOUNT = 0.25;        // 정비공: 장비(weapon) 강화 비용을 이 비율만큼 깎는다
   const MEDIC_SUSPICION_RELIEF = 2;      // 의무병: 기절 시 오르는 의심도를 이만큼 덜어낸다(양수 델타에만)
   const MEDIC_CONSOLATION_RATE = 0.15;   // 의무병: 잃은 짐 값의 이 비율만큼 위로 보상을 더 챙겨준다
+  const INSIDER_WATCHPOST_RELIEF = 4;    // 전 직원: 감시소에서 낡은 직원 코드로 덜어내는 의심도(결정적)
+  const INSIDER_WATCHPOST_LIGHT = 3;     // 전 직원: 봉쇄 코드를 넣느라 드는 조명(소음·위험은 없음)
+  const INSIDER_CHECKPOINT_RELIEF = 2;   // 전 직원: 공식 출구 검문에서 통행 암구호로 덜어내는 의심도
+
+  // 전 위원회 직원: 감시소 봉쇄 코드로 열면 흘러나오는 봉쇄문/재봉인 단서. 진실 조각은 공짜로 풀지 않는다.
+  const INSIDER_SEAL_LOG = '낡은 직원 코드가 먹혔다. 단말이 순순히 열리고 한 줄이 떠오른다 — “봉쇄문 재봉인은 3단계, 마지막 인증은 현장 직원 코드.” 코드 주인이 옆에서 조용히 고개를 끄덕인다.';
 
   // 지도공: 갈림길에서 앞쪽 방 목적지의 특징을 낮은 정밀도로 미리 보여준다(kind → 짧은 특징어).
   // 계단·물건 유무는 mapperHint에서 따로 처리한다. 좌표·정확한 전리품·추격자 위치는 드러내지 않는다.
@@ -1740,6 +1754,10 @@
           eventChoice('pass', '그냥 지나간다', '건드리지 않는다'),
         ],
       };
+      // 전 위원회 직원을 구출했다면 낡은 직원 코드로 조용히 의심도를 더는 안전한 선택지를 연다.
+      if (hasSurvivor('insider')) {
+        ev.choices.splice(1, 0, eventChoice('seal-code', '봉쇄 코드를 넣는다', '낡은 직원 코드를 쓴다', 'good'));
+      }
     } else if (node.kind === 'crack' || node.kind === 'corridor') {
       ev = {
         type: 'footprints',
@@ -2003,6 +2021,15 @@
           saveMeta();
         }
         msg = '단말을 열어 내 회수 이력을 지웠다. 자판이 딸깍이고, 감시등이 한 번 꺼졌다 켜진다.';
+      } else if (choiceId === 'seal-code' && hasSurvivor('insider')) {
+        // 전 직원의 낡은 직원 코드: 소음·위험 없이 의심도를 조금 덜고 봉쇄문/재봉인 단서 한 줄을 흘린다.
+        // 진실 조각은 공짜로 주지 않는다 — 단서 로그일 뿐.
+        run.light = Math.max(0, run.light - INSIDER_WATCHPOST_LIGHT);
+        if (meta.suspicion > 0) {
+          meta.suspicion = Math.max(0, meta.suspicion - INSIDER_WATCHPOST_RELIEF);
+          saveMeta();
+        }
+        msg = INSIDER_SEAL_LOG;
       } else if (choiceId === 'search') {
         run.light = Math.max(0, run.light - 3);
         if (tense) {
@@ -2780,14 +2807,31 @@
     }
     const heatTotal = run.bag.reduce((s, it) => s + itemHeat(it), 0);
     const checkpoint = heatTotal >= EXIT_CHECKPOINT_HEAT || meta.suspicion >= EXIT_CHECKPOINT_SUSP;
+    const insider = hasSurvivor('insider');
+    let suspAdd = checkpoint ? EXIT_CHECKPOINT_SUSP_ADD : 0;
+    let note;
+    if (checkpoint) {
+      // 전 직원을 구출했다면 미리 넣어 둔 통행 암구호로 오르는 의심도를 조금 덜어낸다.
+      // 다만 완전히 없애진 않는다 — 뜨거운 짐/높은 의심도면 여전히 조금은 오른다.
+      if (insider) {
+        suspAdd = Math.max(0, suspAdd - INSIDER_CHECKPOINT_RELIEF);
+        note = suspAdd > 0
+          ? '공식 출구 — 검문에 걸렸지만, 전 직원이 준비해 둔 통행 암구호로 검문대가 한풀 눅었다.'
+          : '공식 출구 — 검문에 걸렸지만, 전 직원의 통행 암구호에 검문대가 그냥 손을 저었다.';
+      } else {
+        note = '공식 출구 — 안전하지만 검문이 있다. 짐이 뜨거워 검문대가 의심도를 조금 올렸다.';
+      }
+    } else {
+      note = insider
+        ? '공식 출구 — 전 직원이 통행 암구호를 미리 넣어 둬 검문을 매끈하게 통과했다.'
+        : '공식 출구 — 안전하지만 검문이 있다. 이번엔 무사히 통과했다.';
+    }
     return {
       route,
-      suspDelta: checkpoint ? EXIT_CHECKPOINT_SUSP_ADD : 0,
+      suspDelta: suspAdd,
       gainDelta: 0,
       blackSuspRelief: 0,
-      note: checkpoint
-        ? '공식 출구 — 안전하지만 검문이 있다. 짐이 뜨거워 검문대가 의심도를 조금 올렸다.'
-        : '공식 출구 — 안전하지만 검문이 있다. 이번엔 무사히 통과했다.',
+      note,
     };
   }
 
