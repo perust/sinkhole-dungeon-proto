@@ -68,11 +68,22 @@
     { key: 'storage',  label: '낮은 창고',   desc: '먼지 쌓인 선반',     style: 'good',   light: 6,  danger: -2 },
     { key: 'office',   label: '관리실',      desc: '잠긴 캐비닛',        style: '',       light: 0,  danger: 1 },
     { key: 'vent',     label: '환풍구',      desc: '좁고 찬 바람',       style: '',       light: -2, danger: -1 },
-    { key: 'hall',     label: '무너진 통로', desc: '머리 위가 삐걱인다', style: '',       light: -6, danger: 5 },
+    { key: 'hall',     label: '무너진 통로', desc: '내려앉은 콘크리트', style: '',       light: -6, danger: 5 },
     { key: 'crack',    label: '오른쪽 균열', desc: '젖은 발자국',        style: 'danger', light: -8, danger: 9 },
+    // 위원회 감시소: 드물게 등장(uncommon). 의심도가 높으면 단말/기록 조작이 위험해진다.
+    { key: 'watchpost',label: '위원회 감시소', desc: '꺼진 감시등',        style: '',       light: -2, danger: 2, uncommon: true },
   ];
   const ENTRY_KIND  = { key: 'entry',  label: '입구',       desc: '',            style: '', light: 0, danger: 0 };
   const STAIRS_KIND = { key: 'stairs', label: '계단 아래로', desc: '더 깊은 냉기', style: '', light: 0, danger: 0 };
+
+  // 위원회 감시소 튜닝값과 단말 로그. 로그는 진실 조각을 공짜로 풀지 않고 단서 한 줄만 흘린다.
+  const WATCHPOST_SPAWN_CHANCE = 0.28;     // 층마다 감시소가 나타날 확률(드물게)
+  const WATCHPOST_TENSE_SUSPICION = 40;    // 이 이상이면 단말을 뒤지는 게 위험해진다
+  const WATCHPOST_LOGS = [
+    '단말 로그: “회수물은 폐기가 아니라 재봉인 창고로 이송.” 날짜 칸은 지워져 있다.',
+    '깨진 화면에 한 줄이 남아 있다 — “감시등 소등은 상부 지시.” 서명란은 비어 있다.',
+    '명단이 스친다. 회수자 몇 사람 이름 옆에 붉은 표시가 찍혀 있다.',
+  ];
 
   const FLOOR_OPEN_CUE = [
     '아래에서 찬바람이 올라온다.',
@@ -920,16 +931,24 @@
       addEdge(nodes, extraCandidates[e][0], extraCandidates[e][1]);
     }
 
-    // 6) 방 유형 배정.
+    // 6) 방 유형 배정. 흔한 유형만 기본 풀에 넣고, 감시소 같은 드문 유형은 따로 주입한다.
     applyKind(nodes[0], ENTRY_KIND);
     if (stairsId >= 0) applyKind(nodes[stairsId], STAIRS_KIND);
     const others = [];
     for (let i = 0; i < count; i++) if (i !== 0 && i !== stairsId) others.push(i);
-    const pool = shuffle(NODE_KINDS.slice());
+    const pool = shuffle(NODE_KINDS.filter((k) => !k.uncommon));
     others.forEach((id, idx) => applyKind(nodes[id], pool[idx % pool.length]));
 
-    // 7) 아이템 배치: 입구/계단을 제외한 노드 중 2~3개.
-    const itemSlots = shuffle(others.slice());
+    // 위원회 감시소는 드물게 등장한다: 낮은 확률로 비입구/비계단 노드 하나를 감시소로 바꾼다.
+    let watchpostId = -1;
+    const watchpostKind = NODE_KINDS.find((k) => k.key === 'watchpost');
+    if (watchpostKind && others.length && Math.random() < WATCHPOST_SPAWN_CHANCE) {
+      watchpostId = others[Math.floor(Math.random() * others.length)];
+      applyKind(nodes[watchpostId], watchpostKind);
+    }
+
+    // 7) 아이템 배치: 입구/계단/감시소를 제외한 노드 중 2~3개(감시소 이벤트가 물건에 가려지지 않게).
+    const itemSlots = shuffle(others.filter((id) => id !== watchpostId));
     const itemCount = Math.min(itemSlots.length, 2 + (Math.random() < 0.5 ? 1 : 0));
     for (let i = 0; i < itemCount; i++) nodes[itemSlots[i]].item = pickFloorItem(floor, nodes[itemSlots[i]]);
 
@@ -1574,7 +1593,35 @@
           eventChoice('noise', '소리를 내서 확인한다', '반응을 확인한다', 'danger'),
         ],
       };
-    } else if (node.kind === 'crack' || node.kind === 'corridor' || node.kind === 'hall') {
+    } else if (node.kind === 'hall') {
+      // 무너진 통로 v1: 고위험/고보상. 잔해를 넘으면 빛·멘탈을 더 쓰고 소리가 나지만,
+      // 방에 물건이 없을 때 더 나은 회수물이 드러날 수 있다(있으면 중복 생성하지 않는다).
+      ev = {
+        type: 'collapsed-passage',
+        title: '무너진 통로',
+        cue: '천장이 내려앉아 철근이 삐져나온 잔해가 통로를 반쯤 막았다. 위쪽 들보가 먼지를 떨구며 낮게 삐걱인다.',
+        choices: [
+          eventChoice('cross', '잔해를 넘어간다', '철근을 넘느라 소리가 난다', 'danger'),
+          eventChoice('low', '낮게 돌아간다', '먼지 속을 기어 돌아간다', 'good'),
+          eventChoice('give-up', '포기한다', '잔해를 등지고 물러난다'),
+        ],
+      };
+    } else if (node.kind === 'watchpost') {
+      // 위원회 감시소 v1: meta.suspicion과 상호작용. 의심도가 높으면 단말을 뒤지는 게 위험하다.
+      const tense = meta.suspicion >= WATCHPOST_TENSE_SUSPICION;
+      ev = {
+        type: 'watchpost',
+        title: '위원회 감시소',
+        cue: tense
+          ? '꺼진 감시등 아래 단말이 아직 희미하게 깜빡인다. 화면에 내 회수 이력 같은 항목이 스쳐 지나간다.'
+          : '감시등은 꺼졌고 단말도 잠들어 있다. 먼지 앉은 자판 위에서 붉은 대기등만 느리게 뛴다.',
+        choices: [
+          eventChoice('wipe-log', '기록을 지운다', '내 흔적을 지운다', 'good'),
+          eventChoice('search', '단말을 뒤진다', tense ? '위험하지만 뭔가 나올 수 있다' : '뭔가 나올 수 있다', tense ? 'danger' : ''),
+          eventChoice('pass', '그냥 지나간다', '건드리지 않는다'),
+        ],
+      };
+    } else if (node.kind === 'crack' || node.kind === 'corridor') {
       ev = {
         type: 'footprints',
         title: node.kind === 'crack' ? '젖은 발자국' : '다가오는 발소리',
@@ -1798,6 +1845,66 @@
         run.light = Math.max(0, run.light - 1);
         run.danger = Math.min(100, run.danger + 5);
         msg = '빠르게 지나쳤다. 뒤에서 물 밟는 소리가 조금 늦게 따라온다.';
+      }
+    } else if (ev.type === 'collapsed-passage') {
+      if (choiceId === 'cross') {
+        // 고위험/고보상: 빛·멘탈을 더 쓰고 큰 소리를 내지만, 방에 물건이 없으면 더 나은 회수물이 드러난다.
+        run.light = Math.max(0, run.light - 8);
+        run.mental = Math.max(0, run.mental - 6);
+        run.danger = Math.min(100, run.danger + 8);
+        emitNoise(node.id, { loud: true });
+        if (!run.currentItem && !node.itemTaken) {
+          // 방에 물건이 없을 때만 새로 드러낸다 — 이미 있으면 중복 생성하지 않는다. style:'danger'로 등급을 위로 편향.
+          const revealed = pickFloorItem(run.floor, { style: 'danger' });
+          node.item = revealed;
+          run.currentItem = revealed;
+          msg = `철근을 밟고 잔해를 넘었다. 무너진 콘크리트 밑에서 ${revealed.name}${subjectParticle(revealed.name)} 걸려 나왔다.`;
+        } else {
+          msg = '철근을 붙잡고 잔해를 넘었다. 등 뒤로 콘크리트 조각이 우수수 굴러떨어진다.';
+        }
+      } else if (choiceId === 'low') {
+        // 낮은 길: 시간과 빛은 들지만 소음·위험이 적다.
+        run.light = Math.max(0, run.light - 5);
+        run.danger = Math.max(0, run.danger - 3);
+        msg = '먼지 속을 낮게 기어 잔해 옆을 돌았다. 들보가 머리 위에서 한 번 삐걱였을 뿐이다.';
+      } else {
+        run.danger = Math.max(0, run.danger - 1);
+        msg = '잔해 더미를 등지고 물러났다. 무너진 통로는 그대로 남는다.';
+      }
+    } else if (ev.type === 'watchpost') {
+      const tense = meta.suspicion >= WATCHPOST_TENSE_SUSPICION;
+      if (choiceId === 'wipe-log') {
+        // 기록 삭제: 의심도를 조금 낮추고 빛·멘탈을 쓰며 작은 소음을 낸다.
+        run.light = Math.max(0, run.light - 4);
+        run.mental = Math.max(0, run.mental - 3);
+        run.danger = Math.min(100, run.danger + 4);
+        emitNoise(node.id, { loud: false });
+        if (meta.suspicion > 0) {
+          meta.suspicion = Math.max(0, meta.suspicion - 3);
+          saveMeta();
+        }
+        msg = '단말을 열어 내 회수 이력을 지웠다. 자판이 딸깍이고, 감시등이 한 번 꺼졌다 켜진다.';
+      } else if (choiceId === 'search') {
+        run.light = Math.max(0, run.light - 3);
+        if (tense) {
+          // 의심도가 높으면 뒤지는 게 위험하다 — 경보가 남고 의심도가 오른다.
+          run.danger = Math.min(100, run.danger + 10);
+          meta.suspicion = Math.min(99, meta.suspicion + 3);
+          saveMeta();
+          emitNoise(node.id, { loud: true });
+          msg = '단말을 뒤지자 화면이 붉게 번쩍이며 경보음이 짧게 울렸다. 어둠 저편에서 무언가 방향을 튼다.';
+        } else if (!run.currentItem && !node.itemTaken && Math.random() < 0.5) {
+          const found = pickFloorItem(run.floor, node);
+          node.item = found;
+          run.currentItem = found;
+          msg = `서랍을 뒤지자 ${found.name}${subjectParticle(found.name)} 딸려 나왔다.`;
+        } else {
+          // 진실 조각을 공짜로 풀지 않는다 — 단서 로그 한 줄만 남긴다.
+          msg = WATCHPOST_LOGS[Math.floor(Math.random() * WATCHPOST_LOGS.length)];
+        }
+      } else {
+        run.danger = Math.max(0, run.danger - 1);
+        msg = '감시소는 건드리지 않고 지나쳤다. 꺼진 감시등이 등 뒤에 남는다.';
       }
     } else if (ev.type === 'item-encounter') {
       const item = run.currentItem;
