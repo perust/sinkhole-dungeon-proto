@@ -318,7 +318,8 @@
 
   /* ---------------- 생존자 v1 ---------------- */
   // 던전에서 구출해 지상으로 데려온 사람들. 런을 넘어 유지되며(meta.survivors),
-  // 각자 하나의 영구 효과를 준다. v1은 정비공(장비 강화 할인)·의무병(기절 후유증 완화) 둘.
+  // 각자 하나의 영구 효과를 준다. 정비공(장비 강화 할인)·의무병(기절 후유증 완화)·
+  // 지도공(갈림길에서 앞쪽 방 미리보기) 셋.
   const SURVIVORS = {
     mechanic: {
       id: 'mechanic',
@@ -337,6 +338,14 @@
       rescueSub: '선반을 들어 다리를 뺀다',
       rescueLog: '선반을 들어 올려 다리를 빼냈다. 의무병이라던 사람이 절뚝이며 따라붙는다. 다음에 쓰러져도 뒤처리를 도와줄 것이다.',
     },
+    mapper: {
+      id: 'mapper',
+      name: '지도공',
+      eventTitle: '벽 뒤의 사람',
+      eventCue: '휘어진 벽판 뒤에서 접힌 지도를 쥔 손이 흔들린다. 젖은 종이에는 아래층 통로가 손으로 그려져 있고, 낮은 목소리가 판을 두드리며 꺼내 달라고 한다.',
+      rescueSub: '벽판을 뜯어 끌어낸다',
+      rescueLog: '휘어진 벽판을 뜯어 그 사람을 끌어냈다. 지도공이라던 이가 젖은 지도를 접어 넣으며 따라붙는다. 이제부터 갈림길마다 앞쪽 방이 뭔지 짚어 준다.',
+    },
   };
   const SURVIVOR_IDS = Object.keys(SURVIVORS);
   const KNOWN_SURVIVORS = new Set(SURVIVOR_IDS);
@@ -344,6 +353,19 @@
   const MECHANIC_DISCOUNT = 0.25;        // 정비공: 장비(weapon) 강화 비용을 이 비율만큼 깎는다
   const MEDIC_SUSPICION_RELIEF = 2;      // 의무병: 기절 시 오르는 의심도를 이만큼 덜어낸다(양수 델타에만)
   const MEDIC_CONSOLATION_RATE = 0.15;   // 의무병: 잃은 짐 값의 이 비율만큼 위로 보상을 더 챙겨준다
+
+  // 지도공: 갈림길에서 앞쪽 방 목적지의 특징을 낮은 정밀도로 미리 보여준다(kind → 짧은 특징어).
+  // 계단·물건 유무는 mapperHint에서 따로 처리한다. 좌표·정확한 전리품·추격자 위치는 드러내지 않는다.
+  const MAPPER_FEATURE = {
+    corridor: '곧은 복도',
+    door: '문',
+    storage: '창고',
+    office: '관리실',
+    vent: '좁은 통로',
+    hall: '잔해',
+    crack: '균열',
+    watchpost: '꺼진 감시등',
+  };
 
   const SURVIVOR_EVENT_CHANCE = 0.16;    // 방 도착 시 생존자 조우가 열릴 확률(드물게)
   const SURVIVOR_RESCUE_LIGHT = 8;       // 구출: 끌어내느라 드는 조명
@@ -1616,7 +1638,7 @@
   function maybeStartSurvivorEvent(node) {
     if (!node || Math.random() >= SURVIVOR_EVENT_CHANCE) return false;
     const id = nextUnrescuedSurvivor();
-    if (!id) return false; // 둘 다 구출했으면 이벤트 없음
+    if (!id) return false; // 모두 구출했으면 이벤트 없음
     const s = SURVIVORS[id];
     node.roomEventResolved = true;
     run.pendingEvent = {
@@ -3032,6 +3054,31 @@
     };
   }
 
+  // 지도공: 한 출구 목적지에 붙일 짧은 표시. 계단·물건 유무·방 특징만, 낮은 정밀도로.
+  // 정확한 전리품/RP·몬스터 위치·좌표는 절대 드러내지 않는다.
+  function mapperHint(node) {
+    if (!node) return '';
+    if (node.kind === 'stairs') return '계단';
+    if (node.item && !node.itemTaken) return '물건 있음';
+    return MAPPER_FEATURE[node.kind] || '';
+  }
+
+  // 지도공을 구출했을 때만: 현재 방 각 출구의 목적지 특징을 방향 기호와 함께 한 줄로 미리 보여준다.
+  // 방 생성/좌표는 건드리지 않고 이동 선택지 큐에만 붙는다. 방향 배정은 이동 패드와 같은 규칙을 쓴다.
+  function mapperCueLine(node) {
+    if (!hasSurvivor('mapper') || !node || !node.exits || !node.exits.length) return '';
+    const used = new Set();
+    const parts = [];
+    node.exits.forEach((nid, index) => {
+      const t = nodeById(nid);
+      if (!t) return;
+      const dir = directionForExit(node, t, index, used);
+      const hint = mapperHint(t);
+      if (hint) parts.push(`${dir.glyph} ${hint}`);
+    });
+    return parts.length ? `지도공 표시: ${parts.join(' · ')}` : '';
+  }
+
   const GENERIC_SITUATION_SENTENCES = new Set();
 
   function cleanSituationText(text) {
@@ -3116,12 +3163,16 @@
       return;
     }
 
+    // 지도공을 구출했으면 이동 큐에 앞쪽 방 미리보기 한 줄을 덧붙인다(이동 선택지일 때만).
+    const mapperLine = mapperCueLine(node);
+    const moveCue = mapperLine ? `${cue}  ${mapperLine}` : cue;
+
     const s = stalker();
     const towardId = stalkerTowardExit(); // 깨어 가까이 붙은 추격자 쪽 출구(없으면 null) — 서 있는 동안에도 갱신되게 서명에 포함한다.
     const waitSig = `wait:${stalkerAwake() ? 1 : 0}:${s ? s.quietSteps : 0}`;
     const moveSig = `move:${run.currentNodeId}:${waitSig}:${node.exits.join(',')}:t${towardId == null ? '-' : towardId}`;
     if (dock.dataset.choiceSig === moveSig) {
-      if (el['choice-cue']) el['choice-cue'].textContent = cue;
+      if (el['choice-cue']) el['choice-cue'].textContent = moveCue;
       return;
     }
 
@@ -3154,7 +3205,7 @@
     dock.innerHTML = out.join('');
     dock.dataset.choiceSig = moveSig;
     dock.classList.toggle('spatial', true);
-    if (el['choice-cue']) el['choice-cue'].textContent = cue;
+    if (el['choice-cue']) el['choice-cue'].textContent = moveCue;
     dock.querySelectorAll('[data-act]').forEach((btn) => {
       btn.addEventListener('click', (event) => {
         event.stopPropagation();
