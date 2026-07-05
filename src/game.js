@@ -357,6 +357,8 @@
   };
   const SURVIVOR_IDS = Object.keys(SURVIVORS);
   const KNOWN_SURVIVORS = new Set(SURVIVOR_IDS);
+  // 구출하지 않고 남겨 둔 생존자의 뒤처리 상태. 'marked'=위치만 표시, 'abandoned'=그냥 지나감.
+  const SURVIVOR_OUTCOMES = new Set(['marked', 'abandoned']);
 
   const MECHANIC_DISCOUNT = 0.25;        // 정비공: 장비(weapon) 강화 비용을 이 비율만큼 깎는다
   const MEDIC_SUSPICION_RELIEF = 2;      // 의무병: 기절 시 오르는 의심도를 이만큼 덜어낸다(양수 델타에만)
@@ -385,6 +387,9 @@
   const SURVIVOR_RESCUE_LIGHT = 8;       // 구출: 끌어내느라 드는 조명
   const SURVIVOR_RESCUE_MENTAL = 5;      // 구출: 끌어내느라 드는 멘탈
   const SURVIVOR_RESCUE_DANGER = 6;      // 구출: 소음으로 오르는 위험
+  // 미구출 후속 v1: 등진(abandoned) 생존자 기록당 딱 한 번, 다음 런에서 뒤늦게 돌아오는 대가.
+  const SURVIVOR_ABANDON_SUSPICION = 1;  // 등진 기록 하나당 다음 런에서 오르는 의심도(한 번만)
+  const SURVIVOR_STREET_RUMOR = '거리 소문: 어젯밤 누군가 두드리는 소리가 멈췄다.';
 
   /* ---------------- 상태 ---------------- */
 
@@ -401,9 +406,23 @@
     extractionCueSeen: false,
     endingSeen: false,
     survivors: [],   // 구출해 지상으로 데려온 생존자 id 목록(런을 넘어 유지)
+    // 구출하지 않고 남겨 둔 생존자 기록(런을 넘어 유지). id → { outcome, reported }.
+    // outcome: 'marked'|'abandoned'. reported: abandoned의 뒤늦은 대가를 이미 치렀는지.
+    // 여기에 있어도 meta.survivors에는 없으므로, 후속 런에서 다시 나타나 구출할 수 있다.
+    survivorNotes: {},
   };
 
   const hasSurvivor = (id) => meta.survivors.includes(id);
+  // 구출하지 않고 남겨 둔 생존자를 기록한다. 같은 사람은 마지막 선택으로 덮어쓴다.
+  function noteSurvivor(id, outcome) {
+    if (!KNOWN_SURVIVORS.has(id) || !SURVIVOR_OUTCOMES.has(outcome)) return;
+    meta.survivorNotes[id] = { outcome, reported: false };
+    saveMeta(); // 선택 즉시 저장 — 이번 런이 실패로 끝나도 기록은 남는다
+  }
+  // 나중에 구출했으면 남겨 둔 기록을 지운다(같은 사람이 다시 나타나 구출된 경우).
+  function clearSurvivorNote(id) {
+    if (meta.survivorNotes[id]) delete meta.survivorNotes[id];
+  }
   // 아직 구출하지 않은 생존자 중 하나를 고른다(중복 방지). 없으면 null.
   function nextUnrescuedSurvivor() {
     const pool = SURVIVOR_IDS.filter((id) => !hasSurvivor(id));
@@ -467,6 +486,7 @@
         extractionCueSeen: !!meta.extractionCueSeen,
         endingSeen: !!meta.endingSeen,
         survivors: meta.survivors,
+        survivorNotes: meta.survivorNotes,
       };
       window.localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -508,6 +528,19 @@
     if (Array.isArray(data.survivors)) {
       meta.survivors = [...new Set(data.survivors.filter((id) => KNOWN_SURVIVORS.has(id)))];
     }
+    // survivorNotes: 구버전 저장값에는 없다 → 기본 {}. 알려진 id·유효 outcome만 남기고,
+    // 이미 구출한 사람은 기록에서 제외한다(하위호환·깨진 값 정리). SAVE_VERSION은 올리지 않는다.
+    meta.survivorNotes = {};
+    const rawNotes = data.survivorNotes;
+    if (rawNotes && typeof rawNotes === 'object') {
+      for (const id of Object.keys(rawNotes)) {
+        if (!KNOWN_SURVIVORS.has(id) || meta.survivors.includes(id)) continue;
+        const note = rawNotes[id];
+        if (note && typeof note === 'object' && SURVIVOR_OUTCOMES.has(note.outcome)) {
+          meta.survivorNotes[id] = { outcome: note.outcome, reported: !!note.reported };
+        }
+      }
+    }
   }
 
   function clearSave() {
@@ -522,7 +555,7 @@
     Object.assign(meta, {
       rp: 0, bagLevel: 1, lightLevel: 1, weaponLevel: 1,
       maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0, extractionCueSeen: false,
-      endingSeen: false, survivors: [],
+      endingSeen: false, survivors: [], survivorNotes: {},
     });
     renderStartScreen();
   }
@@ -1447,9 +1480,28 @@
     if (floor === 1) maybeQueueExtractionTutorial();
   }
 
+  // 다음 런이 시작될 때, 지난 런에서 등진(abandoned) 생존자 기록마다 딱 한 번 대가를 치른다.
+  // 거리 소문 한 줄과 의심도 +1(기록당). 위치만 표시(marked)한 기록은 대가가 없다(안내만).
+  function settleSurvivorNotes() {
+    let reportedNow = 0;
+    for (const id of Object.keys(meta.survivorNotes)) {
+      const note = meta.survivorNotes[id];
+      if (note.outcome === 'abandoned' && !note.reported) {
+        meta.suspicion = Math.min(99, meta.suspicion + SURVIVOR_ABANDON_SUSPICION);
+        note.reported = true;
+        reportedNow += 1;
+      }
+    }
+    if (reportedNow > 0) {
+      saveMeta();
+      log(SURVIVOR_STREET_RUMOR, 'hot');
+    }
+  }
+
   function startNewRun() {
     if (el['log']) el['log'].innerHTML = '<div class="log-line">아래가 열린다.</div>';
     run = newRun();
+    settleSurvivorNotes(); // 지난 런에서 등진 생존자의 뒤늦은 대가(거리 소문·의심도)를 반영
     bumpMaxDepth(run.floor);
     enterFloor(1);
     setMetaPanel(false);
@@ -2060,19 +2112,22 @@
         run.mental = Math.max(0, run.mental - SURVIVOR_RESCUE_MENTAL);
         run.danger = Math.min(100, run.danger + SURVIVOR_RESCUE_DANGER);
         emitNoise(node.id, { loud: false }); // 끌어내는 소리 — 작지 않은 소음
-        if (!hasSurvivor(ev.survivorId)) {
-          meta.survivors.push(ev.survivorId);
-          saveMeta(); // 구출 즉시 저장 — 이번 런이 실패로 끝나도 사람은 남는다
-        }
+        if (!hasSurvivor(ev.survivorId)) meta.survivors.push(ev.survivorId);
+        clearSurvivorNote(ev.survivorId); // 예전에 남겨 뒀던 사람이면 그 기록을 지운다
+        saveMeta(); // 구출 즉시 저장 — 이번 런이 실패로 끝나도 사람은 남는다
         msg = s.rescueLog || '갇혀 있던 사람을 끌어냈다.';
       } else if (choiceId === 'mark') {
-        // 위치만 표시: 구출하지 않는다. v1은 되돌아와도 이 방에 다시 열리지 않는다.
+        // 위치만 표시: 구출하지 않지만 표식을 남긴다. 소음·의심은 없고, 남긴 자리는 시작 화면에 기록된다.
         run.mental = Math.max(0, run.mental - 2);
         run.danger = Math.min(100, run.danger + 2);
-        msg = '지금은 손이 없다. 벽에 표식을 긁어 위치만 남기고 물러났다.';
+        noteSurvivor(ev.survivorId, 'marked');
+        msg = '벽에 분필로 표시를 남기고 물러났다. 손이 비면 다시 오겠다고 스스로에게 말했다.';
       } else {
-        run.danger = Math.max(0, run.danger - 1);
-        msg = '못 본 척 지나쳤다. 두드림 소리가 등 뒤에서 한동안 이어진다.';
+        // 그냥 지나감: 지금은 조용하지만, 다음 런에서 거리 소문·의심도로 뒤늦게 돌아온다.
+        run.mental = Math.max(0, run.mental - 3);
+        run.danger = Math.min(100, run.danger + 1);
+        noteSurvivor(ev.survivorId, 'abandoned');
+        msg = '못 본 척 등을 돌렸다. 뒤에서 무언가를 두드리는 소리가 한참 따라왔다.';
       }
     } else if (ev.type === 'item-encounter') {
       const item = run.currentItem;
@@ -3550,14 +3605,21 @@
     el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
   }
 
-  // 구출한 생존자를 시작 화면에 짧게 표시한다(없으면 줄을 숨긴다).
+  // 구출한 생존자와, 구출하지 않고 남겨 둔 자리를 시작 화면에 짧게 표시한다(둘 다 없으면 줄을 숨긴다).
   function renderStartSurvivors() {
     const line = el['start-survivors'];
     if (!line) return;
     const names = meta.survivors.map((id) => SURVIVORS[id] && SURVIVORS[id].name).filter(Boolean);
-    if (!names.length) { line.hidden = true; line.textContent = ''; return; }
+    const notes = Object.values(meta.survivorNotes);
+    const markedCount = notes.filter((n) => n.outcome === 'marked').length;
+    const abandonedCount = notes.filter((n) => n.outcome === 'abandoned').length;
+    if (!names.length && !markedCount && !abandonedCount) { line.hidden = true; line.textContent = ''; return; }
     line.hidden = false;
-    line.innerHTML = `구출한 생존자 <b>${names.length}</b>명 · <b>${names.join(', ')}</b>`;
+    const parts = [];
+    if (names.length) parts.push(`구출한 생존자 <b>${names.length}</b>명 · <b>${names.join(', ')}</b>`);
+    if (markedCount) parts.push(`표시해 둔 위치 <b>${markedCount}</b>곳`);
+    if (abandonedCount) parts.push(`등진 생존자 <b>${abandonedCount}</b>명`);
+    line.innerHTML = parts.join(' / ');
   }
 
   // 시작 화면 메타 표시를 한곳에서 갱신한다(초기 진입 + 기록 초기화 공용).
