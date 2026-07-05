@@ -121,6 +121,7 @@
   const DESCEND_DANGER_BUMP= 8;   // 추격 중 강하 시 위험 점프
   const DROP_DANGER_FACTOR = 0.45;// 버리고 도망: 위험 ×0.45
   const DROP_DANGER_MINUS  = 6;
+  const LOOT_RETRIEVE_TICKS = 6;  // 끌개: 버린 물건을 놈이 거둬 가기까지의 유예(틱). 이후 가까우면 사라진다.
   const WAIT_LIGHT_COST     = 4;  // 기다리기: 시간이 흘러 조명 소모
   const START_MENTAL        = 80; // 침착함/판단력. 조명 상태에 따라 서서히 변한다.
   const MENTAL_BREAK_RECOVERY = 28; // 붕괴 후 간신히 다시 움직일 수 있는 기준선
@@ -800,18 +801,72 @@
     return currentNode().exits.includes(step) ? step : null;
   }
 
+  // 미끼/버린 물건을 둘 인접 칸 하나를 고른다: 추격자 쪽이 아닌 출구를 우선하고,
+  // 계단은 피한다(그쪽에 두면 되찾으러 갈 수 없다). 출구가 없으면 현재 칸.
+  function baitAdjacentNodeId() {
+    if (!run || !run.floorMap) return run ? run.currentNodeId : 0;
+    const exits = currentNode().exits;
+    if (!exits.length) return run.currentNodeId;
+    const s = stalker();
+    const toward = s ? pathNextStep(run.currentNodeId, s.nodeId) : null;
+    const stairsId = run.floorMap.stairsId;
+    let pool = exits.filter((id) => id !== toward && id !== stairsId);
+    if (!pool.length) pool = exits.filter((id) => id !== stairsId);
+    if (!pool.length) pool = exits;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
   // 미끼를 던져 추격자의 관심을 인접한 칸으로 돌린다(가능할 때).
   function divertStalkerToAdjacent() {
     const s = stalker();
     if (!s || !run || !run.floorMap) return;
-    const exits = currentNode().exits;
-    if (!exits.length) return;
-    // 추격자 쪽이 아닌 인접 칸을 우선한다 — 미끼가 놈을 내 진로에서 떼어내도록.
-    const toward = pathNextStep(run.currentNodeId, s.nodeId);
-    const away = exits.filter((id) => id !== toward);
-    const pool = away.length ? away : exits;
-    s.lastHeardId = pool[Math.floor(Math.random() * pool.length)];
+    if (!currentNode().exits.length) return;
+    s.lastHeardId = baitAdjacentNodeId();
     s.nearCued = false;
+  }
+
+  // 끌개 v1: 버린 물건을 바닥 자국으로 남기고, 추격자가 그것을 되찾으러 오게 한다.
+  // 한 층에 활성 자국은 하나뿐(새로 버리면 이전 자국은 덮인다). 인접 칸(추격자 반대쪽) 우선.
+  function dropLootTrace(item) {
+    if (!run || !run.floorMap || !item) return null;
+    const nodeId = baitAdjacentNodeId();
+    run.floorMap.droppedLoot = { nodeId, item, ticks: 0, broken: itemFragile(item) };
+    // 추격자를 물건 쪽으로 돌린다 — 플레이어가 아니라 훔친 물건을 좇게 한다.
+    const s = stalker();
+    if (s) {
+      s.lastHeardId = nodeId;
+      s.quietSteps = 0;   // 깨워서 회수하러 오게 한다
+      s.stepCounter = 0;  // 새 목표이므로 이동 주기를 처음부터
+      s.nearCued = false;
+    }
+    return run.floorMap.droppedLoot;
+  }
+
+  // 끌개 회수 판정(틱마다): 추격자가 버린 물건 칸에 닿거나, 깨어 가까이서 유예가 다하면 거둬 간다.
+  function maybeRetrieveDroppedLoot() {
+    const loot = run && run.floorMap ? run.floorMap.droppedLoot : null;
+    if (!loot) return;
+    loot.ticks += 1;
+    const s = stalker();
+    if (!s) return;
+    const reached = s.nodeId === loot.nodeId;
+    let grace = false;
+    if (!reached && loot.ticks >= LOOT_RETRIEVE_TICKS && stalkerAwake()) {
+      const d = bfs(run.floorMap.nodes, loot.nodeId)[s.nodeId];
+      grace = d != null && d <= 1; // 놈이 바로 옆까지 왔을 때만 — 멀리서 사라지지 않게
+    }
+    if (!reached && !grace) return;
+    run.floorMap.droppedLoot = null;
+    const item = loot.item;
+    const obj = `${item.name}${objectParticle(item.name)}`;
+    const line = loot.broken
+      ? `깨진 채 버린 ${obj}, 어둠이 조각째 훑어 가는 소리가 났다.`
+      : `버리고 온 ${obj}, 어둠 저편에서 무언가 도로 끌어가는 소리가 났다.`;
+    // 플레이어가 같은/인접 칸일 때만 상황판에도 남긴다(멀면 로그만 — 대사로 도배하지 않는다).
+    const nearDist = bfs(run.floorMap.nodes, run.currentNodeId)[loot.nodeId];
+    const near = nearDist != null && nearDist <= 1;
+    log(line, near ? 'hot' : undefined);
+    if (near) run.lastAction = line;
   }
 
   // 각 층 진입 시 5~7개 노드짜리 작은 맵을 만든다.
@@ -884,7 +939,7 @@
     // 9) 숨은 이동 추격자 하나를 배치한다.
     const stalker = seedStalker(nodes, 0, stairsId, floor);
 
-    return { nodes, entryId: 0, stairsId, count, travelledEdges: new Set(), stalker };
+    return { nodes, entryId: 0, stairsId, count, travelledEdges: new Set(), stalker, droppedLoot: null };
   }
 
   function monsterKindForEvent(type, floor, node) {
@@ -1184,6 +1239,8 @@
         }
         s.quietSteps += 1; // 새 소음이 없으면 조용한 걸음이 쌓여 결국 다시 잠든다.
       }
+      // 끌개: 버린 물건 자국이 있으면 매 틱 유예를 세고, 놈이 닿으면 거둬 간다.
+      maybeRetrieveDroppedLoot();
     }
 
     // 추격 여부는 추격자가 깨어 있는지로만 결정한다.
@@ -1460,8 +1517,35 @@
     return `${item.name}${subjectParticle(item.name)} 발치에 떨어져 있다 — ${stat}.${hintPart} ${threat}`;
   }
 
+  // 끌개: 되찾을 수 있는, 내가 버린 물건이 이 칸에 아직 남아 있는가.
+  function droppedLootHere(node) {
+    const loot = run && run.floorMap ? run.floorMap.droppedLoot : null;
+    return loot && node && loot.nodeId === node.id ? loot : null;
+  }
+
   function maybeStartRoomEvent(node) {
-    if (!node || node.roomEventResolved || node.kind === 'entry' || node.kind === 'stairs') return;
+    if (!node) return;
+    // 버린 물건은 이미 방 이벤트를 끝낸 칸이라도 다시 집을 수 있어야 하므로 roomEventResolved 앞에서 처리한다.
+    const loot = droppedLootHere(node);
+    if (loot && !run.currentItem) {
+      const item = loot.item;
+      const brokenHint = loot.broken ? ' 모서리가 깨졌지만, 아직 바닥에 걸려 있다.' : '';
+      run.pendingEvent = {
+        type: 'dropped-loot',
+        title: '버리고 온 물건',
+        cue: `버리고 도망쳤던 ${item.name}${subjectParticle(item.name)} 아직 이 자리에 있다.${brokenHint} 지금이라면 되챙길 수 있다.`,
+        node: node.id,
+        tone: 'hot',
+        choices: [
+          eventChoice('take-back', '다시 챙긴다', loot.broken ? '깨진 채로 회수한다' : '조용히 되챙긴다', 'good'),
+          eventChoice('leave', '그냥 둔다', '두고 물러난다'),
+        ],
+      };
+      run.lastAction = run.pendingEvent.cue;
+      log(run.pendingEvent.cue, 'hot');
+      return;
+    }
+    if (node.roomEventResolved || node.kind === 'entry' || node.kind === 'stairs') return;
     let ev = null;
     if (run.currentItem) {
       // 물건이 보이면 선택지를 '집기/지나치기'로 물건에 묶는다 → 뒤따르는 별도 줍기 버튼이 없다.
@@ -1757,6 +1841,39 @@
         maybeQueueBagAlert();
         maybeQueueLightAlert();
         maybeQueueMentalAlert();
+      }
+    } else if (ev.type === 'dropped-loot') {
+      const loot = droppedLootHere(node);
+      if (!loot) {
+        msg = '버린 물건은 이미 어둠 속으로 사라졌다.'; // 그새 놈이 거둬 갔다.
+      } else if (choiceId === 'leave') {
+        // 두고 물러난다 — 자국은 남는다. 놈이 나중에 되찾으러 올 몫이다.
+        run.danger = Math.max(0, run.danger - 2);
+        msg = `${loot.item.name}${objectParticle(loot.item.name)} 그대로 두고 물러났다. 자국은 바닥에 남는다.`;
+      } else if (!roomFor(loot.item)) {
+        // 가방이 가득 차 되챙길 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
+        run.seenBagAlerts.add('blocked');
+        run.lastAction = BAG_ALERTS.blocked;
+        log(BAG_ALERTS.blocked, 'hot');
+        showDialogue(BAG_ALERTS.blocked, 'hot');
+        render();
+        return;
+      } else {
+        // 되챙기기: 같은 물건이 가방으로 돌아온다(복제 아님). 되찾으면 버림 카운트도 되돌린다.
+        run.bag.push(loot.item);
+        run.floorMap.droppedLoot = null;
+        run.grabbedCount += 1;
+        run.droppedCount = Math.max(0, run.droppedCount - 1);
+        run.currentItem = null;
+        run.light = Math.max(0, run.light - GRAB_LIGHT_COST);
+        playGrabFx();
+        run.chasing = true;
+        applyPickupNoise(node.id, loot.item, true); // 되챙기는 소리가 난다(조심히 다뤄도 티가 날 수 있다).
+        run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
+        const brokenTail = loot.broken ? ' 깨진 모서리가 손끝을 스친다.' : '';
+        msg = `버리고 왔던 ${loot.item.name}${objectParticle(loot.item.name)} 다시 가방에 넣었다.${brokenTail}`;
+        maybeQueueBagAlert();
+        maybeQueueLightAlert();
       }
     } else if (ev.type === 'vent') {
       if (choiceId === 'crawl') {
@@ -2086,26 +2203,19 @@
   function dropAndFlee() {
     if (run.dialogue || !run.chasing || run.bag.length === 0) return;
     clearDialogue();
-    // 가장 비싼 물건을 미끼로 떨군다 → 위험 급감.
+    // 가장 비싼 물건을 떨군다 → 위험 급감. 이제 물건은 사라지지 않고 바닥 자국으로 남는다(끌개):
+    // 던전은 미끼가 아니라 '되찾을 물건'을 좇는다. 놈보다 먼저 닿으면 다시 집을 수 있다.
     let idx = 0;
     run.bag.forEach((it, i) => { if (it.value > run.bag[idx].value) idx = i; });
     const dropped = run.bag.splice(idx, 1)[0];
     run.droppedCount += 1;
     run.danger = Math.max(0, run.danger * DROP_DANGER_FACTOR - DROP_DANGER_MINUS);
-    divertStalkerToAdjacent(); // 던진 짐 쪽으로 추격자의 관심을 돌린다.
+    dropLootTrace(dropped); // 던진 물건 쪽으로 추격자를 돌리고, 되찾을 수 있는 자국을 남긴다.
     const droppedObject = `${dropped.name}${objectParticle(dropped.name)}`;
-    // 깨지는 물건을 미끼로 던지면 파손된다 — 되찾는 기능은 없으므로 회수·잔존가치를 암시하지 않는다.
-    const shatter = itemFragile(dropped) ? ' 깨지는 소리가 났다. 온전하게 남지는 않을 것 같다.' : '';
-    if (run.bag.length === 0) {
-      run.chasing = false;
-      run.lastAction = `${droppedObject} 던졌다. 발소리가 멀어진다.${shatter}`;
-      log(`${droppedObject} 던졌다. 발소리가 멀어진다.${shatter}`);
-      showDialogue(run.lastAction);
-    } else {
-      run.lastAction = `${droppedObject} 미끼로 던졌다. 발소리와 거리가 조금 벌어진다.${shatter}`;
-      log(`${droppedObject} 미끼로 던졌다. 발소리와 거리가 조금 벌어진다.${shatter}`);
-      showDialogue(run.lastAction);
-    }
+    const shatter = itemFragile(dropped) ? ' 깨지는 소리가 났다.' : '';
+    run.lastAction = `${droppedObject} 던지고 반대쪽으로 뛰었다.${shatter} 발소리가 던진 물건 쪽으로 돌아선다.`;
+    log(run.lastAction);
+    showDialogue(run.lastAction);
     render();
   }
 
@@ -2292,6 +2402,9 @@
     let knockedOut = false;
     const risky = ev.risk.score >= 86;
     const veryRisky = ev.risk.score >= 102;
+    // TODO(끌개 v2): 귀환 중 버린 짐은 dropLootTrace로 자국을 남기지 않는다 — 이 시점엔 이미
+    // 계단을 오르며 층을 떠나므로(startReturnWalk) 플레이어가 되찾을 수 없다. 되찾기 루프가
+    // 성립하지 않아 v1에서는 조용히 잃는다. 층에 남아 다시 내려갈 수 있게 되면 그때 연결한다.
     const loseCheapest = (fallback) => {
       const lost = takeCheapestBagItem();
       if (!lost) return fallback || '버릴 짐이 없다. 가방이 빈 소리만 낸다.';
