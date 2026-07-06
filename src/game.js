@@ -3436,7 +3436,7 @@
     renderDepthRail();
     renderMiniMap();
 
-    // 액션 버튼: 줍기(스테이지 위), 버리고 도망, 나가기.
+    // 액션 버튼: 줍기(스테이지 위), 짐 버리고 튀기, 지상으로 나가기/발길 돌리기.
     if (el['dock']) {
       el['dock'].classList.toggle('hidden', !!(run.moving || dialogueOpen));
       el['dock'].setAttribute('aria-hidden', dialogueOpen ? 'true' : 'false');
@@ -3453,10 +3453,10 @@
     el['btn-drop'].classList.toggle('hidden-action', !showDrop);
     if (el['dock-actions']) el['dock-actions'].classList.toggle('has-drop', showDrop);
     el['btn-return'].disabled = !!(run.moving || run.pendingEvent || dialogueOpen);
-    el['btn-drop'].textContent = '↙ 버리고 도망';
+    el['btn-drop'].textContent = '↙ 짐 버리고 튀기';
     el['btn-return'].textContent = run.pendingEvent && run.pendingEvent.type === 'return-attempt'
       ? '↩ 올라가는 중'
-      : (run.bag.length > 0 ? '↩ 나가기' : '↩ 돌아가기');
+      : (run.bag.length > 0 ? '↩ 지상으로 나가기' : '↩ 발길 돌리기');
   }
 
   function renderBag() {

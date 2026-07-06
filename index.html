@@ -138,8 +138,8 @@
       <div id="dock" class="dock">
         <div id="room-choices" class="room-choices" aria-label="갈림길"></div>
         <div id="dock-actions" class="dock-actions">
-          <button id="btn-drop"   class="btn btn-act warn hidden-action">버리고 도망</button>
-          <button id="btn-return" class="btn btn-act good">돌아가기</button>
+          <button id="btn-drop"   class="btn btn-act warn hidden-action">↙ 짐 버리고 튀기</button>
+          <button id="btn-return" class="btn btn-act good">↩ 발길 돌리기</button>
         </div>
       </div>
     </section>
@@ -176,17 +176,17 @@
 
       <div class="buyers">
         <button id="buy-committee" class="btn buyer-btn committee">
-          <span class="buyer-name">위원회</span>
-          <span class="buyer-sub">정식 반납 · 값은 낮아도 흔적이 지워진다</span>
+          <span class="buyer-name">안전 제출</span>
+          <span class="buyer-sub">위원회 정식 반납 · 값은 낮아도 흔적이 지워진다</span>
           <span class="buyer-est"><b id="committee-rp">+0</b> RP · 의심도 <span id="committee-susp" class="susp-delta">0</span></span>
         </button>
         <button id="buy-black" class="btn buyer-btn black">
-          <span class="buyer-name">암시장</span>
-          <span class="buyer-sub">값은 세지만, 뜨거운 물건일수록 꼬리가 남는다</span>
+          <span class="buyer-name">위험 판매</span>
+          <span class="buyer-sub">암시장 거래 · 값은 세지만 뜨거운 물건일수록 꼬리가 남는다</span>
           <span class="buyer-est"><b id="black-rp">+0</b> RP · 의심도 <span id="black-susp" class="susp-delta">+0</span></span>
         </button>
         <button id="buy-family" class="btn buyer-btn family" hidden>
-          <span class="buyer-name">가족에게 반환</span>
+          <span class="buyer-name">가족에게 돌려주기</span>
           <span class="buyer-sub">유품은 가족에게, 나머지는 조용히 반납한다</span>
           <span class="buyer-est"><b id="family-rp">+0</b> RP · 의심도 <span id="family-susp" class="susp-delta">0</span></span>
         </button>
@@ -215,7 +215,7 @@
         <button id="up-weapon" class="btn up-btn"></button>
       </div>
 
-      <button id="btn-again" class="btn btn-primary">다시 내려가기</button>
+      <button id="btn-again" class="btn btn-primary">한 방 더</button>
     </section>
 
     <!-- ===================== 실패 화면 ===================== -->
@@ -228,7 +228,7 @@
         <div class="fail-meta">지상 의심도 <b id="fail-susp" class="susp-v">0</b></div>
         <p class="fail-keep">강화와 남은 RP는 유지된다.</p>
       </div>
-      <button id="btn-retry" class="btn btn-primary">다시 내려가기</button>
+      <button id="btn-retry" class="btn btn-primary">한 방 더</button>
     </section>
 
     <!-- ===================== 엔딩(진실 6/6) 화면 ===================== -->
@@ -249,6 +249,6 @@
 
   </div>
 
-  <script src="src/game.js?v=41"></script>
+  <script src="src/game.js?v=42"></script>
 </body>
 </html>
