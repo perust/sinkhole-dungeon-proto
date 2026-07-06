@@ -1036,6 +1036,33 @@
     return currentNode().exits.includes(step) ? step : null;
   }
 
+  // 숨은 회수자의 '기척'을 4단계로 거칠게 요약한다. 정확한 거리·위험 수치는 절대 노출하지 않고,
+  // 화면 연출(가장자리 어둠·미세 깜빡임·짧은 진동)의 강도만 고르기 위한 값이다.
+  //   none    안전 — 연출 없음
+  //   far     추격이 붙었거나 위험이 어느 정도 — 아주 옅은 가장자리 어둠
+  //   near    깨어 바로 옆(≤2)이거나 위험이 높음 — 어둠 강화 + 미세 깜빡임/약한 진동
+  //   contact 조우 위기창이 열렸거나 같은 칸이거나 위험이 극에 달함 — 짧게 조이는 강한 가장자리
+  function presenceTier() {
+    if (!run || !run.floorMap) return 'none';
+    const encounterOpen = !!(run.pendingEvent && run.pendingEvent.type === 'monster-encounter');
+    const dist = stalkerDistance();
+    const danger = run.danger || 0;
+    if (encounterOpen || dist <= 0 || danger >= 82) return 'contact';
+    if ((stalkerAwake() && dist <= 2) || danger >= 55) return 'near';
+    if (run.chasing || danger >= 30) return 'far';
+    return 'none';
+  }
+
+  // 기척 단계를 무대 CSS 클래스로만 반영한다. 매 렌더마다 이전 단계 클래스를 지우고
+  // 현재 단계 하나만 붙인다 — 텍스트·숫자·스프라이트는 전혀 노출하지 않는다.
+  function renderPresenceFx() {
+    const stage = el['stage'];
+    if (!stage) return;
+    stage.classList.remove('presence-far', 'presence-near', 'presence-contact');
+    const tier = presenceTier();
+    if (tier !== 'none') stage.classList.add('presence-' + tier);
+  }
+
   // 미끼/버린 물건을 둘 인접 칸 하나를 고른다: 추격자 쪽이 아닌 출구를 우선하고,
   // 계단은 피한다(그쪽에 두면 되찾으러 갈 수 없다). 출구가 없으면 현재 칸.
   function baitAdjacentNodeId() {
@@ -3240,6 +3267,7 @@
       el['stage'].classList.toggle('has-loot', !!run.currentItem);
       el['stage'].classList.toggle('monster-encounter', monsterCrisisOpen);
       el['stage'].classList.toggle('returning', !!run.returnWalk);
+      renderPresenceFx();
     }
     renderStage();
     renderDepthRail();

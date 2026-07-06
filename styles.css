@@ -498,6 +498,61 @@ body {
 @keyframes shake { 0%,100%{ transform: translateX(0) rotate(0);} 25%{transform:translateX(-2px) rotate(-6deg);} 75%{transform:translateX(2px) rotate(6deg);} }
 @keyframes encounterShake { 0%,100%{ transform: translateX(-50%) scale(1.35) rotate(0);} 25%{transform:translateX(calc(-50% - 2px)) scale(1.35) rotate(-4deg);} 75%{transform:translateX(calc(-50% + 2px)) scale(1.35) rotate(4deg);} }
 
+/* 기척 단계별 화면 연출 -------------------------------------- */
+/* 숨은 회수자의 접근을 '빛과 공기의 압력'으로만 흘린다 — 스프라이트나 숫자 없이
+   무대 가장자리 어둠·미세 깜빡임·짧은 진동으로 단계만 전한다. 클래스는 JS가 붙인다. */
+.stage.presence-far .fp-view::before,
+.stage.presence-near .fp-view::before,
+.stage.presence-contact .fp-view::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+}
+/* far: 가장자리에 아주 옅은 어둠이 천천히 숨쉰다. */
+.stage.presence-far .fp-view::before {
+  background: radial-gradient(ellipse at 50% 46%, transparent 54%, rgba(0,0,0,.5) 100%);
+  animation: presenceBreath 3.4s ease-in-out infinite;
+}
+/* near: 어둠이 짙어지고 붉은 기운이 옅게 번지며 미세하게 깜빡인다. */
+.stage.presence-near .fp-view::before {
+  background:
+    radial-gradient(ellipse at 50% 46%, transparent 42%, rgba(0,0,0,.62) 100%),
+    radial-gradient(ellipse at 50% 92%, rgba(255,82,110,.10), transparent 55%);
+  animation: presenceFlicker 1.7s steps(1, end) infinite;
+}
+/* contact: 가장자리가 강하게 조이고 붉게 물든다 — 짧게 한 번 치고 정착(영구 멀미 금지). */
+.stage.presence-contact .fp-view::before {
+  background:
+    radial-gradient(ellipse at 50% 46%, transparent 34%, rgba(0,0,0,.74) 100%),
+    radial-gradient(ellipse at 50% 60%, rgba(255,82,110,.16), transparent 60%);
+  animation: presencePulse .9s ease-out 1 both;
+}
+/* 무대 자체의 미세 진동 — 근접부터. 아케이드 타격감이 아니라 숨이 붙은 흔들림. */
+.stage.presence-near { animation: presenceShakeSoft 2.4s ease-in-out infinite; }
+.stage.presence-contact { animation: presenceShakeHard .5s ease-in-out 2 both; }
+/* 이동/귀환 걷기 중엔 무대 진동을 끈다 — fp-view 전환 연출과 겹치지 않게. */
+.stage.moving.presence-near, .stage.moving.presence-contact,
+.stage.returning.presence-near, .stage.returning.presence-contact { animation: none; }
+/* 조우 위기창이 열리면 전용 오버레이가 화면을 지배하므로 기척 오버레이는 물러난다. */
+.stage.monster-encounter.presence-contact .fp-view::before { display: none; }
+@keyframes presenceBreath { 0%,100%{ opacity: .5; } 50%{ opacity: .85; } }
+@keyframes presenceFlicker {
+  0%,100%{ opacity: .78; } 8%{ opacity: 1; } 12%{ opacity: .6; }
+  48%{ opacity: .92; } 52%{ opacity: .7; } 70%{ opacity: 1; }
+}
+@keyframes presencePulse { 0%{ opacity: 0; } 22%{ opacity: 1; } 100%{ opacity: .9; } }
+@keyframes presenceShakeSoft { 0%,100%{ transform: translate(0,0); } 25%{ transform: translate(-.6px,.4px); } 60%{ transform: translate(.5px,-.4px); } }
+@keyframes presenceShakeHard { 0%,100%{ transform: translate(0,0); } 20%{ transform: translate(-1.4px,.8px); } 50%{ transform: translate(1.6px,-.6px); } 80%{ transform: translate(-1px,.6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .stage.presence-near, .stage.presence-contact { animation: none; }
+  .stage.presence-far .fp-view::before,
+  .stage.presence-near .fp-view::before,
+  .stage.presence-contact .fp-view::before { animation: none; }
+}
+
 /* 로그 ----------------------------------------------------- */
 .log {
   margin-top: 12px;
