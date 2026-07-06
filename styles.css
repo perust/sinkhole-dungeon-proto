@@ -274,6 +274,16 @@ body {
 .btn-reset:hover { color: var(--danger); opacity: 1; }
 .btn-reset:active { transform: translateY(1px); }
 
+/* 시작 화면 하단: 기록 초기화 + 소리 토글을 한 줄에 나란히 둔다(붐비지 않게). */
+.start-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.btn-sound:hover { color: var(--accent); opacity: 1; }
+.btn-sound[aria-pressed="true"] { opacity: .5; }
+
 /* ===================== 던전 HUD ===================== */
 .hud {
   display: flex; gap: 8px;

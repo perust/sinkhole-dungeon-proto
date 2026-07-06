@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/pixel/player-delver.png" />
   <title>Unlit Halls</title>
-  <link rel="stylesheet" href="styles.css?v=24" />
+  <link rel="stylesheet" href="styles.css?v=25" />
 </head>
 <body>
   <div id="app" class="phone">
@@ -50,7 +50,10 @@
       <div class="goal-hint" id="start-mutations" hidden></div>
       <div class="contract-card" id="start-contract"></div>
       <div class="goal-hint">다음 목표 · <b id="start-goal">2층 도달</b></div>
-      <button id="btn-reset" class="btn-reset" type="button">기록 초기화</button>
+      <div class="start-footer">
+        <button id="btn-reset" class="btn-reset" type="button">기록 초기화</button>
+        <button id="btn-sound" class="btn-reset btn-sound" type="button" aria-pressed="false" aria-label="소리 켜짐, 눌러서 끄기">소리</button>
+      </div>
     </section>
 
     <!-- ===================== 던전 화면 ===================== -->
@@ -246,6 +249,6 @@
 
   </div>
 
-  <script src="src/game.js?v=40"></script>
+  <script src="src/game.js?v=41"></script>
 </body>
 </html>

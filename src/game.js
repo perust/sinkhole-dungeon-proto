@@ -522,6 +522,7 @@
 
   const SAVE_KEY = 'sinkhole-dungeon-save';
   const INTRO_KEY = 'unlit-halls-intro-seen';
+  const SOUND_KEY = 'unlit-halls-sound-off'; // '1'이면 소리를 재생하지 않는다(사용자 무음 선택)
   const SAVE_VERSION = 1;
 
   // 알려진 진실 조각 이름 집합 — 깨진/오래된 truths 값을 거를 때 쓴다.
@@ -723,6 +724,7 @@
       lastTruth: null,
       contractResult: null,
       streetNews: '허가소 앞 전광판이 조용하다.',
+      lastPresenceSfx: 'none', // 마지막으로 소리 낸 기척 단계(엣지 트리거로 반복 방지)
     };
   }
 
@@ -1061,6 +1063,20 @@
     stage.classList.remove('presence-far', 'presence-near', 'presence-contact');
     const tier = presenceTier();
     if (tier !== 'none') stage.classList.add('presence-' + tier);
+    maybePlayPresenceSfx(tier);
+  }
+
+  // 기척 사운드는 단계가 올라갈 때만, near/contact에서만 짧은 맥동 하나로 낸다.
+  // renderPresenceFx는 매 렌더 호출되므로 run.lastPresenceSfx로 엣지 트리거만 잡는다(반복 방지).
+  const PRESENCE_RANK = { none: 0, far: 1, near: 2, contact: 3 };
+  function maybePlayPresenceSfx(tier) {
+    if (!run) return;
+    const rank = PRESENCE_RANK[tier] || 0;
+    const prevRank = PRESENCE_RANK[run.lastPresenceSfx || 'none'] || 0;
+    if (rank > prevRank && rank >= PRESENCE_RANK.near) {
+      playSfx(tier === 'contact' ? 'presence-contact' : 'presence-near');
+    }
+    run.lastPresenceSfx = tier;
   }
 
   // 미끼/버린 물건을 둘 인접 칸 하나를 고른다: 추격자 쪽이 아닌 출구를 우선하고,
@@ -1271,7 +1287,7 @@
   const el = {};
   const IDS = [
     'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail', 'screen-ending',
-    'btn-enter', 'btn-reset', 'start-art', 'intro-panel', 'intro-line', 'intro-hint', 'enter-fade', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-codex-tail', 'start-contract', 'start-goal',
+    'btn-enter', 'btn-reset', 'btn-sound', 'start-art', 'intro-panel', 'intro-line', 'intro-hint', 'enter-fade', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-codex-tail', 'start-contract', 'start-goal',
     'btn-meta', 'meta-panel', 'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
@@ -1354,6 +1370,7 @@
 
   // 줍기 후 연출: 회수물이 플레이어 쪽으로 빨려 들어가는 짧은 애니메이션.
   function playGrabFx() {
+    playSfx('grab'); // 챙기기/되챙기기 공용 훅 — 짧은 천/금속 틱
     if (!el['stage']) return;
     el['stage'].classList.remove('grabbing');
     void el['stage'].offsetWidth;
@@ -1364,6 +1381,148 @@
   function show(screenId) {
     document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
     el[screenId].classList.add('active');
+  }
+
+  /* ---------------- 사운드 (WebAudio · 코드 생성 · 파일 없음) ----------------
+     모든 소리는 첫 사용자 제스처 이후에만 시작한다(자동재생 금지). AudioContext가
+     없거나 브라우저가 막으면 조용히 무시하고 절대 throw하지 않는다. 파일/네트워크
+     없이 짧은 톤·노이즈로만 생성한다. localStorage 무음 플래그로 끌 수 있다. */
+
+  let audioCtx = null;
+  let masterGain = null;
+  let soundOff = false;
+
+  // 저장된 무음 선호를 읽는다(막힌 환경이면 소리 켜짐 기본).
+  function loadSoundPref() {
+    try { soundOff = window.localStorage.getItem(SOUND_KEY) === '1'; }
+    catch (e) { soundOff = false; }
+  }
+
+  // 무음 여부를 바꾸고 저장한다. 켜는 순간은 제스처 안이므로 컨텍스트를 깨운다.
+  function setSoundOff(off) {
+    soundOff = !!off;
+    try { window.localStorage.setItem(SOUND_KEY, soundOff ? '1' : '0'); }
+    catch (e) { /* 저장 차단 환경 무시 */ }
+    if (!soundOff) ensureAudio();
+  }
+
+  // 첫 제스처에 컨텍스트를 만들거나 깨운다. 실패해도 조용히 포기한다.
+  function ensureAudio() {
+    if (soundOff) return null;
+    try {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        audioCtx = new AC();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.16; // 마스터 게인 낮게 — 저피로
+        masterGain.connect(audioCtx.destination);
+      }
+      if (audioCtx.state === 'suspended' && audioCtx.resume) audioCtx.resume();
+    } catch (e) {
+      audioCtx = null; // 막히면 조용히 포기
+      return null;
+    }
+    return audioCtx;
+  }
+
+  // 짧은 톤 하나. {freq, to(글라이드 목표), dur(s), type, gain, delay(s)}.
+  function tone(opts) {
+    const ctx = ensureAudio();
+    if (!ctx || !masterGain) return;
+    try {
+      const o = opts || {};
+      const t0 = ctx.currentTime + (o.delay || 0);
+      const dur = o.dur || 0.12;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = o.type || 'sine';
+      osc.frequency.setValueAtTime(o.freq || 440, t0);
+      if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+      const peak = o.gain != null ? o.gain : 0.5;
+      // 짧은 어택 + 부드러운 감쇠 — 클릭/거친 소리 방지
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(peak, t0 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(g); g.connect(masterGain);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.03);
+    } catch (e) { /* 무시 */ }
+  }
+
+  // 짧은 감쇠 노이즈 버스트(천/금속 틱·긁힘·둔탁한 낙하). {dur(s), gain, cutoff(Hz), delay(s)}.
+  function noiseBurst(opts) {
+    const ctx = ensureAudio();
+    if (!ctx || !masterGain) return;
+    try {
+      const o = opts || {};
+      const t0 = ctx.currentTime + (o.delay || 0);
+      const dur = o.dur || 0.1;
+      const frames = Math.max(1, Math.floor(ctx.sampleRate * dur));
+      const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / frames);
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      const g = ctx.createGain();
+      const peak = o.gain != null ? o.gain : 0.4;
+      g.gain.setValueAtTime(peak, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      let node = src;
+      if (o.cutoff) {
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = o.cutoff;
+        src.connect(lp); node = lp;
+      }
+      node.connect(g); g.connect(masterGain);
+      src.start(t0);
+      src.stop(t0 + dur + 0.03);
+    } catch (e) { /* 무시 */ }
+  }
+
+  // 이름표 하나로 핵심 행동 소리를 재생한다. 무음/막힌 오디오/모르는 이름은 조용히 무시.
+  function playSfx(name) {
+    if (soundOff) return;
+    if (!ensureAudio()) return;
+    switch (name) {
+      case 'grab': // 챙기기 — 짧은 천/금속 틱 + 낮은 확인음
+        noiseBurst({ dur: 0.05, gain: 0.26, cutoff: 2600 });
+        tone({ freq: 320, to: 360, dur: 0.08, type: 'triangle', gain: 0.26, delay: 0.02 });
+        break;
+      case 'drop': // 버리고 도망 — 바닥을 긁는 스크레이프
+        noiseBurst({ dur: 0.22, gain: 0.3, cutoff: 1400 });
+        tone({ freq: 180, to: 90, dur: 0.2, type: 'sawtooth', gain: 0.12 });
+        break;
+      case 'sale': // 판매/반환 — 낮은 확인 펄스 두 번
+        tone({ freq: 210, dur: 0.12, type: 'sine', gain: 0.5 });
+        tone({ freq: 280, dur: 0.16, type: 'sine', gain: 0.42, delay: 0.11 });
+        break;
+      case 'upgrade': // 강화 성공 — 부드럽게 오르는 차임
+        tone({ freq: 440, dur: 0.14, type: 'sine', gain: 0.4 });
+        tone({ freq: 587, dur: 0.16, type: 'sine', gain: 0.4, delay: 0.1 });
+        tone({ freq: 784, dur: 0.24, type: 'sine', gain: 0.34, delay: 0.2 });
+        break;
+      case 'fail': // 실패/기절 — 짧고 둔탁한 낙하(거칠지 않게)
+        tone({ freq: 160, to: 70, dur: 0.32, type: 'sine', gain: 0.5 });
+        noiseBurst({ dur: 0.14, gain: 0.16, cutoff: 500, delay: 0.02 });
+        break;
+      case 'presence-near': // 기척 접근 — 아주 낮고 짧은 맥동 하나
+        tone({ freq: 96, dur: 0.5, type: 'sine', gain: 0.32 });
+        break;
+      case 'presence-contact': // 기척 접촉 — 조금 더 낮고 무거운 맥동 하나
+        tone({ freq: 72, dur: 0.6, type: 'sine', gain: 0.4 });
+        break;
+      default:
+        break;
+    }
+  }
+
+  // 첫 사용자 제스처에 오디오를 깨운다(자동재생 금지 준수). 한 번 쓰면 리스너를 뗀다.
+  function unlockAudioOnce() {
+    ensureAudio();
+    document.removeEventListener('pointerdown', unlockAudioOnce);
+    document.removeEventListener('touchstart', unlockAudioOnce);
   }
 
   /* ---------------- 로그 ---------------- */
@@ -1760,7 +1919,7 @@
     if (!el['screen-start'] || !el['screen-start'].classList.contains('active')) return;
     // 자체 동작이 있는 버튼(기록 초기화·진입 버튼) 탭은 인트로를 진행시키지 않는다.
     if (event && event.target && event.target.closest &&
-        (event.target.closest('#btn-reset') || event.target.closest('#btn-enter'))) return;
+        (event.target.closest('#btn-reset') || event.target.closest('#btn-enter') || event.target.closest('#btn-sound'))) return;
     if (event) event.preventDefault();
     advanceIntro();
   }
@@ -2707,6 +2866,7 @@
     run.droppedCount += 1;
     run.danger = Math.max(0, run.danger * DROP_DANGER_FACTOR - DROP_DANGER_MINUS);
     dropLootTrace(dropped); // 던진 물건 쪽으로 추격자를 돌리고, 되찾을 수 있는 자국을 남긴다.
+    playSfx('drop'); // 바닥을 긁는 스크레이프
     const droppedObject = `${dropped.name}${objectParticle(dropped.name)}`;
     const shatter = itemFragile(dropped) ? ' 깨지는 소리가 났다.' : '';
     run.lastAction = `${droppedObject} 던지고 반대쪽으로 뛰었다.${shatter} 발소리가 던진 물건 쪽으로 돌아선다.`;
@@ -3109,6 +3269,7 @@
 
   function chooseBuyer(buyer) {
     const quote = saleQuote(buyer);
+    playSfx('sale'); // 판매처/가족 선택 확인 펄스(위원회·암시장·가족 공용)
     run.exitNote = quote.note; // 강화 화면 요약에 출구 결과를 남긴다
     const previousTruthCount = meta.truths.length;
     meta.rp += quote.gained;
@@ -3150,6 +3311,7 @@
 
   function failRun() {
     stopTick();
+    playSfx('fail'); // 기절 — 짧고 둔탁한 낙하(거칠지 않게)
     const lost = bagValue();
     const outcome = RECOVERY_OUTCOMES[Math.floor(Math.random() * RECOVERY_OUTCOMES.length)];
     // 의무병 구출 시: 오르는 의심도를 덜어내고(양수 델타만), 위로 보상을 조금 더 챙겨준다.
@@ -3194,6 +3356,7 @@
     meta.rp -= cost;
     meta[lvKey] += 1;
     run.bought = true;
+    playSfx('upgrade'); // 강화 성공 — 부드럽게 오르는 차임
     saveMeta(); // 강화 구매 후 자동 저장
     log(`${UPGRADES[type].label}${objectParticle(UPGRADES[type].label)} 손봤다. 다음엔 더 버틴다.`, 'win');
     renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
@@ -3797,6 +3960,9 @@
   }
 
   function bind() {
+    // 첫 사용자 제스처에 오디오 컨텍스트를 깨운다(자동재생 금지). 한 번 쓰면 스스로 뗀다.
+    document.addEventListener('pointerdown', unlockAudioOnce);
+    document.addEventListener('touchstart', unlockAudioOnce);
     el['btn-enter'].addEventListener('click', handleStartButton);
     if (el['screen-start']) el['screen-start'].addEventListener('click', handleStartScreenTap);
     if (el['btn-meta']) el['btn-meta'].addEventListener('click', (event) => {
@@ -3823,6 +3989,7 @@
     el['btn-again'].addEventListener('click', startNewRun);
     el['btn-retry'].addEventListener('click', startNewRun);
     if (el['btn-reset']) el['btn-reset'].addEventListener('click', resetProgress);
+    if (el['btn-sound']) el['btn-sound'].addEventListener('click', (event) => { event.stopPropagation(); toggleSound(); });
     if (el['ending-continue']) el['ending-continue'].addEventListener('click', acknowledgeEnding);
     if (el['ending-reset']) el['ending-reset'].addEventListener('click', resetProgress);
   }
@@ -3871,6 +4038,21 @@
     line.innerHTML = `몸에 남은 흔적 · <b>${names.join(', ')}</b>`;
   }
 
+  // 소리/무음 토글 라벨과 상태를 갱신한다(현재 상태를 그대로 표시하는 스위치).
+  function renderSoundToggle() {
+    const btn = el['btn-sound'];
+    if (!btn) return;
+    btn.textContent = soundOff ? '무음' : '소리';
+    btn.setAttribute('aria-pressed', soundOff ? 'true' : 'false');
+    btn.setAttribute('aria-label', soundOff ? '소리 꺼짐, 눌러서 켜기' : '소리 켜짐, 눌러서 끄기');
+  }
+
+  function toggleSound() {
+    setSoundOff(!soundOff);
+    renderSoundToggle();
+    if (!soundOff) playSfx('sale'); // 켜는 순간(제스처 안) 짧은 확인음 하나
+  }
+
   // 시작 화면 메타 표시를 한곳에서 갱신한다(초기 진입 + 기록 초기화 공용).
   function renderStartScreen() {
     el['start-rp'].textContent = meta.rp;
@@ -3879,6 +4061,7 @@
     renderCodex();
     renderStartSurvivors();
     renderStartMutations();
+    renderSoundToggle();
     renderGoals();
     renderContractCards();
   }
@@ -3886,6 +4069,7 @@
   function init() {
     cacheDom();
     bind();
+    loadSoundPref(); // 무음 선호 복원 (막힌 환경이면 소리 켜짐 기본)
     loadMeta(); // 저장된 진행도 복원 (없거나 깨졌으면 기본값 유지)
     setupFirstStartIntro();
     renderStartScreen();
