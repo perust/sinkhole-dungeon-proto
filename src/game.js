@@ -95,7 +95,7 @@
   const WATCHPOST_TENSE_SUSPICION = 40;    // 이 이상이면 단말을 뒤지는 게 위험해진다
   const WATCHPOST_LOGS = [
     '단말 로그: “회수물은 폐기가 아니라 재봉인 창고로 이송.” 날짜 칸은 지워져 있다.',
-    '깨진 화면에 한 줄이 남아 있다 — “감시등 소등은 상부 지시.” 서명란은 비어 있다.',
+    '깨진 화면에 한 줄이 떠 있다 — “감시등 소등은 상부 지시.” 서명란은 비어 있다.',
     '명단이 스친다. 회수자 몇 사람 이름 옆에 붉은 표시가 찍혀 있다.',
   ];
 
@@ -269,7 +269,7 @@
     {
       elapsed: '3시간 후',
       title: '위원회 드론에 발견되어 구조됐다.',
-      body: '구조 기록이 남았다. 대신 현장 물품은 대부분 압수됐다.',
+      body: '구조 기록에 이름이 찍혔다. 대신 현장 물품은 대부분 압수됐다.',
       rpRate: 0.15,
       suspDelta: -6,
       loss: '위원회가 회수품을 압수하고 구조비 명목으로 정리했다.',
@@ -314,7 +314,7 @@
       apply() {
         run.danger = clamp(run.danger + 10, 0, 100);
       },
-      after: '돌아보면 아무도 없다. 젖은 벽만 손바닥에 남는다.',
+      after: '돌아보면 아무도 없다. 손바닥에 벽의 물기만 축축하게 묻는다.',
     },
     {
       key: 'tremor',
@@ -420,7 +420,7 @@
 
   /* ---------------- 왜곡 변이 v1 ---------------- */
   // 아주 뜨거운 유물을 들고 지상으로 나오면 몸에 남는 영구 흔적. 런을 넘어 유지되며(meta.mutations),
-  // 하나가 이득과 대가를 함께 준다. v1은 둘뿐이고, 더 큰 변이 트리는 후속으로 남긴다.
+  // 하나가 이득과 대가를 함께 준다. v1은 둘뿐이고, 더 큰 변이 트리는 후속으로 미룬다.
   //  - fissure-sight(균열 시야): 앞쪽 틈/계단/물건 방향을 낮은 정밀도로 짚어 주지만,
   //    균열 출구에서 길을 더 잘못 짚어 파손되기 쉬운 짐이 조금 더 긁힌다.
   //  - black-hand(검은 손): 캐비닛을 더 쉽게 열지만, 공식 출구 검문에서 손이 눈에 띄어 의심도가 조금 더 오른다.
@@ -433,7 +433,7 @@
     'black-hand': {
       id: 'black-hand',
       name: '검은 손',
-      gainLog: '손등에 검은 얼룩이 남았다. 손가락이 전보다 쉽게 틈을 비집는다.',
+      gainLog: '손등에 검은 얼룩이 번졌다. 손가락이 전보다 쉽게 틈을 비집는다.',
     },
   };
   // 지급은 이 순서대로 첫 번째 미보유 변이를 준다(무작위 없음 — 테스트 결정성).
@@ -477,7 +477,7 @@
   function noteSurvivor(id, outcome) {
     if (!KNOWN_SURVIVORS.has(id) || !SURVIVOR_OUTCOMES.has(outcome)) return;
     meta.survivorNotes[id] = { outcome, reported: false };
-    saveMeta(); // 선택 즉시 저장 — 이번 런이 실패로 끝나도 기록은 남는다
+    saveMeta(); // 선택 즉시 저장 — 이번 런이 실패로 끝나도 기록은 유지된다
   }
   // 나중에 구출했으면 남겨 둔 기록을 지운다(같은 사람이 다시 나타나 구출된 경우).
   function clearSurvivorNote(id) {
@@ -512,7 +512,7 @@
     const nextId = MUTATION_ORDER.find((id) => !hasMutation(id));
     if (!nextId) return null; // 이미 v1 변이를 모두 가짐
     meta.mutations.push(nextId);
-    saveMeta(); // 지급 즉시 저장 — 이번 런 결과와 무관하게 몸에 남는다
+    saveMeta(); // 지급 즉시 저장 — 이번 런 결과와 무관하게 몸에 새겨진다
     return MUTATIONS[nextId];
   }
 
@@ -935,7 +935,7 @@
     }
     if (next == null) return;
     s.nodeId = next;
-    // 바로 옆까지 붙으면 한 번만 짧은 큐를 남긴다(소리 없는 이동은 제외).
+    // 바로 옆까지 붙으면 짧은 큐를 한 번만 띄운다(소리 없는 이동은 제외).
     const silent = !!(opts && opts.silent);
     if (!silent && awake) {
       const d = stalkerDistance();
@@ -967,7 +967,7 @@
   // - careful: 어느 noise든 즉시 한 칸 끌어당기지 않는다(loud=false).
   //     · low/medium: 깨우고 이 칸을 기억시키는 정도.
   //     · high: 조용히 다뤄도 티가 난다 — 이미 두 칸 이상 떨어져 있으면 소리 없이 한 칸 좁혀오고
-  //       경고 한 줄을 남긴다. 붙어 있을 때(dist<=1)는 좁히지 않아 부당한 즉살은 없다.
+  //       경고 한 줄을 띄운다. 붙어 있을 때(dist<=1)는 좁히지 않아 부당한 즉살은 없다.
   // - quick: medium/high는 큰 소리라 즉시 한 칸 끌어당긴다(loud=true).
   //     low는 재빨라도 즉시 한 칸까지는 아니다(loud=false) — 대신 호출부에서 위험만 더 오른다.
   // 반환: 상황 문구에 덧붙일 경고(없으면 '').
@@ -1140,7 +1140,7 @@
     const line = loot.broken
       ? `깨진 채 버린 ${obj}, 어둠이 조각째 훑어 가는 소리가 났다.`
       : `버리고 온 ${obj}, 어둠 저편에서 무언가 도로 끌어가는 소리가 났다.`;
-    // 플레이어가 같은/인접 칸일 때만 상황판에도 남긴다(멀면 로그만 — 대사로 도배하지 않는다).
+    // 플레이어가 같은/인접 칸일 때만 상황판에도 띄운다(멀면 로그만 — 대사로 도배하지 않는다).
     const nearDist = bfs(run.floorMap.nodes, run.currentNodeId)[loot.nodeId];
     const near = nearDist != null && nearDist <= 1;
     log(line, near ? 'hot' : undefined);
@@ -1980,13 +1980,13 @@
     return `${item.name}${subjectParticle(item.name)} 발치에 떨어져 있다 — ${stat}.${hintPart} ${threat}`;
   }
 
-  // 끌개: 되찾을 수 있는, 내가 버린 물건이 이 칸에 아직 남아 있는가.
+  // 끌개: 되찾을 수 있는, 내가 버린 물건이 이 칸에 아직 그대로 있는가.
   function droppedLootHere(node) {
     const loot = run && run.floorMap ? run.floorMap.droppedLoot : null;
     return loot && node && loot.nodeId === node.id ? loot : null;
   }
 
-  // 생존자 조우: 아직 구출 안 한 사람이 남아 있을 때만, 드물게 이 방에서 열린다.
+  // 생존자 조우: 아직 구출 안 한 사람이 있을 때만, 드물게 이 방에서 열린다.
   // 물건이 없는 방에서만 호출되므로 회수물 이벤트를 밀어내지 않는다. 열면 true.
   function maybeStartSurvivorEvent(node) {
     if (!node || Math.random() >= SURVIVOR_EVENT_CHANCE) return false;
@@ -2003,7 +2003,7 @@
       tone: 'hot',
       choices: [
         eventChoice('rescue', '꺼내준다', s.rescueSub, 'good'),
-        eventChoice('mark', '위치만 표시한다', '두고 표시만 남긴다'),
+        eventChoice('mark', '위치만 표시한다', '벽에 분필로 긋고 물러난다'),
         eventChoice('pass', '그냥 지나간다', '못 본 척 지나친다'),
       ],
     };
@@ -2139,7 +2139,7 @@
         title: node.kind === 'storage' ? '비상 배터리' : '벽 비상등',
         cue: node.kind === 'storage'
           ? '선반 아래 배터리가 아직 아주 작게 깜빡인다.'
-          : '깨진 비상등 안쪽에 약한 빛이 남아 있다.',
+          : '깨진 비상등 안쪽에서 약한 빛이 새어 나온다.',
         choices: [
           eventChoice('charge', '조명에 연결한다', '배터리를 연결한다', 'good'),
           eventChoice('wipe', '렌즈만 닦는다', '시야를 확보한다', 'good'),
@@ -2314,7 +2314,7 @@
         msg = '금속음이 울렸다. 먼 곳에서 비슷한 소리가 한 번 늦게 돌아온다.';
       } else {
         run.danger = Math.max(0, run.danger - 1);
-        msg = '캐비닛은 그대로 둔다. 열린 틈이 등 뒤에서 오래 남는다.';
+        msg = '캐비닛은 그대로 둔다. 열린 틈이 등 뒤에서 계속 벌어져 있다.';
       }
     } else if (ev.type === 'footprints') {
       if (choiceId === 'hold') {
@@ -2361,7 +2361,7 @@
         msg = '먼지 속을 낮게 기어 잔해 옆을 돌았다. 들보가 머리 위에서 한 번 삐걱였을 뿐이다.';
       } else {
         run.danger = Math.max(0, run.danger - 1);
-        msg = '잔해 더미를 등지고 물러났다. 무너진 통로는 그대로 남는다.';
+        msg = '잔해 더미를 등지고 물러났다. 무너진 통로는 그대로 막혀 있다.';
       }
     } else if (ev.type === 'watchpost') {
       const tense = meta.suspicion >= WATCHPOST_TENSE_SUSPICION;
@@ -2400,12 +2400,12 @@
           run.currentItem = found;
           msg = `서랍을 뒤지자 ${found.name}${subjectParticle(found.name)} 딸려 나왔다.`;
         } else {
-          // 진실 조각을 공짜로 풀지 않는다 — 단서 로그 한 줄만 남긴다.
+          // 진실 조각을 공짜로 풀지 않는다 — 단서 로그 한 줄만 띄운다.
           msg = WATCHPOST_LOGS[Math.floor(Math.random() * WATCHPOST_LOGS.length)];
         }
       } else {
         run.danger = Math.max(0, run.danger - 1);
-        msg = '감시소는 건드리지 않고 지나쳤다. 꺼진 감시등이 등 뒤에 남는다.';
+        msg = '감시소는 건드리지 않고 지나쳤다. 꺼진 감시등이 등 뒤로 멀어진다.';
       }
     } else if (ev.type === 'missing-trace') {
       if (choiceId === 'keep') {
@@ -2418,7 +2418,7 @@
           run.currentItem = keepsake;
           msg = `벽에서 ${keepsake.name}${objectParticle(keepsake.name)} 조심히 떼어 냈다. ${keepsake.familyNote}`;
         } else {
-          msg = '남은 흔적을 조용히 정리했다. 더 가져갈 것은 남지 않았다.';
+          msg = '흐트러진 자리를 조용히 정리했다. 더 가져갈 것은 없다.';
         }
       } else if (choiceId === 'photo') {
         // 사진만 확인: 단서 한 줄, 물건 없음. 진실 조각은 주지 않는다.
@@ -2427,7 +2427,7 @@
       } else {
         // 그냥 둔다: 물건 없음, 등을 돌린 작은 대가(멘탈).
         run.mental = Math.max(0, run.mental - 2);
-        msg = '사진도 배낭도 그대로 두고 등을 돌렸다. 이름을 읽지 않은 게 오래 마음에 남는다.';
+        msg = '사진도 배낭도 그대로 두고 등을 돌렸다. 이름을 읽지 않은 게 한동안 마음이 무겁다.';
       }
     } else if (ev.type === 'survivor') {
       const s = SURVIVORS[ev.survivorId] || {};
@@ -2439,10 +2439,10 @@
         emitNoise(node.id, { loud: false }); // 끌어내는 소리 — 작지 않은 소음
         if (!hasSurvivor(ev.survivorId)) meta.survivors.push(ev.survivorId);
         clearSurvivorNote(ev.survivorId); // 예전에 남겨 뒀던 사람이면 그 기록을 지운다
-        saveMeta(); // 구출 즉시 저장 — 이번 런이 실패로 끝나도 사람은 남는다
+        saveMeta(); // 구출 즉시 저장 — 이번 런이 실패로 끝나도 구한 사람은 유지된다
         msg = s.rescueLog || '갇혀 있던 사람을 끌어냈다.';
       } else if (choiceId === 'mark') {
-        // 위치만 표시: 구출하지 않지만 표식을 남긴다. 소음·의심은 없고, 남긴 자리는 시작 화면에 기록된다.
+        // 위치만 표시: 구출하지 않지만 표식을 새긴다. 소음·의심은 없고, 새긴 자리는 시작 화면에 기록된다.
         run.mental = Math.max(0, run.mental - 2);
         run.danger = Math.min(100, run.danger + 2);
         noteSurvivor(ev.survivorId, 'marked');
@@ -2459,7 +2459,7 @@
       if (!item) {
         msg = '물건은 이미 챙겼다.';
       } else if (choiceId === 'skip') {
-        // 지금은 지나친다. 자국은 남아, 다시 이 방을 지날 때 조용히 집을 수 있다.
+        // 지금은 지나친다. 자국은 그대로라, 다시 이 방을 지날 때 조용히 집을 수 있다.
         run.currentItem = null;
         run.danger = Math.max(0, run.danger - 2);
         msg = `${item.name}${objectParticle(item.name)} 그대로 두고 지나쳤다. 발소리를 죽인 채 물러난다.`;
@@ -2502,9 +2502,9 @@
       if (!loot) {
         msg = '버린 물건은 이미 어둠 속으로 사라졌다.'; // 그새 놈이 거둬 갔다.
       } else if (choiceId === 'leave') {
-        // 두고 물러난다 — 자국은 남는다. 놈이 나중에 되찾으러 올 몫이다.
+        // 두고 물러난다 — 바닥의 자국을 따라 놈이 나중에 되찾으러 온다.
         run.danger = Math.max(0, run.danger - 2);
-        msg = `${loot.item.name}${objectParticle(loot.item.name)} 그대로 두고 물러났다. 자국은 바닥에 남는다.`;
+        msg = `${loot.item.name}${objectParticle(loot.item.name)} 그대로 두고 물러났다. 바닥의 자국을 따라 놈이 되찾으러 올 것이다.`;
       } else if (!roomFor(loot.item)) {
         // 가방이 가득 차 되챙길 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
         run.seenBagAlerts.add('blocked');
@@ -2552,7 +2552,7 @@
         run.mental = clamp(run.mental + 5, 0, 100);
         msg = '렌즈의 흙탕물을 닦아냈다. 앞뒤의 깊이가 조금 돌아온다.';
       } else {
-        msg = '불안정한 빛은 건드리지 않는다. 깜빡임만 뒤에 남는다.';
+        msg = '불안정한 빛은 건드리지 않는다. 등 뒤에서 계속 깜빡인다.';
       }
     } else if (ev.type === 'monster-encounter') {
       const result = resolveMonsterEncounter(ev, choiceId);
@@ -2755,7 +2755,7 @@
     if (target.kind === 'stairs') { descend(); return; }
 
     const fromId = node.id;
-    // 이미 깨어 있거나 추격 중이거나 짐을 들었을 때만 발소리를 남긴다.
+    // 이미 깨어 있거나 추격 중이거나 짐을 들었을 때만 발소리를 흘린다.
     // 짐을 집기 전 첫 탐색은 완전히 잠든 추격자를 깨우지 않는다(공정성).
     if (stalkerAwake() || run.chasing || run.bag.length > 0) {
       emitNoise(fromId, { loud: false }); // 발을 떼는 소리로 추격자에게 이 칸을 기억시킨다.
@@ -2858,14 +2858,14 @@
   function dropAndFlee() {
     if (run.dialogue || !run.chasing || run.bag.length === 0) return;
     clearDialogue();
-    // 가장 비싼 물건을 떨군다 → 위험 급감. 이제 물건은 사라지지 않고 바닥 자국으로 남는다(끌개):
+    // 가장 비싼 물건을 떨군다 → 위험 급감. 이제 물건은 사라지지 않고 바닥 자국으로 바뀐다(끌개):
     // 던전은 미끼가 아니라 '되찾을 물건'을 좇는다. 놈보다 먼저 닿으면 다시 집을 수 있다.
     let idx = 0;
     run.bag.forEach((it, i) => { if (it.value > run.bag[idx].value) idx = i; });
     const dropped = run.bag.splice(idx, 1)[0];
     run.droppedCount += 1;
     run.danger = Math.max(0, run.danger * DROP_DANGER_FACTOR - DROP_DANGER_MINUS);
-    dropLootTrace(dropped); // 던진 물건 쪽으로 추격자를 돌리고, 되찾을 수 있는 자국을 남긴다.
+    dropLootTrace(dropped); // 던진 물건 쪽으로 추격자를 돌리고, 되찾을 수 있는 자국을 만든다.
     playSfx('drop'); // 바닥을 긁는 스크레이프
     const droppedObject = `${dropped.name}${objectParticle(dropped.name)}`;
     const shatter = itemFragile(dropped) ? ' 깨지는 소리가 났다.' : '';
@@ -3060,7 +3060,7 @@
     const veryRisky = ev.risk.score >= 102;
     // TODO(끌개 v2): 귀환 중 버린 짐은 dropLootTrace로 자국을 남기지 않는다 — 이 시점엔 이미
     // 계단을 오르며 층을 떠나므로(startReturnWalk) 플레이어가 되찾을 수 없다. 되찾기 루프가
-    // 성립하지 않아 v1에서는 조용히 잃는다. 층에 남아 다시 내려갈 수 있게 되면 그때 연결한다.
+    // 성립하지 않아 v1에서는 조용히 잃는다. 층에 머물러 다시 내려갈 수 있게 되면 그때 연결한다.
     const loseCheapest = (fallback) => {
       const lost = takeCheapestBagItem();
       if (!lost) return fallback || '버릴 짐이 없다. 가방이 빈 소리만 낸다.';
@@ -3150,11 +3150,11 @@
     run.lastSale = run.bag.slice();
     run.chasing = false;
     run.bought = false;
-    // 판매 전에 왜곡 변이 지급을 판정한다(런당 한 번). 뜨거운 유물을 들고 나왔으면 몸에 흔적이 남는다.
+    // 판매 전에 왜곡 변이 지급을 판정한다(런당 한 번). 뜨거운 유물을 들고 나왔으면 몸에 흔적이 생긴다.
     const gainedMutation = grantMutationOnReturn();
     if (gainedMutation) {
       run.mutationNote = gainedMutation.gainLog;
-      log(gainedMutation.gainLog, 'hot'); // 강화 화면 요약과 함께 던전 로그에도 남긴다
+      log(gainedMutation.gainLog, 'hot'); // 강화 화면 요약과 함께 던전 로그에도 함께 띄운다
     }
     // 빈손 귀환도 판매 화면을 거친다: 출구 경로를 고르고 판매처(위원회/암시장)를 눌러야 강화로 넘어간다.
     // chooseBuyer가 raw 0을 안전 처리하므로 빈 가방이어도 문제없이 진행된다.
@@ -3192,8 +3192,8 @@
         gainDelta: noCargo ? 0 : -EXIT_PASSAGE_FEE,
         blackSuspRelief: EXIT_PASSAGE_BLACK_RELIEF,
         note: noCargo
-          ? '암시장 통로 — 빈손이라 통행료를 받지 않았다. 바로 뒷골목에 붙어 꼬리가 덜 남는다.'
-          : `암시장 통로 — 통행료 -${EXIT_PASSAGE_FEE} RP로 바로 뒷골목에 붙어 꼬리가 덜 남는다.`,
+          ? '암시장 통로 — 빈손이라 통행료를 받지 않았다. 바로 뒷골목에 붙어 꼬리를 덜 잡힌다.'
+          : `암시장 통로 — 통행료 -${EXIT_PASSAGE_FEE} RP로 바로 뒷골목에 붙어 꼬리를 덜 잡힌다.`,
       };
     }
     const heatTotal = run.bag.reduce((s, it) => s + itemHeat(it), 0);
@@ -3270,7 +3270,7 @@
   function chooseBuyer(buyer) {
     const quote = saleQuote(buyer);
     playSfx('sale'); // 판매처/가족 선택 확인 펄스(위원회·암시장·가족 공용)
-    run.exitNote = quote.note; // 강화 화면 요약에 출구 결과를 남긴다
+    run.exitNote = quote.note; // 강화 화면 요약에 출구 결과를 적어 둔다
     const previousTruthCount = meta.truths.length;
     meta.rp += quote.gained;
     meta.totalEarned += quote.gained;
