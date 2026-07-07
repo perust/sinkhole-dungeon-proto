@@ -28,18 +28,20 @@
   //   heat   — 암시장 판매 시 물건 하나가 더하는 의심도(등급이 아니라 물건별로 다르다).
   //   noise  — 집는 순간의 소음 압박('low'|'medium'|'high'). 조심/재빨리와 함께 추격 압박을 정한다.
   //   fragile— 버리고 도망 시 깨져 값이 거의 남지 않는 물건(true).
+  //   marked — 위원회가 추적 중인 회수물(true). 정식 반납이면 명단이 지워져 의심도가 조금 더 눅고,
+  //            암시장에 넘기면 중개상이 이름을 한 번 더 확인해 꼬리가 조금 더 잡힌다.
   const ITEM_TABLE = {
     1: [
       { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0, heat: 3,  noise: 'medium', fragile: false, truth: '배터리에는 위원회 마크가 지워진 흔적이 있다.' },
       { name: '배관 부품',     slots: 1, value: 5,  tier: 'common', icon: 1, heat: 2,  noise: 'low',    fragile: false, truth: '도시 배관은 사고 전부터 아래로 이어져 있었다.' },
     ],
     2: [
-      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, heat: 9,  noise: 'low',    fragile: true,  truth: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
+      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, heat: 9,  noise: 'low',    fragile: true,  marked: true, truth: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
       { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, heat: 7,  noise: 'medium', fragile: true,  truth: '연구 노트에는 ‘어둠붙이’가 빛과 소리에 다르게 반응한다고 적혀 있다.' },
     ],
     3: [
       { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4, heat: 15, noise: 'high',   fragile: false, truth: '코어는 싱크홀을 막는 장치가 아니라 더 깊게 여는 열쇠다.' },
-      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5, heat: 20, noise: 'high',   fragile: true,  truth: '봉인 유물의 문양은 지상 허가증의 직인과 같다.' },
+      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5, heat: 20, noise: 'high',   fragile: true,  marked: true, truth: '봉인 유물의 문양은 지상 허가증의 직인과 같다.' },
     ],
   };
 
@@ -51,6 +53,7 @@
   function itemNoise(it) { return it && it.noise ? it.noise : (TIER_NOISE[it && it.tier] || 'medium'); }
   function itemFragile(it) { return !!(it && it.fragile); }
   function itemFamily(it) { return !!(it && it.family); }
+  function itemMarked(it) { return !!(it && it.marked); }
   const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().length;
 
   // 실종자 흔적방 유품 v1: 실종자 방에서만 나오는 가족 keepsake.
@@ -119,6 +122,12 @@
   // 가족 반환 v1: 유품(family 태그)을 가족에게 돌려주는 판매 경로. 암시장/위원회보다 값은 낮지만 의심도가 눅는다.
   const FAMILY_RETURN_RATE = 0.4;        // 유품 값 중 가족이 사례로 돌려주는 비율(암시장 1.35·위원회 0.72보다 낮다)
   const FAMILY_RETURN_SUSP_RELIEF = 2;   // 유품 하나를 가족에게 돌려줄 때마다 줄어드는 의심도
+
+  // 회수물 태그 marked v1: 위원회 추적 명단에 오른 회수물. 판매 선택을 안전 제출 쪽으로 살짝 기울인다.
+  // 보정은 결정적이며 판당 상한(MARKED_SUSPICION_CAP)으로 묶어 한쪽 경로가 항상 최선이 되지 않게 한다.
+  const MARKED_COMMITTEE_RELIEF = 2;   // 표식 물건 하나를 위원회에 정식 반납할 때마다 추가로 덜어내는 의심도
+  const MARKED_BLACK_SUSPICION = 3;    // 표식 물건 하나를 암시장에 넘길 때마다 추가로 오르는 의심도
+  const MARKED_SUSPICION_CAP = 6;      // 표식 보정(양방향)이 한 판매에서 넘지 못하는 상한(유계)
 
   const FLOOR_OPEN_CUE = [
     '아래에서 찬바람이 올라온다.',
@@ -716,6 +725,7 @@
       roomsEntered: 0,   // 이번 런에서 처음 밟은 방 수(왜곡 변이 트리거 판정용)
       mutationChecked: false, // 이번 귀환에서 변이 지급을 이미 판정했는가(런당 한 번)
       mutationNote: '',  // 이번 런에서 새로 얻은 변이 안내 문구(강화 화면 요약에 노출)
+      markedNote: '',    // 이번 판매에서 표식(marked) 회수물 처리 결과 한 줄(강화 화면 요약에 노출)
       grabbedCount: 0,
       droppedCount: 0,
       bought: false,     // 이번 귀환에서 강화를 샀는가
@@ -1959,6 +1969,7 @@
   // 인던 물건 힌트: RP·수치는 감추고 '소리가 클 것 같다 / 깨질 것 같다'만 짧게 흘린다.
   function itemTraitHint(item) {
     const bits = [];
+    if (itemMarked(item)) bits.push('위원회 직인이 작게 찍혀 있다');
     if (itemNoise(item) === 'high') bits.push('금속이 부딪치면 소리가 클 것 같다');
     if (itemFragile(item)) bits.push('모서리가 금 가 있다');
     return bits.join('. ');
@@ -3246,6 +3257,9 @@
     if (buyer === 'committee') {
       gained = Math.ceil(raw * 0.72);
       suspDelta = -Math.min(10, 2 + run.bag.length * 2);
+      // 표식 물건은 위원회 추적 명단에 오른 회수물이라, 정식 반납하면 그 명단이 함께 지워져 의심도가 조금 더 눅는다(유계).
+      const markedCount = run.bag.filter(itemMarked).length;
+      if (markedCount) suspDelta -= Math.min(MARKED_SUSPICION_CAP, markedCount * MARKED_COMMITTEE_RELIEF);
     } else if (buyer === 'family') {
       // 유품은 가족에게(사례로 값의 일부만), 나머지는 위원회 반납가로 조용히 넘긴다.
       const familyItems = run.bag.filter(itemFamily);
@@ -3256,21 +3270,47 @@
       // 유품 반환 + 조용한 위원회 반납 → 의심도가 눅는다(유품 개수 + 반납 물건 수 기준).
       const committeeRelief = otherItems.length ? Math.min(10, 2 + otherItems.length * 2) : 0;
       suspDelta = -(FAMILY_RETURN_SUSP_RELIEF * familyItems.length + committeeRelief);
+      // 유품 자체는 표식이 없다. 위원회 반납분(유품이 아닌 짐)에 표식 물건이 섞여 있으면 그 명단이 함께 지워져 조금 더 눅는다(유계).
+      const markedOther = otherItems.filter(itemMarked).length;
+      if (markedOther) suspDelta -= Math.min(MARKED_SUSPICION_CAP, markedOther * MARKED_COMMITTEE_RELIEF);
     } else {
       // 암시장 의심도는 물건별 heat 합(등급이 아니라 물건 태그). 태그 없으면 등급으로 보정.
       const heat = run.bag.reduce((sum, it) => sum + itemHeat(it), 0);
       gained = Math.ceil(raw * 1.35);
       suspDelta = eff.blackSuspRelief ? Math.max(0, heat - eff.blackSuspRelief) : heat;
+      // 표식 물건을 뒷골목에 넘기면 중개상이 명단에 오른 이름을 한 번 더 확인해 꼬리가 조금 더 잡힌다(추가 의심도·유계).
+      const markedCount = run.bag.filter(itemMarked).length;
+      if (markedCount) suspDelta += Math.min(MARKED_SUSPICION_CAP, markedCount * MARKED_BLACK_SUSPICION);
     }
     gained = Math.max(0, gained + eff.gainDelta);
     suspDelta += eff.suspDelta;
     return { gained, suspDelta, note: eff.note, route: eff.route };
   }
 
+  // 표식(marked) 회수물을 이번 판매처로 넘긴 결과를 한 줄로 요약한다(수치·명단은 감춘다).
+  // 표식 물건이 없으면 빈 문자열이라 요약 영역에 아무 줄도 더하지 않는다.
+  function markedSaleNote(buyer) {
+    const markedSold = run.lastSale.filter(itemMarked);
+    if (!markedSold.length) return '';
+    if (buyer === 'black') {
+      return '표식 있는 물건 때문에 중개상이 명단을 한 번 더 확인하고 값을 치렀다.';
+    }
+    if (buyer === 'committee') {
+      return '표식 있는 물건을 정식 창구에 올리자, 위원회 추적 명단에서 이름이 조용히 지워졌다.';
+    }
+    if (buyer === 'family') {
+      // 유품 자체는 표식이 없다. 위원회 반납분으로 함께 넘어간 표식 짐이 있을 때만 알린다.
+      const markedOther = markedSold.filter((it) => !itemFamily(it));
+      if (markedOther.length) return '유품과 함께 넘긴 표식 물건이 위원회 반납분에서 조용히 정리됐다.';
+    }
+    return '';
+  }
+
   function chooseBuyer(buyer) {
     const quote = saleQuote(buyer);
     playSfx('sale'); // 판매처/가족 선택 확인 펄스(위원회·암시장·가족 공용)
     run.exitNote = quote.note; // 강화 화면 요약에 출구 결과를 적어 둔다
+    run.markedNote = markedSaleNote(buyer); // 표식(marked) 회수물 처리 결과 한 줄(있을 때만)
     const previousTruthCount = meta.truths.length;
     meta.rp += quote.gained;
     meta.totalEarned += quote.gained;
@@ -3890,7 +3930,7 @@
     }
     // 출구 결과와, 이번 런에서 새로 얻은 변이 안내를 한 요약 영역에 함께 보여준다(둘 다 고정 문구).
     if (el['run-summary']) {
-      const summaryLines = [run.exitNote, run.mutationNote].filter(Boolean);
+      const summaryLines = [run.exitNote, run.markedNote, run.mutationNote].filter(Boolean);
       el['run-summary'].innerHTML = summaryLines.join('<br>');
     }
     el['sale-balance'].textContent = meta.rp;
