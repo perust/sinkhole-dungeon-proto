@@ -994,6 +994,78 @@ body {
 .buyer-est { color: var(--gold); font-size: 13px; font-weight: 800; }
 .susp-delta { color: var(--warn); }
 
+/* 세력별 작은 심볼 v1: 판매처/기록 카드에서 세력을 한눈에 구분하는 배지.
+   새 이미지 없이 CSS 도형·글리프로만 그린다. 장식용이라 aria-hidden이며 옆 텍스트가 접근성 이름을 담당한다.
+   판매처 이름 앞에 붙어 새 줄을 만들지 않고, 좁은 모바일 폭에서도 이름·부제·값 오버플로를 늘리지 않는다. */
+.faction-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  margin-right: 7px;
+  vertical-align: middle;
+  border-radius: 50%;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+/* 위원회 — 접수 도장/직인 느낌: 초록 이중 테두리 원인 안에 접수 확인 표식. */
+.faction-symbol.committee {
+  color: var(--good);
+  border: 1.5px solid rgba(90,209,127,.72);
+  background: rgba(90,209,127,.12);
+  box-shadow: inset 0 0 0 2px rgba(90,209,127,.2);
+}
+.faction-symbol.committee::before { content: "✓"; }
+/* 암시장 — 가려진 눈/검은 태그 느낌: 어두운 원판을 가로지르는 한 줄로 무기명·가림을 나타낸다. */
+.faction-symbol.black {
+  background: #0c0f18;
+  border: 1px solid rgba(255,161,74,.6);
+}
+.faction-symbol.black::before {
+  content: "";
+  width: 9px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255,161,74,.88);
+}
+/* 가족 — 유품/집으로 돌아가는 마음: 부드러운 파란 하트. */
+.faction-symbol.family {
+  color: #9db8ff;
+  border: 1px solid rgba(120,170,255,.58);
+  background: rgba(120,170,255,.12);
+}
+.faction-symbol.family::before { content: "♥"; font-size: 10px; }
+/* 연구자 — 기록을 들여다보는 돋보기(CSS 도형). 별도 판매처가 없어 엔딩/기록 카드에 은은히 쓴다. */
+.faction-symbol.research {
+  position: relative;
+  border: none;
+  background: transparent;
+}
+.faction-symbol.research::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid #b79cff;
+  margin: -1px 1px 0 -2px;
+}
+.faction-symbol.research::after {
+  content: "";
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 2px;
+  height: 6px;
+  border-radius: 1px;
+  background: #b79cff;
+  transform: rotate(-45deg);
+  transform-origin: center;
+}
+
 /* 출구 선택 v1: 판매처 선택 전, 지상으로 나가는 세 갈래 길 */
 .route-choice { margin-top: 12px; }
 .route-hint { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
