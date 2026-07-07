@@ -28,8 +28,8 @@
   //   heat   — 암시장 판매 시 물건 하나가 더하는 의심도(등급이 아니라 물건별로 다르다).
   //   noise  — 집는 순간의 소음 압박('low'|'medium'|'high'). 조심/재빨리와 함께 추격 압박을 정한다.
   //   fragile— 버리고 도망 시 깨져 값이 거의 남지 않는 물건(true).
-  //   marked — 위원회가 추적 중인 회수물(true). 정식 반납이면 명단이 지워져 의심도가 조금 더 눅고,
-  //            암시장에 넘기면 중개상이 이름을 한 번 더 확인해 꼬리가 조금 더 잡힌다.
+  //   marked — 위원회가 추적 중인 회수물(true). 정식 반납이면 그 물건이 공개 수배·검문 목록에서 빠져
+  //            의심도가 조금 더 눅고, 암시장에 넘기면 표식된 물건이 뒷골목에 다시 떠올라 꼬리가 조금 더 잡힌다.
   const ITEM_TABLE = {
     1: [
       { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0, heat: 3,  noise: 'medium', fragile: false, truth: true, truthText: '배터리에는 위원회 마크가 지워진 흔적이 있다.' },
@@ -147,12 +147,12 @@
   // 의심도 대가 v1: 의심도가 실제로 아프도록 두 문턱을 둔다. 값이 낮을 땐 아무 대가도 없고(비징벌),
   // 문턱을 넘을수록 위원회 감시가 지상까지 따라붙어 런 시작과 뒷거래가 불리해진다. 보정은 전부 결정적·유계.
   const SUSPICION_TENSE = 35;          // 긴장선: 입구에 위원회 밴이 붙기 시작한다(가벼운 시작 압박)
-  const SUSPICION_HOT   = 60;          // 과열선: 이름이 명단 위쪽에 오른다(무거운 시작 압박 + 뒷거래 불이익)
+  const SUSPICION_HOT   = 60;          // 과열선: 짐·차량이 검문 명단 위쪽에 오른다(무거운 시작 압박 + 뒷거래 불이익)
   const SUSPICION_TENSE_MENTAL = 8;    // 긴장선에서 검문을 피해 내려오느라 깎이는 시작 멘탈
   const SUSPICION_HOT_MENTAL   = 16;   // 과열선에서 더 크게 깎이는 시작 멘탈
   const SUSPICION_HOT_LIGHT    = 20;   // 과열선에서 감시등을 피하느라 미리 닳는 시작 조명
   const BLACK_RATE      = 1.35;        // 암시장 기본 매입 배율(위험 프리미엄)
-  const BLACK_RATE_HOT  = 1.15;        // 이미 과열된 이름이면 중개상이 위험 프리미엄을 깎는다(뜨거운 물건은 자기도 부담)
+  const BLACK_RATE_HOT  = 1.15;        // 짐 경로가 이미 뜨거우면 중개상이 위험 프리미엄을 깎는다(뜨거운 물건은 자기도 부담)
   const BROKER_HOT_SUSP = 2;           // 과열 상태에서 뒷거래로 더 붙는 의심도(유계)
 
   const FLOOR_OPEN_CUE = [
@@ -1380,7 +1380,7 @@
     if (buyer === 'family') return '거리 소문: 가족에게 돌아간 유품 때문에, 지상 소문이 조금 누그러졌다.';
     const hot = quote.suspDelta > 10 || meta.suspicion >= 55;
     if (buyer === 'black' && hot) return '뉴스: “싱크홀 밀반출 급증”… 검문 드론이 한 블록 가까워졌다.';
-    if (buyer === 'black') return '소문: 암시장 매입가가 올랐다. 대신 허가소가 이름을 묻기 시작했다.';
+    if (buyer === 'black') return '소문: 암시장 매입가가 올랐다. 대신 검문소가 짐 경로를 캐기 시작했다.';
     if (meta.suspicion <= 15) return '공보: 위원회가 “성실 반납자” 명단을 정리 중이다. 아직 조용하다.';
     return '뉴스: 위원회가 일부 반납품을 은폐했다는 제보가 돈다.';
   }
@@ -3319,13 +3319,13 @@
     } else {
       // 암시장 의심도는 물건별 heat 합(등급이 아니라 물건 태그). 태그 없으면 등급으로 보정.
       const heat = run.bag.reduce((sum, it) => sum + itemHeat(it), 0);
-      // 과열선(SUSPICION_HOT)을 넘긴 이름이면 중개상도 부담이 커져 위험 프리미엄을 깎고, 뒷거래로 꼬리가 조금 더 붙는다.
+      // 과열선(SUSPICION_HOT)을 넘긴 상황이면 짐 경로가 이미 뜨거워 중개상도 부담이 커져 위험 프리미엄을 깎고, 뒷거래로 꼬리가 조금 더 붙는다.
       // 뜨거울수록 '위험 판매'가 더는 공짜가 아니게 되어 위원회 냉각과 저울질하게 된다(결정적·유계).
       const hot = meta.suspicion >= SUSPICION_HOT;
       gained = Math.ceil(raw * (hot ? BLACK_RATE_HOT : BLACK_RATE));
       suspDelta = eff.blackSuspRelief ? Math.max(0, heat - eff.blackSuspRelief) : heat;
       if (hot) suspDelta += BROKER_HOT_SUSP;
-      // 표식 물건을 뒷골목에 넘기면 중개상이 명단에 오른 이름을 한 번 더 확인해 꼬리가 조금 더 잡힌다(추가 의심도·유계).
+      // 표식 물건을 뒷골목에 넘기면 표식된 물건이 단속·소문에 다시 떠올라 꼬리가 조금 더 잡힌다(추가 의심도·유계).
       const markedCount = run.bag.filter(itemMarked).length;
       if (markedCount) suspDelta += Math.min(MARKED_SUSPICION_CAP, markedCount * MARKED_BLACK_SUSPICION);
     }
@@ -3335,20 +3335,20 @@
   }
 
   // 판매처를 'NPC와의 짧은 대화'로 보여주는 한 줄. 왜 그 값·의심도가 나오는지 숫자 대신 사람 말로 전한다.
-  // 중개상 대사는 상태에 따라 달라진다 — 이름이 뜨거우면 값을 깎고, 이번 짐에 단서가 있으면 장부 한 줄을 흘린다.
+  // 중개상 대사는 상태에 따라 달라진다 — 짐 경로가 이미 뜨거우면 값을 깎고, 이번 짐에 단서가 있으면 장부 한 줄을 흘린다.
   function buyerDialogue(buyer) {
     if (buyer === 'committee') {
-      return '접수창 너머 직원이 서류에 도장을 찍는다. “정식 반납이면 값은 낮습니다. 대신 오늘 기록에서 당신 이름은 지웁니다.”';
+      return '접수창 너머 직원이 서류에 도장을 찍는다. “정식 반납이면 값은 낮습니다. 대신 접수증을 끊어 드리죠. 검문에서 이 짐을 어디서 냈는지 설명이 됩니다.”';
     }
     if (buyer === 'family') {
       return '유족이 유품을 두 손으로 받아 든다. “고맙습니다… 이건 조용히 간직하겠습니다.”';
     }
-    // 암시장 중개상: 위로 못 올리는 물건이라 더 쳐주는 대신, 이름이 기록에 오르내린다.
+    // 암시장 중개상: 이름은 묻지 않고 위로 못 올리는 물건이라 더 쳐주는 대신, 짐이 단속·소문에 걸리면 처음 올린 사람을 되짚는다.
     const unknown = run.lastSale.find((it) => itemTruth(it) && !meta.truths.includes(it.name));
     const hot = meta.suspicion >= SUSPICION_HOT;
     let line = hot
-      ? '중개상이 물건을 보다 혀를 찬다. “네 이름이 벌써 뜨거워. 이런 건 나도 부담이라 값은 깎아. 그래도 소문은 붙어.”'
-      : '중개상이 천을 걷어 물건을 살핀다. “이건 위로 못 올리는 물건이야. 그래서 내가 더 쳐주지. 대신 네 이름도 같이 움직여.”';
+      ? '중개상이 물건을 보다 혀를 찬다. “이 물건, 경로가 벌써 너무 뜨거워. 나도 부담이라 값은 깎아. 그래도 소문은 붙어.”'
+      : '중개상이 천을 걷어 물건을 살핀다. “이름은 안 물어. 위로 못 올리는 물건이라 더 쳐주지. 대신 이게 단속에 걸리면 처음 올린 사람부터 되짚어.”';
     if (unknown) line += ' 그가 낡은 장부를 밀어 준다. “이 번호, 싱크홀 전날에도 찍혔어.”';
     return line;
   }
@@ -3359,10 +3359,10 @@
     const markedSold = run.lastSale.filter(itemMarked);
     if (!markedSold.length) return '';
     if (buyer === 'black') {
-      return '표식 있는 물건 때문에 중개상이 명단을 한 번 더 확인하고 값을 치렀다.';
+      return '표식 있는 물건이 뒷골목에 다시 떠올라, 순찰이 이걸 누가 올렸는지 캐고 다닌다.';
     }
     if (buyer === 'committee') {
-      return '표식 있는 물건을 정식 창구에 올리자, 위원회 추적 명단에서 이름이 조용히 지워졌다.';
+      return '표식 있는 물건을 정식 창구에 올리자, 그 물건이 공개 수배·검문 목록에서 조용히 빠졌다.';
     }
     if (buyer === 'family') {
       // 유품 자체는 표식이 없다. 위원회 반납분으로 함께 넘어간 표식 짐이 있을 때만 알린다.
