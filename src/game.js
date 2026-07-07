@@ -3466,6 +3466,20 @@
     saveMeta(); // 강화 구매 후 자동 저장
     log(`${UPGRADES[type].label}${objectParticle(UPGRADES[type].label)} 손봤다. 다음엔 더 버틴다.`, 'win');
     renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
+    flashUpgradeSuccess(type); // 성공한 버튼에 짧은 반짝임 + 가벼운 진동감
+  }
+
+  // 강화가 성공한 그 버튼에만 짧은 반짝임/진동 느낌을 준다. 실패·비활성 탭에는 붙지 않는다.
+  function flashUpgradeSuccess(type) {
+    const btn = el['up-' + type];
+    if (!btn) return;
+    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) return; // 모션 최소화 설정이면 정적으로 둔다
+    btn.classList.remove('up-flash');
+    void btn.offsetWidth; // 리플로우로 애니메이션을 확실히 재시작
+    btn.classList.add('up-flash');
+    window.setTimeout(() => btn.classList.remove('up-flash'), 560); // 가장 긴 반짝임 길이 + 여유
+    if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} } // 지원 기기 한정 가벼운 햅틱
   }
 
   function riskState() {

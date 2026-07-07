@@ -619,6 +619,39 @@ body {
 .up-btn .up-cost { font-size: 12px; color: var(--gold); font-weight: 700; }
 .up-btn.bought { border-color: var(--good); color: var(--good); }
 
+/* 강화 성공 순간의 짧은 반짝임(글린트) + 가벼운 진동감. buyUpgrade 성공 경로에서만 붙는다. */
+.up-btn.up-flash { position: relative; overflow: hidden; animation: upFlashShake .32s ease-in-out; }
+.up-btn.up-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(105deg,
+    transparent 34%,
+    rgba(90,209,127,.34) 47%,
+    rgba(255,255,255,.55) 50%,
+    rgba(90,209,127,.34) 53%,
+    transparent 66%);
+  background-size: 240% 100%;
+  animation: upFlashGlint .5s ease-out;
+}
+@keyframes upFlashShake {
+  0%, 100% { transform: translate(0, 0); }
+  22%  { transform: translate(-1.2px, .5px); }
+  55%  { transform: translate(1.3px, -.5px); }
+  80%  { transform: translate(-.7px, .3px); }
+}
+@keyframes upFlashGlint {
+  0%   { opacity: 0; background-position: 130% 0; }
+  22%  { opacity: 1; }
+  100% { opacity: 0; background-position: -30% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .up-btn.up-flash { animation: none; }
+  .up-btn.up-flash::after { content: none; }
+}
+
 #btn-again, #btn-retry { margin-top: auto; width: 100%; }
 .goal-line { margin: 10px 0 12px; text-align: center; color: var(--muted); font-size: 13px; }
 .goal-line b { color: var(--accent); }
@@ -1683,7 +1716,7 @@ html, body { touch-action: manipulation; }
 }
 
 /* ===================== Invisible threat pass ===================== */
-/* 회수자는 내부적으로만 다가온다. 화면에는 수치/스프라이트 대신 기척만 남긴다. */
+/* 회수자는 내부적으로만 다가온다. 화면에는 수치/스프라이트 대신 기척만 보여 준다. */
 .stealth-gauge .gauge-bar { display: none; }
 .stealth-gauge .gauge-label {
   min-height: 18px;

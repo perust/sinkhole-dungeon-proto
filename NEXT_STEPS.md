@@ -32,6 +32,7 @@
 - [x] 왜곡 변이 v1 (균열 시야·검은 손): heat≥15 유물을 하나라도 들고 충분히 깊은(2층↑ 또는 3방↑) 런에서 귀환하면 `meta.mutations`에 영구 흔적이 새겨진다(런당 한 번 `grantMutationOnReturn`, 무작위 없이 `MUTATION_ORDER` 순 첫 미보유 변이, 물건·비밀 불변). 균열 시야는 앞쪽 방향 단서(지도공 없을 때)+균열 출구 긁힘↑(15→20%), 검은 손은 캐비닛 조명 소모↓(-3→-1)+공식 검문 의심도 +1. 시작 화면 `몸에 남은 흔적` 표시
 - [x] 실종자 흔적방 + 가족 반환 v1: 드문 `missing-trace` 방(벽 사진/이름표/배낭/가족 편지)에서 `조심히 챙긴다`/`사진만 확인한다`/`그냥 둔다`를 고른다. 유품(`family`, `FAMILY_KEEPSAKES`)은 `ITEM_TABLE` 밖이라 `TRUTH_TOTAL`=6 유지, 지상에서 유품이 있을 때만 `가족에게 반환` 경로가 열려 RP는 낮지만 의심도↓·거리 소문 완화(비밀은 주지 않음). 캐시 무효화 위해 `game.js?v=39`로 범프
 - [x] 핵심 행동 사운드 v1: WebAudio로 코드에서 생성하는(파일·네트워크 없는) 짧은 큐 — 챙기기/버리고 도망/판매·반환/강화 성공/기절, 그리고 기척 near·contact 상승 시 낮은 맥동. `ensureAudio`/`tone`/`noiseBurst`/`playSfx`, 마스터 게인 0.16, 첫 제스처 전 무재생·`AudioContext` 실패 시 무음(throw 없음). 시작 화면 `소리`/`무음` 토글(`unlit-halls-sound-off`). 기척 소리는 `run.lastPresenceSfx` 엣지 트리거로 반복 금지. 캐시 `game.js?v=41`·`styles.css?v=25`
+- [x] 강화 성공 피드백 v1: 강화가 성공한 그 버튼에만 짧은 반짝임(글린트 스윕)과 가벼운 진동감(미세 흔들림)을 CSS 애니메이션으로 준다. `flashUpgradeSuccess`가 `buyUpgrade` 성공 경로에서만 호출돼 실패·비활성(잔액 부족·이미 구매) 탭에는 붙지 않고, `prefers-reduced-motion`이면 정적으로 둔다(모션·햅틱 모두 생략). 지원 기기에서는 `navigator.vibrate(18)` 가벼운 햅틱을 곁들이고, 기존 강화 성공 사운드는 건드리지 않는다. 외부 에셋·라이브러리 없음. 캐시 `styles.css?v=27`·`game.js?v=51`
 - [x] 문법/공백 검증: `node --check src/game.js`, `git diff --check`
 - [x] 로컬 브라우저 검증: 시작 → 던전 → 챙기기 → 귀환 → 판매처 선택 → 강화 화면까지 확인
 
