@@ -753,8 +753,13 @@ body {
   vertical-align: middle;
   border-radius: 8px;
   background-image: var(--pixel-loot);
+  /* 회수물 스트립은 아이콘 11칸(0~10)이 가로로 늘어서 있다. background-size 1100%로
+     한 칸이 상자 너비를 채우게 키우고, 칸 i는 i*10%(양수)로 이동해 개별 아이콘만 보인다.
+     예전 음수(-10%) 값은 픽셀 오프셋 감각을 퍼센트에 잘못 옮겨 0번 외에는 엉뚱한 칸을
+     보여줬다. no-repeat로 타일 잔상도 막는다. */
   background-size: 1100% 100%;
-  background-position: calc(var(--icon-index, 0) * -10%) center;
+  background-position: calc(var(--icon-index, 0) * 10%) center;
+  background-repeat: no-repeat;
   image-rendering: pixelated;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 2px 6px rgba(0,0,0,.35);
 }
@@ -1539,7 +1544,7 @@ html, body { touch-action: manipulation; }
 }
 @keyframes moveWipe { 0% { opacity: 0; } 100% { opacity: 1; } }
 
-/* 귀환 걷기: 순간이동 대신 왔던 길을 되짚어 오르는 동안 시야가 천천히 걸음처럼 흔들린다. */
+/* 귀환 걷기: 순간이동 대신 왔던 길을 거슬러 오르는 동안 시야가 천천히 걸음처럼 흔들린다. */
 .stage.returning .fp-view { animation: returnBob 1.4s ease-in-out infinite; will-change: transform; }
 @keyframes returnBob {
   0%, 100% { transform: translateY(0); }

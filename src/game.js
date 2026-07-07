@@ -182,8 +182,13 @@
     blocked: '가방 입구가 벌어져 있다. 더 넣으면 찢어질 것 같다.',
   };
 
-  function itemIcon(index) {
-    return `<span class="loot-icon" style="--icon-index:${index}" aria-hidden="true"></span>`;
+  // 회수물 스트립(loot-icons-strip.png)에서 물건별 아이콘 한 칸을 잘라 보여준다.
+  // name을 넘기면 좁은 슬롯에서 이름이 잘려도 hover로 확인할 수 있게 title을 달되,
+  // 곁에 보이는 텍스트가 접근성 라벨을 이미 담당하므로 아이콘은 aria-hidden으로 둬
+  // 스크린 리더가 이름을 두 번 읽지 않게 한다.
+  function itemIcon(index, name) {
+    const title = name ? ` title="${name}"` : '';
+    return `<span class="loot-icon" style="--icon-index:${index}"${title} aria-hidden="true"></span>`;
   }
 
   function hasFinalConsonant(text) {
@@ -3019,7 +3024,7 @@
     run.pendingEvent = null;
     run.returnWalk = true;
     if (opts.lead) showDialogue(opts.lead, opts.leadTone || '');
-    else log('왔던 길을 되짚어 지상으로 향한다.', 'win');
+    else log('왔던 길을 거슬러 지상으로 향한다.', 'win');
     const walk = buildReturnWalkLines(risk, opts);
     const pursuitSet = new Set(RETURN_WALK_PURSUIT);
     walk.forEach((text) => {
@@ -3585,7 +3590,7 @@
     // 각 물건이 차지하는 칸을 색으로 채운다.
     run.bag.forEach((item) => {
       for (let s = 0; s < item.slots; s++) {
-        cells.push({ color: TIER_COLOR[item.tier], icon: item.icon, label: s === 0 ? item.name : '' });
+        cells.push({ color: TIER_COLOR[item.tier], icon: item.icon, name: item.name, label: s === 0 ? item.name : '' });
       }
     });
     while (cells.length < cap) cells.push(null);
@@ -3596,7 +3601,7 @@
       d.className = 'slot' + (c ? ' filled' : '');
       if (c) {
       d.style.setProperty('--tier-color', c.color);
-      d.innerHTML = itemIcon(c.icon) + (c.label ? `<span class="slot-label">${c.label}</span>` : '');
+      d.innerHTML = itemIcon(c.icon, c.name) + (c.label ? `<span class="slot-label">${c.label}</span>` : '');
       }
       el['bag-slots'].appendChild(d);
     });
@@ -3909,7 +3914,7 @@
       run.lastSale.forEach((it) => {
         const row = document.createElement('div');
         row.className = 'sale-item';
-        row.innerHTML = `<span class="sale-name">${itemIcon(it.icon)}${it.name}</span><span class="v">${it.value} RP</span>`;
+        row.innerHTML = `<span class="sale-name">${itemIcon(it.icon, it.name)}${it.name}</span><span class="v">${it.value} RP</span>`;
         list.appendChild(row);
       });
     }
@@ -3970,7 +3975,7 @@
       const it = run.currentItem;
       rpEl.className = 'recovery-point';
       rpEl.style.borderColor = TIER_COLOR[it.tier];
-      rpEl.innerHTML = `${itemIcon(it.icon)}<span class="rp-name">${it.name}</span>`;
+      rpEl.innerHTML = `${itemIcon(it.icon, it.name)}<span class="rp-name">${it.name}</span>`;
     } else {
       rpEl.className = 'recovery-point empty';
       rpEl.style.borderColor = '';
@@ -4009,7 +4014,7 @@
         run.lastSale.forEach((it) => {
           const row = document.createElement('div');
           row.className = 'sale-item';
-          row.innerHTML = `<span class="sale-name">${itemIcon(it.icon)}${it.name}</span><span class="v">+${it.value}</span>`;
+          row.innerHTML = `<span class="sale-name">${itemIcon(it.icon, it.name)}${it.name}</span><span class="v">+${it.value}</span>`;
           list.appendChild(row);
         });
       }
