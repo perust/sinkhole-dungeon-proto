@@ -54,7 +54,7 @@
   function itemFragile(it) { return !!(it && it.fragile); }
   function itemFamily(it) { return !!(it && it.family); }
   function itemMarked(it) { return !!(it && it.marked); }
-  // 진실 조각 여부(태그)와 해금 문구(텍스트)를 분리한다. 구버전 물건은 truth가 문자열이었다 →
+  // 단서 여부(태그)와 해금 문구(텍스트)를 분리한다. 구버전 물건은 truth가 문자열이었다 →
   // itemTruth는 문자열도 참으로 보고, itemTruthText는 그 문자열을 그대로 문구로 돌려준다(하위호환).
   function itemTruth(it) {
     if (!it) return false;
@@ -67,13 +67,13 @@
     if (typeof it.truth === 'string') return it.truth; // 구버전: truth가 문구를 담던 시절
     return '';
   }
-  // 진실 조각 총량은 진짜 진실 물건만 센다(itemTruth). 앞으로 truth 없는 일반 회수물이 ITEM_TABLE에
+  // 단서 총량은 truth 태그가 붙은 물건만 센다(itemTruth). 앞으로 truth 없는 일반 회수물이 ITEM_TABLE에
   // 들어와도 6/6 목표가 흔들리지 않는다.
   const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().filter(itemTruth).length;
 
   // 실종자 흔적방 유품 v1: 실종자 방에서만 나오는 가족 keepsake.
-  // ITEM_TABLE 밖에 두어 진실 조각 총량(TRUTH_TOTAL=6)에 영향이 없다. truth 필드가 없어
-  // 암시장에 팔아도 진실 조각을 풀지 않는다(chooseBuyer는 truth 있는 물건만 조각으로 센다).
+  // ITEM_TABLE 밖에 두어 단서 총량(TRUTH_TOTAL=6)에 영향이 없다. truth 필드가 없어
+  // 암시장에 팔아도 비밀을 풀지 않는다(chooseBuyer는 truth 있는 물건만 단서로 센다).
   // family:true 태그로 지상 귀환 시 '가족에게 돌려준다' 경로가 열린다. 값·heat는 낮다(개인 유품).
   const FAMILY_KEEPSAKES = [
     { name: '가족 사진',     slots: 1, value: 4, tier: 'common', icon: 3, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '사진 뒤에 “아빠 꼭 돌아와”라고 적혀 있다.' },
@@ -108,7 +108,7 @@
   const ENTRY_KIND  = { key: 'entry',  label: '입구',       desc: '',            style: '', light: 0, danger: 0 };
   const STAIRS_KIND = { key: 'stairs', label: '계단 아래로', desc: '더 깊은 냉기', style: '', light: 0, danger: 0 };
 
-  // 위원회 감시소 튜닝값과 단말 로그. 로그는 진실 조각을 공짜로 풀지 않고 단서 한 줄만 흘린다.
+  // 위원회 감시소 튜닝값과 단말 로그. 로그는 비밀을 공짜로 풀지 않고 단서 한 줄만 흘린다.
   const WATCHPOST_SPAWN_CHANCE = 0.28;     // 층마다 감시소가 나타날 확률(드물게)
   const WATCHPOST_TENSE_SUSPICION = 40;    // 이 이상이면 단말을 뒤지는 게 위험해진다
   const WATCHPOST_LOGS = [
@@ -117,7 +117,7 @@
     '명단이 스친다. 회수자 몇 사람 이름 옆에 붉은 표시가 찍혀 있다.',
   ];
 
-  // 실종자 흔적방 튜닝값과 단서 로그. '사진만 확인'하면 단서 한 줄만 흘린다 — 진실 조각은 주지 않는다.
+  // 실종자 흔적방 튜닝값과 단서 로그. '사진만 확인'하면 단서 한 줄만 흘린다 — 비밀은 주지 않는다.
   const MISSING_TRACE_SPAWN_CHANCE = 0.24;  // 층마다 실종자 흔적방이 나타날 확률(드물게)
   const MISSING_TRACE_LOGS = [
     '사진 뒤에 날짜가 적혀 있다 — 싱크홀이 열리기 사흘 전. 이 회수자는 그날 이후로 올라오지 않았다.',
@@ -417,7 +417,7 @@
   const INSIDER_WATCHPOST_LIGHT = 3;     // 전 직원: 봉쇄 코드를 넣느라 드는 조명(소음·위험은 없음)
   const INSIDER_CHECKPOINT_RELIEF = 2;   // 전 직원: 공식 출구 검문에서 통행 암구호로 덜어내는 의심도
 
-  // 전 위원회 직원: 감시소 봉쇄 코드로 열면 흘러나오는 봉쇄문/재봉인 단서. 진실 조각은 공짜로 풀지 않는다.
+  // 전 위원회 직원: 감시소 봉쇄 코드로 열면 흘러나오는 봉쇄문/재봉인 단서. 비밀은 공짜로 풀지 않는다.
   const INSIDER_SEAL_LOG = '낡은 직원 코드가 먹혔다. 단말이 순순히 열리고 한 줄이 떠오른다 — “봉쇄문 재봉인은 3단계, 마지막 인증은 현장 직원 코드.” 코드 주인이 옆에서 조용히 고개를 끄덕인다.';
 
   // 지도공: 갈림길에서 앞쪽 방 목적지의 특징을 낮은 정밀도로 미리 보여준다(kind → 짧은 특징어).
@@ -549,7 +549,7 @@
   const SOUND_KEY = 'unlit-halls-sound-off'; // '1'이면 소리를 재생하지 않는다(사용자 무음 선택)
   const SAVE_VERSION = 1;
 
-  // 알려진 진실 조각 이름 집합 — 깨진/오래된 truths 값을 거를 때 쓴다.
+  // 알려진 단서 이름 집합 — 깨진/오래된 truths 값을 거를 때 쓴다.
   // truth 태그가 있는 물건 이름만 담는다(앞으로 truth 없는 일반 회수물이 섞여도 저장값이 오염되지 않게).
   const KNOWN_TRUTHS = new Set(Object.values(ITEM_TABLE).flat().filter(itemTruth).map((it) => it.name));
 
@@ -661,7 +661,7 @@
 
   // '기록 초기화' — 저장값을 지우고 meta를 출고 상태로 되돌린다.
   function resetProgress() {
-    if (!window.confirm('모든 기록(RP·강화·깊이·의심도·진실 조각·생존자·변이)을 지울까요?')) return;
+    if (!window.confirm('모든 기록(RP·강화·깊이·의심도·단서·생존자·변이)을 지울까요?')) return;
     clearSave();
     Object.assign(meta, {
       rp: 0, bagLevel: 1, lightLevel: 1, weaponLevel: 1,
@@ -675,8 +675,8 @@
 
   function nextGoal() {
     if (meta.maxDepth < FLOORS.length) return `${meta.maxDepth + 1}층 도달`;
-    if (meta.truths.length < TRUTH_TOTAL) return '진실 조각 더 찾기';
-    if (!meta.endingSeen) return '진실 확인하기';
+    if (meta.truths.length < TRUTH_TOTAL) return '단서 더 찾기';
+    if (!meta.endingSeen) return '비밀 확인하기';
     return '심층 루프 계속';
   }
 
@@ -1930,7 +1930,7 @@
       beginEntering();
       return;
     }
-    // 진실을 다 모았지만 엔딩을 아직 확인하지 않았다면, 새 런 대신 엔딩을 먼저 보여준다.
+    // 단서를 다 모았지만 엔딩을 아직 확인하지 않았다면, 새 런 대신 엔딩을 먼저 보여준다.
     if (meta.truths.length >= TRUTH_TOTAL && !meta.endingSeen) {
       renderEndingScreen();
       show('screen-ending');
@@ -2405,7 +2405,7 @@
         msg = '단말을 열어 내 회수 이력을 지웠다. 자판이 딸깍이고, 감시등이 한 번 꺼졌다 켜진다.';
       } else if (choiceId === 'seal-code' && hasSurvivor('insider')) {
         // 전 직원의 낡은 직원 코드: 소음·위험 없이 의심도를 조금 덜고 봉쇄문/재봉인 단서 한 줄을 흘린다.
-        // 진실 조각은 공짜로 주지 않는다 — 단서 로그일 뿐.
+        // 비밀은 공짜로 주지 않는다 — 단서 로그일 뿐.
         run.light = Math.max(0, run.light - INSIDER_WATCHPOST_LIGHT);
         if (meta.suspicion > 0) {
           meta.suspicion = Math.max(0, meta.suspicion - INSIDER_WATCHPOST_RELIEF);
@@ -2427,7 +2427,7 @@
           run.currentItem = found;
           msg = `서랍을 뒤지자 ${found.name}${subjectParticle(found.name)} 딸려 나왔다.`;
         } else {
-          // 진실 조각을 공짜로 풀지 않는다 — 단서 로그 한 줄만 띄운다.
+          // 비밀을 공짜로 풀지 않는다 — 단서 로그 한 줄만 띄운다.
           msg = WATCHPOST_LOGS[Math.floor(Math.random() * WATCHPOST_LOGS.length)];
         }
       } else {
@@ -2448,7 +2448,7 @@
           msg = '흐트러진 자리를 조용히 정리했다. 더 가져갈 것은 없다.';
         }
       } else if (choiceId === 'photo') {
-        // 사진만 확인: 단서 한 줄, 물건 없음. 진실 조각은 주지 않는다.
+        // 사진만 확인: 단서 한 줄, 물건 없음. 비밀은 주지 않는다.
         run.mental = Math.max(0, run.mental - 1);
         msg = MISSING_TRACE_LOGS[Math.floor(Math.random() * MISSING_TRACE_LOGS.length)];
       } else {
@@ -3335,7 +3335,7 @@
     run.lastTruth = null;
 
     if (buyer === 'black') {
-      // truth 태그가 붙은 회수물만 진실 조각이 된다 — 유품(family, truth 없음)은 팔아도 조각을 늘리지 않는다.
+      // truth 태그가 붙은 회수물만 단서가 된다 — 유품(family, truth 없음)은 팔아도 단서를 늘리지 않는다.
       const unknown = run.lastSale.find((it) => itemTruth(it) && !meta.truths.includes(it.name));
       if (unknown) {
         meta.truths.push(unknown.name);
@@ -3344,16 +3344,16 @@
     }
 
     if (previousTruthCount !== meta.truths.length) {
-      log('암시장 정보상이 진실 조각 하나를 넘겼다.', 'win');
+      log('암시장 정보상이 단서 하나를 넘겼다.', 'win');
     }
-    // 마지막 진실 조각이 이번 판매로 처음 채워졌는가(아래→가득). 매 런 반복 발동을 막는다.
+    // 마지막 단서가 이번 판매로 처음 채워졌는가(아래→가득). 매 런 반복 발동을 막는다.
     const endingUnlocked =
       previousTruthCount < TRUTH_TOTAL &&
       meta.truths.length >= TRUTH_TOTAL &&
       !meta.endingSeen;
 
     resolveContract(buyer);
-    saveMeta(); // 판매처 선택 후 자동 저장 (RP·의심도·진실 조각 반영)
+    saveMeta(); // 판매처 선택 후 자동 저장 (RP·의심도·단서 반영)
     run.streetNews = makeStreetNews(buyer, quote);
     // RP/의심도/의뢰/저장은 그대로 반영하고, 강화 화면도 미리 렌더한다(계속 버튼이 곧장 보여줄 수 있게).
     renderUpgradeScreen(quote.gained);
@@ -3956,7 +3956,7 @@
     el['street-news'].textContent = run.streetNews;
     if (run.lastTruth) {
       el['truth-news'].hidden = false;
-      el['truth-news'].textContent = `진실 조각: ${run.lastTruth}`;
+      el['truth-news'].textContent = `단서: ${run.lastTruth}`;
     } else {
       el['truth-news'].hidden = true;
       el['truth-news'].textContent = '';
@@ -3984,7 +3984,7 @@
     });
   }
 
-  // 진실 6/6 엔딩 화면. 조각 개수만 갱신하면 되므로 run 없이도 안전하게 재표시할 수 있다.
+  // 단서 6/6 엔딩 화면. 단서 개수만 갱신하면 되므로 run 없이도 안전하게 재표시할 수 있다.
   function renderEndingScreen() {
     if (el['ending-truth-count']) el['ending-truth-count'].textContent = meta.truths.length;
   }
@@ -4052,11 +4052,11 @@
 
   /* ---------------- 시작 ---------------- */
 
-  // 진실 조각 진행 상태에 맞춘 코덱스 문구(개수/완성/엔딩 확인 여부에 따라 달라진다).
+  // 단서 진행 상태에 맞춘 코덱스 문구(개수/완성/엔딩 확인 여부에 따라 달라진다).
   function codexTail() {
     const n = meta.truths.length;
     if (n <= 0) return '아직 아무것도 모른다.';
-    if (n < TRUTH_TOTAL) return '조각이 맞지 않는다.';
+    if (n < TRUTH_TOTAL) return '아직 그림이 흐리다.';
     return meta.endingSeen ? '이제 안다.' : '확인해야 한다.';
   }
 
