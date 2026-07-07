@@ -1121,6 +1121,15 @@
     run.lastPresenceSfx = tier;
   }
 
+  // 층별 배경 테마 v1: 1층 도시 잔해(따뜻한 잔해 톤) · 2층 연구시설(차가운 톤) · 3층+ 시공간 심층(뒤틀린 심층 톤).
+  // 무대 배경/시야에 옅은 색조만 얹는 CSS 클래스 하나만 붙인다 — DOM·연출은 그대로, 층에 맞춰 CSS 변수만 바뀐다.
+  const FLOOR_THEME_CLASSES = ['floor-theme-ruins', 'floor-theme-lab', 'floor-theme-deep'];
+  function floorThemeClass(floor) {
+    if (floor >= 3) return 'floor-theme-deep';
+    if (floor === 2) return 'floor-theme-lab';
+    return 'floor-theme-ruins';
+  }
+
   // 미끼/버린 물건을 둘 인접 칸 하나를 고른다: 추격자 쪽이 아닌 출구를 우선하고,
   // 계단은 피한다(그쪽에 두면 되찾으러 갈 수 없다). 출구가 없으면 현재 칸.
   function baitAdjacentNodeId() {
@@ -3555,6 +3564,9 @@
       el['stage'].classList.toggle('has-loot', !!run.currentItem);
       el['stage'].classList.toggle('monster-encounter', monsterCrisisOpen);
       el['stage'].classList.toggle('returning', !!run.returnWalk);
+      // 현재 층 테마 클래스 하나만 붙인다 — 층을 내려가면(run.floor) 자동으로 바뀌고, 매 렌더에서 유지된다.
+      el['stage'].classList.remove(...FLOOR_THEME_CLASSES);
+      el['stage'].classList.add(floorThemeClass(run.floor));
       renderPresenceFx();
     }
     renderStage();

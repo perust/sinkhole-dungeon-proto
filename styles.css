@@ -739,11 +739,35 @@ body {
 }
 
 .stage {
+  /* 층별 배경 테마는 CSS 변수 두 개(--floor-tint 무대 가장자리 색조 · --floor-tint-at 위치)로만 갈린다.
+     테마 클래스가 없을 때는 기본 청록 톤(fallback)으로 예전과 같게 보인다. */
   background:
-    radial-gradient(80% 60% at 20% 50%, rgba(87,224,200,.06), transparent 60%),
+    radial-gradient(80% 60% at var(--floor-tint-at, 20% 50%), var(--floor-tint, rgba(87,224,200,.06)), transparent 60%),
     linear-gradient(180deg, rgba(13,19,34,.72), rgba(9,13,24,.86)),
     var(--pixel-env) center/cover;
   image-rendering: pixelated;
+}
+
+/* 층별 배경 타일 v1 — 도시 잔해 / 연구시설 / 시공간 심층.
+   무대 가장자리 색조(--floor-tint)와 1인칭 시야의 상단 발광·먼 깊이 색(--fp-glow/--fp-mid)만 층에 맞춰 옮긴다.
+   변수는 자식 .fp-view로 상속돼 시야까지 물든다. 기존 텍스처(--pixel-env)·기척/조우 오버레이는 그대로 둔다. */
+.stage.floor-theme-ruins {            /* 1층: 부서진 도시 잔해 — 흙먼지·녹슨 콘크리트의 따뜻한 톤 */
+  --floor-tint: rgba(196,132,74,.10);
+  --floor-tint-at: 24% 60%;
+  --fp-glow: rgba(210,150,90,.13);
+  --fp-mid: #17130f;
+}
+.stage.floor-theme-lab {              /* 2층: 변질된 연구시설 — 차갑고 창백한 강철·청록 톤 */
+  --floor-tint: rgba(120,196,206,.09);
+  --floor-tint-at: 50% 40%;
+  --fp-glow: rgba(150,210,220,.14);
+  --fp-mid: #0e1622;
+}
+.stage.floor-theme-deep {             /* 3층+: 뒤틀린 시공간 심층 — 어긋난 보라·자홍의 깊은 톤 */
+  --floor-tint: rgba(150,96,214,.13);
+  --floor-tint-at: 50% 54%;
+  --fp-glow: rgba(176,110,230,.16);
+  --fp-mid: #150f22;
 }
 
 .loot-icon {
@@ -1247,9 +1271,10 @@ html, body { touch-action: manipulation; }
   inset: 0;
   overflow: hidden;
   border-radius: inherit;
+  /* --fp-glow/--fp-mid는 부모 .stage의 층 테마에서 상속받는다. 테마가 없으면 기본 청록/남색(fallback). */
   background:
-    radial-gradient(ellipse at 50% 44%, rgba(87,224,200,.16), transparent 18%),
-    linear-gradient(180deg, #121827 0%, #080b12 62%, #05070c 100%);
+    radial-gradient(ellipse at 50% 44%, var(--fp-glow, rgba(87,224,200,.16)), transparent 18%),
+    linear-gradient(180deg, var(--fp-mid, #121827) 0%, #080b12 62%, #05070c 100%);
   z-index: 0;
 }
 .fp-view::after {
