@@ -32,16 +32,16 @@
   //            암시장에 넘기면 중개상이 이름을 한 번 더 확인해 꼬리가 조금 더 잡힌다.
   const ITEM_TABLE = {
     1: [
-      { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0, heat: 3,  noise: 'medium', fragile: false, truth: '배터리에는 위원회 마크가 지워진 흔적이 있다.' },
-      { name: '배관 부품',     slots: 1, value: 5,  tier: 'common', icon: 1, heat: 2,  noise: 'low',    fragile: false, truth: '도시 배관은 사고 전부터 아래로 이어져 있었다.' },
+      { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0, heat: 3,  noise: 'medium', fragile: false, truth: true, truthText: '배터리에는 위원회 마크가 지워진 흔적이 있다.' },
+      { name: '배관 부품',     slots: 1, value: 5,  tier: 'common', icon: 1, heat: 2,  noise: 'low',    fragile: false, truth: true, truthText: '도시 배관은 사고 전부터 아래로 이어져 있었다.' },
     ],
     2: [
-      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, heat: 9,  noise: 'low',    fragile: true,  marked: true, truth: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
-      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, heat: 7,  noise: 'medium', fragile: true,  truth: '연구 노트에는 ‘어둠붙이’가 빛과 소리에 다르게 반응한다고 적혀 있다.' },
+      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, heat: 9,  noise: 'low',    fragile: true,  marked: true, truth: true, truthText: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
+      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, heat: 7,  noise: 'medium', fragile: true,  truth: true, truthText: '연구 노트에는 ‘어둠붙이’가 빛과 소리에 다르게 반응한다고 적혀 있다.' },
     ],
     3: [
-      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4, heat: 15, noise: 'high',   fragile: false, truth: '코어는 싱크홀을 막는 장치가 아니라 더 깊게 여는 열쇠다.' },
-      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5, heat: 20, noise: 'high',   fragile: true,  marked: true, truth: '봉인 유물의 문양은 지상 허가증의 직인과 같다.' },
+      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4, heat: 15, noise: 'high',   fragile: false, truth: true, truthText: '코어는 싱크홀을 막는 장치가 아니라 더 깊게 여는 열쇠다.' },
+      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5, heat: 20, noise: 'high',   fragile: true,  marked: true, truth: true, truthText: '봉인 유물의 문양은 지상 허가증의 직인과 같다.' },
     ],
   };
 
@@ -54,7 +54,22 @@
   function itemFragile(it) { return !!(it && it.fragile); }
   function itemFamily(it) { return !!(it && it.family); }
   function itemMarked(it) { return !!(it && it.marked); }
-  const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().length;
+  // 진실 조각 여부(태그)와 해금 문구(텍스트)를 분리한다. 구버전 물건은 truth가 문자열이었다 →
+  // itemTruth는 문자열도 참으로 보고, itemTruthText는 그 문자열을 그대로 문구로 돌려준다(하위호환).
+  function itemTruth(it) {
+    if (!it) return false;
+    if (it.truth === true) return true;
+    return typeof it.truth === 'string' && it.truth.length > 0;
+  }
+  function itemTruthText(it) {
+    if (!it) return '';
+    if (typeof it.truthText === 'string') return it.truthText;
+    if (typeof it.truth === 'string') return it.truth; // 구버전: truth가 문구를 담던 시절
+    return '';
+  }
+  // 진실 조각 총량은 진짜 진실 물건만 센다(itemTruth). 앞으로 truth 없는 일반 회수물이 ITEM_TABLE에
+  // 들어와도 6/6 목표가 흔들리지 않는다.
+  const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().filter(itemTruth).length;
 
   // 실종자 흔적방 유품 v1: 실종자 방에서만 나오는 가족 keepsake.
   // ITEM_TABLE 밖에 두어 진실 조각 총량(TRUTH_TOTAL=6)에 영향이 없다. truth 필드가 없어
@@ -535,7 +550,8 @@
   const SAVE_VERSION = 1;
 
   // 알려진 진실 조각 이름 집합 — 깨진/오래된 truths 값을 거를 때 쓴다.
-  const KNOWN_TRUTHS = new Set(Object.values(ITEM_TABLE).flat().map((it) => it.name));
+  // truth 태그가 있는 물건 이름만 담는다(앞으로 truth 없는 일반 회수물이 섞여도 저장값이 오염되지 않게).
+  const KNOWN_TRUTHS = new Set(Object.values(ITEM_TABLE).flat().filter(itemTruth).map((it) => it.name));
 
   function hasStorage() {
     try {
@@ -3319,11 +3335,11 @@
     run.lastTruth = null;
 
     if (buyer === 'black') {
-      // truth 있는 회수물만 진실 조각이 된다 — 유품(family, truth 없음)은 팔아도 조각을 늘리지 않는다.
-      const unknown = run.lastSale.find((it) => it.truth && !meta.truths.includes(it.name));
+      // truth 태그가 붙은 회수물만 진실 조각이 된다 — 유품(family, truth 없음)은 팔아도 조각을 늘리지 않는다.
+      const unknown = run.lastSale.find((it) => itemTruth(it) && !meta.truths.includes(it.name));
       if (unknown) {
         meta.truths.push(unknown.name);
-        run.lastTruth = unknown.truth;
+        run.lastTruth = itemTruthText(unknown);
       }
     }
 
@@ -4125,6 +4141,6 @@
 
   // 헤드리스(Node) 검증용: 순수 맵 생성 로직만 노출한다. 브라우저에는 영향 없음.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { generateFloorMap, bfs, FLOORS, ITEM_TABLE, NODE_KINDS };
+    module.exports = { generateFloorMap, bfs, FLOORS, ITEM_TABLE, NODE_KINDS, itemTruth, itemTruthText, TRUTH_TOTAL };
   }
 })();
