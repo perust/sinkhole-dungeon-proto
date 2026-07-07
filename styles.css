@@ -556,11 +556,77 @@ body {
 @keyframes presencePulse { 0%{ opacity: 0; } 22%{ opacity: 1; } 100%{ opacity: .9; } }
 @keyframes presenceShakeSoft { 0%,100%{ transform: translate(0,0); } 25%{ transform: translate(-.6px,.4px); } 60%{ transform: translate(.5px,-.4px); } }
 @keyframes presenceShakeHard { 0%,100%{ transform: translate(0,0); } 20%{ transform: translate(-1.4px,.8px); } 50%{ transform: translate(1.6px,-.6px); } 80%{ transform: translate(-1px,.6px); } }
+
+/* 위험 단계별 회수자 실루엣 v1 -------------------------------- */
+/* 숨은 회수자를 스프라이트가 아니라 시야 안쪽의 흐릿한 어둠 덩어리로만 흘린다.
+   소실점(가운데 문) 쪽에 세로로 긴 그림자가 단계에 따라 옅게 서 있다가(far)
+   또렷이 늘어나고(near) 코앞까지 밀려든다(contact). 기본은 완전히 숨김 —
+   기척 클래스가 붙을 때만 서서히 드러난다. 숫자·이름·윤곽선은 전혀 없다.
+   fp-view의 overflow:hidden 안에 갇혀 레이아웃을 넘치지 않고, 기존 비네트
+   (::before/::after)가 위에 얹혀 실루엣 가장자리를 주변 어둠에 녹인다. */
+.fp-figure {
+  position: absolute;
+  left: 50%;
+  bottom: 26%;
+  width: 22px;
+  height: 34px;
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  border-radius: 46% 46% 40% 40% / 60% 60% 40% 40%;
+  background:
+    radial-gradient(56% 42% at 50% 20%, rgba(3,4,7,.92), transparent 74%),
+    linear-gradient(180deg, rgba(3,4,7,.82) 6%, rgba(3,4,7,.58) 58%, transparent 100%);
+  filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .8s ease, transform .8s ease, width .8s ease, height .8s ease, bottom .8s ease, filter .8s ease;
+}
+/* far: 저 안쪽에 세로로 긴 어둠이 아주 옅게 서 있다 */
+.stage.presence-far .fp-view .fp-figure { opacity: .3; }
+/* near: 그림자가 또렷해지고 위로 늘어나며 짙어진다 */
+.stage.presence-near .fp-view .fp-figure {
+  opacity: .6;
+  bottom: 23%;
+  width: 27px; height: 54px;
+  filter: blur(2.3px);
+  transform: translateX(-50%) scaleY(1.1);
+  animation: presenceFigureSway 3.8s ease-in-out infinite;
+}
+/* contact: 실루엣이 코앞까지 밀려들어 시야 아래를 채운다(짧게 한 번 밀려들고 정착) */
+.stage.presence-contact .fp-view .fp-figure {
+  opacity: .8;
+  bottom: 11%;
+  width: 48px; height: 82px;
+  filter: blur(1.8px);
+  transform: translateX(-50%) scaleY(1.04);
+  animation: presenceFigureLoom 1s ease-out 1 both;
+}
+/* 이동/귀환 걷기 중엔 실루엣의 흔들림만 끈다 — 걷기 전환 연출과 겹치지 않게(존재는 유지). */
+.stage.moving.presence-near .fp-view .fp-figure,
+.stage.moving.presence-contact .fp-view .fp-figure,
+.stage.returning.presence-near .fp-view .fp-figure,
+.stage.returning.presence-contact .fp-view .fp-figure { animation: none; }
+/* 조우 위기창이 열리면 전용 오버레이가 화면을 지배하므로 실루엣은 물러난다. */
+.stage.monster-encounter .fp-view .fp-figure { display: none; }
+@keyframes presenceFigureSway {
+  0%,100% { transform: translateX(-50%) scaleY(1.1); }
+  50% { transform: translateX(calc(-50% + 1.4px)) scaleY(1.13); }
+}
+@keyframes presenceFigureLoom {
+  0% { opacity: 0; transform: translateX(-50%) scaleY(1.22); }
+  55% { opacity: .9; }
+  100% { opacity: .8; transform: translateX(-50%) scaleY(1.04); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .stage.presence-near, .stage.presence-contact { animation: none; }
   .stage.presence-far .fp-view::before,
   .stage.presence-near .fp-view::before,
   .stage.presence-contact .fp-view::before { animation: none; }
+  /* 실루엣은 단계별 정착 모습만 남기고 등장/늘어남/흔들림 모션은 모두 끈다. */
+  .stage.presence-far .fp-view .fp-figure,
+  .stage.presence-near .fp-view .fp-figure,
+  .stage.presence-contact .fp-view .fp-figure { animation: none; transition: none; }
 }
 
 /* 로그 ----------------------------------------------------- */
