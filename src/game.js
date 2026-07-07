@@ -144,6 +144,17 @@
   const MARKED_BLACK_SUSPICION = 3;    // 표식 물건 하나를 암시장에 넘길 때마다 추가로 오르는 의심도
   const MARKED_SUSPICION_CAP = 6;      // 표식 보정(양방향)이 한 판매에서 넘지 못하는 상한(유계)
 
+  // 의심도 대가 v1: 의심도가 실제로 아프도록 두 문턱을 둔다. 값이 낮을 땐 아무 대가도 없고(비징벌),
+  // 문턱을 넘을수록 위원회 감시가 지상까지 따라붙어 런 시작과 뒷거래가 불리해진다. 보정은 전부 결정적·유계.
+  const SUSPICION_TENSE = 35;          // 긴장선: 입구에 위원회 밴이 붙기 시작한다(가벼운 시작 압박)
+  const SUSPICION_HOT   = 60;          // 과열선: 이름이 명단 위쪽에 오른다(무거운 시작 압박 + 뒷거래 불이익)
+  const SUSPICION_TENSE_MENTAL = 8;    // 긴장선에서 검문을 피해 내려오느라 깎이는 시작 멘탈
+  const SUSPICION_HOT_MENTAL   = 16;   // 과열선에서 더 크게 깎이는 시작 멘탈
+  const SUSPICION_HOT_LIGHT    = 20;   // 과열선에서 감시등을 피하느라 미리 닳는 시작 조명
+  const BLACK_RATE      = 1.35;        // 암시장 기본 매입 배율(위험 프리미엄)
+  const BLACK_RATE_HOT  = 1.15;        // 이미 과열된 이름이면 중개상이 위험 프리미엄을 깎는다(뜨거운 물건은 자기도 부담)
+  const BROKER_HOT_SUSP = 2;           // 과열 상태에서 뒷거래로 더 붙는 의심도(유계)
+
   const FLOOR_OPEN_CUE = [
     '아래에서 찬바람이 올라온다.',
     '벽이 미세하게 떨린다.',
@@ -1313,7 +1324,7 @@
   const el = {};
   const IDS = [
     'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail', 'screen-ending',
-    'btn-enter', 'btn-reset', 'btn-sound', 'start-art', 'intro-panel', 'intro-line', 'intro-hint', 'enter-fade', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-codex-tail', 'start-contract', 'start-goal',
+    'btn-enter', 'btn-reset', 'btn-sound', 'start-art', 'intro-panel', 'intro-line', 'intro-hint', 'enter-fade', 'start-rp', 'start-depth', 'start-susp', 'start-codex', 'start-codex-tail', 'start-contract', 'start-goal',
     'btn-meta', 'meta-panel', 'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
@@ -1322,11 +1333,11 @@
     'btn-grab', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
-    'buy-committee', 'buy-black', 'buy-family', 'family-rp', 'family-susp', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
+    'buy-committee', 'buy-black', 'buy-family', 'family-rp', 'family-susp', 'committee-line', 'black-line', 'family-line', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
     'start-survivors', 'start-mutations',
     'up-bag', 'up-light', 'up-weapon', 'btn-again',
     'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
-    'ending-truth-count', 'ending-continue', 'ending-reset',
+    'ending-continue', 'ending-reset',
   ];
   function cacheDom() { IDS.forEach((id) => { el[id] = document.getElementById(id); }); }
 
@@ -1810,10 +1821,26 @@
     }
   }
 
+  // 지상 의심도가 문턱을 넘으면 위원회 감시가 입구까지 따라붙는다. 결정적·유계 보정이라
+  // 낮을 땐 아무 대가도 없지만(비징벌), 뜨거우면 검문을 피해 내려오느라 시작 멘탈/조명이 깎인다.
+  // 이게 '오늘은 위원회에 식히고 가자'는 선택에 실제 이유를 준다.
+  function applySuspicionStart() {
+    const s = meta.suspicion;
+    if (s >= SUSPICION_HOT) {
+      run.mental = Math.max(20, run.mental - SUSPICION_HOT_MENTAL);
+      run.light = Math.max(20, run.light - SUSPICION_HOT_LIGHT);
+      log('입구에 위원회 밴이 늘어서 있다. 감시등을 피해 기어 내려오느라 진이 빠졌다.', 'hot');
+    } else if (s >= SUSPICION_TENSE) {
+      run.mental = Math.max(30, run.mental - SUSPICION_TENSE_MENTAL);
+      log('입구 근처에 위원회 밴 한 대가 서 있다. 신경이 곤두선 채로 내려간다.');
+    }
+  }
+
   function startNewRun() {
     if (el['log']) el['log'].innerHTML = '<div class="log-line">아래가 열린다.</div>';
     run = newRun();
     settleSurvivorNotes(); // 지난 런에서 등진 생존자의 뒤늦은 대가(거리 소문·의심도)를 반영
+    applySuspicionStart(); // 지상 의심도가 높으면 위원회 감시가 입구까지 따라붙어 시작이 불리해진다
     bumpMaxDepth(run.floor);
     enterFloor(1);
     setMetaPanel(false);
@@ -3292,8 +3319,12 @@
     } else {
       // 암시장 의심도는 물건별 heat 합(등급이 아니라 물건 태그). 태그 없으면 등급으로 보정.
       const heat = run.bag.reduce((sum, it) => sum + itemHeat(it), 0);
-      gained = Math.ceil(raw * 1.35);
+      // 과열선(SUSPICION_HOT)을 넘긴 이름이면 중개상도 부담이 커져 위험 프리미엄을 깎고, 뒷거래로 꼬리가 조금 더 붙는다.
+      // 뜨거울수록 '위험 판매'가 더는 공짜가 아니게 되어 위원회 냉각과 저울질하게 된다(결정적·유계).
+      const hot = meta.suspicion >= SUSPICION_HOT;
+      gained = Math.ceil(raw * (hot ? BLACK_RATE_HOT : BLACK_RATE));
       suspDelta = eff.blackSuspRelief ? Math.max(0, heat - eff.blackSuspRelief) : heat;
+      if (hot) suspDelta += BROKER_HOT_SUSP;
       // 표식 물건을 뒷골목에 넘기면 중개상이 명단에 오른 이름을 한 번 더 확인해 꼬리가 조금 더 잡힌다(추가 의심도·유계).
       const markedCount = run.bag.filter(itemMarked).length;
       if (markedCount) suspDelta += Math.min(MARKED_SUSPICION_CAP, markedCount * MARKED_BLACK_SUSPICION);
@@ -3301,6 +3332,25 @@
     gained = Math.max(0, gained + eff.gainDelta);
     suspDelta += eff.suspDelta;
     return { gained, suspDelta, note: eff.note, route: eff.route };
+  }
+
+  // 판매처를 'NPC와의 짧은 대화'로 보여주는 한 줄. 왜 그 값·의심도가 나오는지 숫자 대신 사람 말로 전한다.
+  // 중개상 대사는 상태에 따라 달라진다 — 이름이 뜨거우면 값을 깎고, 이번 짐에 단서가 있으면 장부 한 줄을 흘린다.
+  function buyerDialogue(buyer) {
+    if (buyer === 'committee') {
+      return '접수창 너머 직원이 서류에 도장을 찍는다. “정식 반납이면 값은 낮습니다. 대신 오늘 기록에서 당신 이름은 지웁니다.”';
+    }
+    if (buyer === 'family') {
+      return '유족이 유품을 두 손으로 받아 든다. “고맙습니다… 이건 조용히 간직하겠습니다.”';
+    }
+    // 암시장 중개상: 위로 못 올리는 물건이라 더 쳐주는 대신, 이름이 기록에 오르내린다.
+    const unknown = run.lastSale.find((it) => itemTruth(it) && !meta.truths.includes(it.name));
+    const hot = meta.suspicion >= SUSPICION_HOT;
+    let line = hot
+      ? '중개상이 물건을 보다 혀를 찬다. “네 이름이 벌써 뜨거워. 이런 건 나도 부담이라 값은 깎아. 그래도 소문은 붙어.”'
+      : '중개상이 천을 걷어 물건을 살핀다. “이건 위로 못 올리는 물건이야. 그래서 내가 더 쳐주지. 대신 네 이름도 같이 움직여.”';
+    if (unknown) line += ' 그가 낡은 장부를 밀어 준다. “이 번호, 싱크홀 전날에도 찍혔어.”';
+    return line;
   }
 
   // 표식(marked) 회수물을 이번 판매처로 넘긴 결과를 한 줄로 요약한다(수치·명단은 감춘다).
@@ -3856,6 +3906,12 @@
     el['committee-susp'].textContent = signed(committee.suspDelta);
     el['black-rp'].textContent = '+' + black.gained;
     el['black-susp'].textContent = signed(black.suspDelta);
+    // 판매처마다 NPC 대사 한 줄을 얹어 '사람과 흥정하는' 느낌을 준다(중개상 대사는 상태에 따라 달라진다).
+    if (el['committee-line']) el['committee-line'].textContent = buyerDialogue('committee');
+    if (el['black-line']) {
+      el['black-line'].textContent = buyerDialogue('black');
+      el['black-line'].classList.toggle('hot', meta.suspicion >= SUSPICION_HOT);
+    }
     // 가족 반환 v1: 가방에 유품(family)이 있을 때만 '가족에게 돌려준다' 버튼을 연다(없으면 숨겨 잡동사니를 줄인다).
     if (el['buy-family']) {
       const showFamily = run.lastSale.some(itemFamily);
@@ -3865,6 +3921,7 @@
         const family = saleQuote('family');
         el['family-rp'].textContent = '+' + family.gained;
         el['family-susp'].textContent = signed(family.suspDelta);
+        if (el['family-line']) el['family-line'].textContent = buyerDialogue('family');
       }
     }
     // 빈손 귀환이라도 판매처를 골라 계속 진행할 수 있어야 한다(chooseBuyer가 raw 0을 안전 처리).
@@ -3984,10 +4041,8 @@
     });
   }
 
-  // 단서 6/6 엔딩 화면. 단서 개수만 갱신하면 되므로 run 없이도 안전하게 재표시할 수 있다.
-  function renderEndingScreen() {
-    if (el['ending-truth-count']) el['ending-truth-count'].textContent = meta.truths.length;
-  }
+  // 단서를 다 모은 뒤 열리는 엔딩 화면. 문구가 전부 고정이라 run 없이도 안전하게 재표시할 수 있다(별도 갱신 불필요).
+  function renderEndingScreen() {}
 
   // 엔딩을 '확인함'으로 표시하고, 강화 루프로 돌아가 계속 플레이한다.
   function acknowledgeEnding() {
@@ -4052,17 +4107,16 @@
 
   /* ---------------- 시작 ---------------- */
 
-  // 단서 진행 상태에 맞춘 코덱스 문구(개수/완성/엔딩 확인 여부에 따라 달라진다).
+  // 시작 화면의 속마음 한 줄. 숫자 카운터가 아니라 진행에 맞춰 달라지는 캐릭터의 혼잣말이다.
   function codexTail() {
     const n = meta.truths.length;
-    if (n <= 0) return '아직 아무것도 모른다.';
-    if (n < TRUTH_TOTAL) return '아직 그림이 흐리다.';
-    return meta.endingSeen ? '이제 안다.' : '확인해야 한다.';
+    if (n <= 0) return '왜 이런 일이 나에게 일어난 거지…';
+    if (n < TRUTH_TOTAL) return '팔아넘긴 물건마다 이상한 말이 따라온다.';
+    return meta.endingSeen ? '아래가 아직 끝나지 않았다.' : '이제 단서가 다 모인 것 같다.';
   }
 
-  // 시작 화면 코덱스 줄(개수 + 상태 문구 + 완성 표시)을 한곳에서 갱신한다.
+  // 시작 화면 속마음 줄을 한곳에서 갱신한다(단서를 다 모으면 색을 바꿔 완성감을 준다).
   function renderCodex() {
-    el['start-truth-count'].textContent = meta.truths.length;
     el['start-codex-tail'].textContent = codexTail();
     el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
   }

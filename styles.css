@@ -851,6 +851,18 @@ body {
 }
 .buyer-name { font-size: 17px; font-weight: 900; }
 .buyer-sub { color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.35; }
+/* 판매처 NPC 대사 한 줄. 인용문처럼 왼쪽 선을 세워 '사람이 건네는 말'로 읽히게 한다. */
+.buyer-line {
+  margin-top: 2px;
+  padding-left: 9px;
+  border-left: 2px solid rgba(231,236,246,.16);
+  color: #c3ccdd;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.buyer-line:empty { display: none; }
+.buyer-line.hot { color: var(--warn); border-left-color: rgba(255,161,74,.5); }
 .buyer-est { color: var(--gold); font-size: 13px; font-weight: 800; }
 .susp-delta { color: var(--warn); }
 
