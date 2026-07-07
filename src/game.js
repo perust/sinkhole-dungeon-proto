@@ -3347,7 +3347,7 @@
     const unknown = run.lastSale.find((it) => itemTruth(it) && !meta.truths.includes(it.name));
     const hot = meta.suspicion >= SUSPICION_HOT;
     let line = hot
-      ? '중개상이 물건을 보다 혀를 찬다. “이 물건, 출처가 너무 의심스러워. 비싸게는 못 쳐줘. 그래도 소문은 붙어.”'
+      ? '중개상이 물건을 보다 혀를 찬다. “이 물건, 출처가 너무 의심스러워. 비싸게는 못 쳐줘. 그래도 꼬리는 잡힐 수 있어.”'
       : '중개상이 천을 걷어 물건을 살핀다. “이름은 안 물어. 위로 못 올리는 물건이라 더 쳐주지. 대신 이게 단속에 걸리면 최초 판매자가 누군지 알아낼 거야.”';
     if (unknown) line += ' 그가 낡은 장부를 밀어 준다. “이 번호, 싱크홀 전날에도 찍혔어.”';
     return line;
