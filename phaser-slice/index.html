@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>도심 싱크홀 — 1층 조사 (Phaser 슬라이스)</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- 정적 CDN Phaser 3 (패키지 설치 없이 동작) -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+</head>
+<body>
+  <main id="app">
+    <!-- 상단 상태바 -->
+    <header id="statusbar">
+      <div class="stat">
+        <span class="stat-key">위치</span>
+        <span class="stat-val" id="hud-floor">1층 · 입구</span>
+      </div>
+      <div class="stat stat-light">
+        <span class="stat-key">조명</span>
+        <span class="bar"><i id="hud-light-bar"></i></span>
+      </div>
+      <div class="stat">
+        <span class="stat-key">손</span>
+        <span class="stat-val" id="hud-hand">맨손</span>
+      </div>
+      <div class="stat stat-presence">
+        <span class="stat-key">기척</span>
+        <span class="stat-val chip" id="hud-presence">잠잠하다</span>
+      </div>
+    </header>
+
+    <!-- 탐색 뷰포트(Phaser 캔버스) + 오버레이 -->
+    <div id="stage-wrap">
+      <div id="game"></div>
+
+      <div id="intro" class="overlay">
+        <div class="panel">
+          <h1>도심 싱크홀 — 1층 조사</h1>
+          <p>맨손으로 내려간다. 회수물 하나를 손에 쥐고, 어두운 형체가 도로 가져가기 전에 입구로 돌아온다.</p>
+          <ul class="hints">
+            <li>방향키 또는 <b>WASD</b> 로 이동 · 인접한 곳을 눌러도 이동</li>
+            <li><b>E</b> 줍기 · <b>Enter</b> 귀환 · <b>R</b> 다시</li>
+            <li>손은 <b>한 칸</b>뿐이다(맨손). 회수물은 하나만 쥔다.</li>
+            <li>정확한 위치는 뜨지 않는다. <b>기척</b>과 가장자리 어둠으로만 어두운 형체를 읽는다.</li>
+          </ul>
+          <button id="btn-start" class="cta">내려가기</button>
+        </div>
+      </div>
+
+      <div id="result" class="overlay hidden">
+        <div class="panel">
+          <h2 id="result-title">귀환</h2>
+          <p id="result-body"></p>
+          <p class="tag">손에 든 것 · <span id="result-tag">맨손</span></p>
+          <button id="btn-restart" class="cta">다시 조사</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 상황 로그 -->
+    <p id="log" class="log">맨손으로 1층에 내려섰다. 회수물 하나를 쥐고 입구로 돌아오자.</p>
+
+    <!-- 하단 조작 독 -->
+    <footer id="dock">
+      <div class="exits">
+        <span class="dock-key">이동 가능</span>
+        <span id="hud-exits">정면 복도</span>
+      </div>
+      <div class="actions">
+        <button id="btn-pickup" disabled>줍기 <kbd>E</kbd></button>
+        <button id="btn-surface" disabled>귀환 <kbd>Enter</kbd></button>
+      </div>
+    </footer>
+  </main>
+
+  <script src="src/floor.js"></script>
+  <script src="src/main.js"></script>
+</body>
+</html>
