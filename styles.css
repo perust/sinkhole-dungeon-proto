@@ -684,8 +684,47 @@ body {
 .up-btn .up-sub { font-size: 12px; color: var(--muted); font-weight: 500; }
 .up-btn .up-cost { font-size: 12px; color: var(--gold); font-weight: 700; }
 .up-btn.bought { border-color: var(--good); color: var(--good); }
+.up-btn.open {
+  border-color: rgba(87,224,200,.55);
+  background: rgba(87,224,200,.08);
+}
+.bag-shop {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: calc(74px + env(safe-area-inset-bottom));
+  z-index: 9;
+  display: grid;
+  gap: 8px;
+  max-height: min(260px, 45vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(87,224,200,.28);
+  border-radius: 14px;
+  background: rgba(8,12,20,.94);
+  box-shadow: 0 18px 44px rgba(0,0,0,.55);
+}
+.bag-shop[hidden] { display: none; }
+.bag-choice {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas: "name cap cost";
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  min-height: 40px;
+  padding: 7px 10px;
+}
+.bag-choice-name { grid-area: name; font-weight: 800; color: #eef3ff; min-width: 0; }
+.bag-choice-name .loot-icon { width: 20px; height: 20px; }
+.bag-choice-cap { grid-area: cap; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.bag-choice-cost { grid-area: cost; color: var(--gold); font-size: 12px; font-weight: 800; white-space: nowrap; }
+.bag-choice.owned { border-color: var(--good); }
+.bag-choice:disabled .bag-choice-cost { color: var(--muted); }
 
-/* 강화 성공 순간의 짧은 반짝임(글린트) + 가벼운 진동감. buyUpgrade 성공 경로에서만 붙는다. */
+/* 구매/손질 성공 순간의 짧은 반짝임(글린트) + 가벼운 진동감. 성공 경로에서만 붙는다. */
 .up-btn.up-flash { position: relative; overflow: hidden; animation: upFlashShake .32s ease-in-out; }
 .up-btn.up-flash::after {
   content: '';

@@ -375,30 +375,39 @@
     },
   ];
 
-  // 장비 비용: 조명/장비는 단계가 오를수록 비싸지고, 가방은 정해진 크기의 제품을 산다.
+  // 조명/장비는 단계가 오를수록 비싸진다. 가방은 순차 강화가 아니라 아래 BAG_PRODUCTS에서 크기를 골라 산다.
   const UPGRADES = {
-    bag:    { label: '가방',  cost: lv => 8  * lv },
     light:  { label: '조명',  cost: lv => 5  * lv },
     weapon: { label: '장비',  cost: lv => 10 * lv },
   };
 
+  // 가방은 크기별 제품이다. level 0(맨손)은 시작·상실 시의 빈손 상태 — 주머니와 한 손만 쓴다(작은 가방보다 좁다).
+  // level 1~4는 구매·발견 가능한 실제 가방으로, 값이 제품마다 고정이라 큰 가방을 곧장 사면 그만큼 더 든다.
   const BAG_PRODUCTS = [
-    { level: 1, name: '작은 가방', cap: 3 },
-    { level: 2, name: '큰 가방',   cap: 5 },
-    { level: 3, name: '대형 가방', cap: 7 },
-    { level: 4, name: '특대 가방', cap: 9 },
+    { level: 0, name: '맨손',     cap: 2, desc: '주머니와 한 손' },
+    { level: 1, name: '작은 가방', cap: 3, cost: 8 },
+    { level: 2, name: '큰 가방',   cap: 5, cost: 20 },
+    { level: 3, name: '대형 가방', cap: 7, cost: 40 },
+    { level: 4, name: '특대 가방', cap: 9, cost: 64 },
   ];
   const MAX_BAG_LEVEL = BAG_PRODUCTS[BAG_PRODUCTS.length - 1].level;
+  const NO_BAG_LEVEL = 0; // 맨손 — 가방을 아직 안 샀거나 괴물에게 빼앗긴 상태
   const CABINET_BAG_CHANCE = 0.28;
   function bagProduct(level = meta.bagLevel) {
-    const safe = Math.max(1, Math.min(MAX_BAG_LEVEL, Math.floor(Number(level)) || 1));
+    const safe = Math.max(NO_BAG_LEVEL, Math.min(MAX_BAG_LEVEL, Math.floor(Number(level)) || 0));
     return BAG_PRODUCTS.find((bag) => bag.level === safe) || BAG_PRODUCTS[0];
   }
-  function nextBagProduct() {
-    return meta.bagLevel < MAX_BAG_LEVEL ? bagProduct(meta.bagLevel + 1) : null;
+  // 구매 가능한 가방(맨손 제외).
+  const purchasableBags = () => BAG_PRODUCTS.filter((bag) => bag.level > NO_BAG_LEVEL);
+  function bagCost(level) {
+    const product = BAG_PRODUCTS.find((bag) => bag.level === level);
+    return product && product.cost != null ? product.cost : Infinity;
   }
+  // 캐비닛에서 나오는 가방: 지금 것보다 큰 제품 중 하나를 무작위로 고른다(없으면 null).
   function bagFindCandidate() {
-    return meta.bagLevel < MAX_BAG_LEVEL ? bagProduct(meta.bagLevel + 1) : null;
+    const larger = purchasableBags().filter((bag) => bag.level > meta.bagLevel);
+    if (!larger.length) return null;
+    return larger[Math.floor(Math.random() * larger.length)];
   }
 
   /* ---------------- 생존자 v1 ---------------- */
@@ -512,7 +521,7 @@
 
   const meta = {
     rp: 0,
-    bagLevel: 1,
+    bagLevel: 0, // 처음엔 가방이 없다 — 맨손(NO_BAG_LEVEL)
     lightLevel: 1,
     weaponLevel: 1,
     maxDepth: 1,
@@ -548,9 +557,8 @@
     if (!pool.length) return null;
     return pool[Math.floor(Math.random() * pool.length)];
   }
-  // 강화 비용: 정비공을 구출했으면 장비(weapon) 강화가 싸진다(결정적).
+  // 강화 비용: 정비공을 구출했으면 장비(weapon) 강화가 싸진다(결정적). 가방 값은 bagCost로 따로 매긴다.
   function upgradeCost(type) {
-    if (type === 'bag' && meta.bagLevel >= MAX_BAG_LEVEL) return Infinity;
     const base = UPGRADES[type].cost(meta[type + 'Level']);
     if (type === 'weapon' && hasSurvivor('mechanic')) {
       return Math.max(1, Math.round(base * (1 - MECHANIC_DISCOUNT)));
@@ -650,7 +658,8 @@
     // 버전 불일치(이전/미래 구조) → 마이그레이션 대신 안전하게 폐기.
     if (data.version !== SAVE_VERSION) { clearSave(); return; }
 
-    meta.bagLevel    = safeInt(data.bagLevel,    1, 1, MAX_BAG_LEVEL);
+    // 맨손(0)부터 특대(4)까지. 구버전 저장값(1~4)도 그대로 실린다.
+    meta.bagLevel    = safeInt(data.bagLevel,    NO_BAG_LEVEL, NO_BAG_LEVEL, MAX_BAG_LEVEL);
     meta.lightLevel  = safeInt(data.lightLevel,  1, 1);
     meta.weaponLevel = safeInt(data.weaponLevel, 1, 1);
     meta.rp          = safeInt(data.rp,          0, 0);
@@ -697,10 +706,10 @@
 
   // '기록 초기화' — 저장값을 지우고 meta를 출고 상태로 되돌린다.
   function resetProgress() {
-    if (!window.confirm('모든 기록(RP·강화·깊이·의심도·단서·생존자·변이)을 지울까요?')) return;
+    if (!window.confirm('모든 기록(RP·장비·깊이·의심도·단서·생존자·변이)을 지울까요?')) return;
     clearSave();
     Object.assign(meta, {
-      rp: 0, bagLevel: 1, lightLevel: 1, weaponLevel: 1,
+      rp: 0, bagLevel: NO_BAG_LEVEL, lightLevel: 1, weaponLevel: 1,
       maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0, extractionCueSeen: false,
       endingSeen: false, survivors: [], survivorNotes: {}, mutations: [],
     });
@@ -720,6 +729,7 @@
   let timer = null;
   let introMode = 'normal';
   let introLine = 0;
+  let bagShopOpen = false; // 강화 화면에서 가방 선택 목록이 열려 있는가
 
   // 파생값
   const maxLight   = () => 100 + (meta.lightLevel  - 1) * 35;
@@ -1369,7 +1379,7 @@
     'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
     'buy-committee', 'buy-black', 'buy-family', 'family-rp', 'family-susp', 'committee-line', 'black-line', 'family-line', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
     'start-survivors', 'start-mutations',
-    'up-bag', 'up-light', 'up-weapon', 'btn-again',
+    'up-bag', 'bag-shop', 'up-light', 'up-weapon', 'btn-again',
     'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
     'ending-continue', 'ending-reset',
   ];
@@ -1872,6 +1882,7 @@
 
   function startNewRun() {
     if (el['log']) el['log'].innerHTML = '<div class="log-line">아래가 열린다.</div>';
+    bagShopOpen = false; // 새 조사로 내려가면 가방 목록은 접어 둔다
     run = newRun();
     settleSurvivorNotes(); // 지난 조사에서 등진 생존자의 뒤늦은 대가(거리 소문·의심도)를 반영
     applySuspicionStart(); // 지상 의심도가 높으면 위원회 감시가 입구까지 따라붙어 시작이 불리해진다
@@ -3446,6 +3457,7 @@
     resolveContract(buyer);
     saveMeta(); // 판매처 선택 후 자동 저장 (RP·의심도·단서 반영)
     run.streetNews = makeStreetNews(buyer, quote);
+    bagShopOpen = false; // 새 강화 화면은 가방 목록을 접은 채로 연다
     // RP/의심도/의뢰/저장은 그대로 반영하고, 장비 화면도 미리 렌더한다(계속 버튼이 곧장 보여줄 수 있게).
     renderUpgradeScreen(quote.gained);
     if (endingUnlocked) {
@@ -3472,21 +3484,25 @@
     }
     const previousSuspicion = meta.suspicion;
     const lostBag = bagProduct();
-    const bagWasAboveStarter = meta.bagLevel > 1;
+    const hadBag = meta.bagLevel > NO_BAG_LEVEL; // 빼앗길 가방이 있었는가
     meta.rp += consolation;
     meta.totalEarned += consolation;
     meta.suspicion = Math.max(0, Math.min(99, meta.suspicion + suspDelta));
-    meta.bagLevel = 1; // 괴물에게 가방채로 빼앗긴다. 소프트락 방지를 위해 다음 조사는 작은 가방으로 재개.
+    meta.bagLevel = NO_BAG_LEVEL; // 가방이 있었으면 통째로 빼앗기고, 없었으면 그대로 맨손. 다음 조사는 맨손으로 재개.
     saveMeta(); // 실패 보상·가방 상실 후 자동 저장
     el['fail-recovery'].innerHTML = `<b>${outcome.elapsed}</b><span>${outcome.title}</span><p>${outcome.body}</p>`;
     const suspChange = meta.suspicion - previousSuspicion;
     const suspText = suspChange === 0 ? '변화 없음' : signed(suspChange);
     el['fail-detail'].innerHTML = [
       run.failContext ? `마지막 순간: ${run.failContext}` : '',
-      lost > 0
-        ? `괴물에게 ${lostBag.name}${objectParticle(lostBag.name)} 가방채로 빼앗겼다 · 위로금 +${consolation} RP`
-        : `괴물에게 빈 ${lostBag.name}${objectParticle(lostBag.name)} 빼앗겼다.`,
-      bagWasAboveStarter ? '다음 조사는 작은 가방으로 다시 시작한다.' : '다음 조사도 작은 가방으로 다시 시작한다.',
+      hadBag
+        ? (lost > 0
+            ? `괴물에게 ${lostBag.name}${objectParticle(lostBag.name)} 가방채로 빼앗겼다 · 위로금 +${consolation} RP`
+            : `괴물에게 빈 ${lostBag.name}${objectParticle(lostBag.name)} 빼앗겼다.`)
+        : (lost > 0
+            ? `괴물이 후려쳐 넘어뜨리고 손에 쥔 것을 털어 갔다 · 위로금 +${consolation} RP`
+            : '괴물이 후려쳐 넘어뜨렸다. 맨손이라 가져갈 가방도 없었다.'),
+      hadBag ? '다음 조사는 맨손으로 다시 시작한다.' : '다음 조사도 맨손으로 다시 시작한다.',
       outcome.loss,
       medic ? `의무병이 상처를 감싸고 뒤처리를 도왔다${medicBonus > 0 ? ` (+${medicBonus} RP)` : ''}.` : '',
       `의심도 ${suspText}`,
@@ -3497,13 +3513,12 @@
     show('screen-fail');
   }
 
-  /* ---------------- 강화 ---------------- */
+  /* ---------------- 장비/구매 ---------------- */
 
+  // 조명·장비 손질(가방은 아래 openBagShop/buyBag로 따로 처리한다).
   function buyUpgrade(type) {
     if (run.bought) return;
     const lvKey = type + 'Level';
-    const nextBag = type === 'bag' ? nextBagProduct() : null;
-    if (type === 'bag' && !nextBag) return;
     const cost = upgradeCost(type); // 정비공 구출 시 장비 강화는 할인가로 계산된다
     if (meta.rp < cost) return;
     meta.rp -= cost;
@@ -3511,10 +3526,35 @@
     run.bought = true;
     playSfx('upgrade'); // 장비 마련 성공 — 부드럽게 오르는 차임
     saveMeta(); // 구매 후 자동 저장
-    if (type === 'bag') log(`${nextBag.name}${objectParticle(nextBag.name)} 샀다. 다음 조사에서 ${nextBag.cap}칸까지 챙길 수 있다.`, 'win');
-    else log(`${UPGRADES[type].label}${objectParticle(UPGRADES[type].label)} 손봤다. 다음엔 더 버틴다.`, 'win');
+    log(`${UPGRADES[type].label}${objectParticle(UPGRADES[type].label)} 손봤다. 다음엔 더 버틴다.`, 'win');
     renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
     flashUpgradeSuccess(type); // 성공한 버튼에 짧은 반짝임 + 가벼운 진동감
+  }
+
+  // 가방 구매는 순차 강화가 아니다. '가방 구매'를 누르면 크기 선택 목록을 열고, 원하는 가방을 곧장 산다.
+  function openBagShop() {
+    if (!run || run.bought) return;
+    bagShopOpen = !bagShopOpen;
+    renderUpgradeScreen(null);
+  }
+
+  // 고른 크기의 가방을 산다(맨손 제외, 지금 것보다 큰 것만). RP가 되면 큰 가방도 곧장 살 수 있다.
+  function buyBag(level) {
+    if (run.bought) return;
+    const product = BAG_PRODUCTS.find((bag) => bag.level === level);
+    if (!product || product.level <= NO_BAG_LEVEL) return;
+    if (product.level <= meta.bagLevel) return; // 이미 같은/더 큰 가방을 멨다
+    const cost = bagCost(level);
+    if (cost === Infinity || meta.rp < cost) return;
+    meta.rp -= cost;
+    meta.bagLevel = product.level; // 고른 가방을 그 자리에서 소유·착용
+    run.bought = true;
+    bagShopOpen = false;
+    playSfx('upgrade'); // 가방 마련 성공 — 부드럽게 오르는 차임
+    saveMeta(); // 구매 후 자동 저장
+    log(`${product.name}${objectParticle(product.name)} 샀다. 다음 조사에서 ${product.cap}칸까지 챙길 수 있다.`, 'win');
+    renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
+    flashUpgradeSuccess('bag'); // 가방 구매 버튼에 짧은 반짝임 + 가벼운 진동감
   }
 
   // 구매/손질이 성공한 그 버튼에만 짧은 반짝임/진동 느낌을 준다. 실패·비활성 탭에는 붙지 않는다.
@@ -4084,29 +4124,70 @@
       el['truth-news'].textContent = '';
     }
 
-    // 구매/손질 버튼 3종. 가방은 정해진 크기의 제품을 사고, 정비공을 구출했으면 장비 설명에 할인을 덧붙인다.
+    // 손질 버튼 2종(조명·장비). 정비공을 구출했으면 장비 설명에 할인을 덧붙인다. 가방은 아래에서 따로 그린다.
     const weaponSub = hasSurvivor('mechanic') ? `들키는 속도 -25% · 정비공 할인` : `들키는 속도 -25%`;
-    const currentBag = bagProduct();
-    const nextBag = nextBagProduct();
-    const bagTitle = nextBag ? `${nextBag.name} 구매` : `${currentBag.name} 사용 중`;
-    const bagSub = nextBag ? `${currentBag.cap}칸 → ${nextBag.cap}칸` : `${currentBag.cap}칸 · 더 큰 가방 없음`;
-    const defs = [
-      ['up-bag',    'bag',    bagTitle,  bagSub],
-      ['up-light',  'light',  `조명 손보기`,  `최대 조명 +35`],
-      ['up-weapon', 'weapon', `장비 개조`,  weaponSub],
+    const gearDefs = [
+      ['up-light',  'light',  `조명 손보기`,  `최대 조명 +35`, 8],
+      ['up-weapon', 'weapon', `장비 개조`,   weaponSub,       9],
     ];
-    defs.forEach(([id, type, title, sub]) => {
+    gearDefs.forEach(([id, type, title, sub, upgradeIcon]) => {
       const lvKey = type + 'Level';
       const cost = upgradeCost(type);
       const btn = el[id];
       const affordable = cost !== Infinity && meta.rp >= cost && !run.bought;
       btn.disabled = !affordable;
       btn.classList.toggle('bought', run.bought);
-      const upgradeIcon = type === 'bag' ? 7 : type === 'light' ? 8 : 9;
       btn.innerHTML =
         `<span class="up-title">${itemIcon(upgradeIcon)}${title}</span>` +
         `<span class="up-sub">${sub} · 현재 Lv.${meta[lvKey]}</span>` +
         `<span class="up-cost">${run.bought ? '오늘은 여기까지' : cost + ' RP'}</span>`;
+    });
+
+    renderBagShop();
+  }
+
+  // 가방 구매 버튼과 크기 선택 목록을 그린다. 상단 버튼을 누르면 목록이 열리고, 원하는 크기를 곧장 산다.
+  function renderBagShop() {
+    const currentBag = bagProduct();
+    const open = bagShopOpen && !run.bought;
+    const btn = el['up-bag'];
+    if (btn) {
+      btn.disabled = !!run.bought;
+      btn.classList.toggle('bought', run.bought);
+      btn.classList.toggle('open', open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const currentDesc = currentBag.desc ? currentBag.desc : `${currentBag.cap}칸`;
+      const hint = run.bought ? '오늘은 여기까지' : (open ? '접기' : '고르기');
+      btn.innerHTML =
+        `<span class="up-title">${itemIcon(7)}가방 구매</span>` +
+        `<span class="up-sub">현재: ${currentBag.name} · ${currentDesc}</span>` +
+        `<span class="up-cost">${hint}</span>`;
+    }
+    const panel = el['bag-shop'];
+    if (!panel) return;
+    panel.hidden = !open;
+    panel.innerHTML = '';
+    if (!open) return;
+    purchasableBags().forEach((product) => {
+      const owned = product.level === meta.bagLevel;
+      const smaller = product.level < meta.bagLevel;
+      const cost = bagCost(product.level);
+      const affordable = meta.rp >= cost;
+      const canBuy = !owned && !smaller && affordable;
+      const choice = document.createElement('button');
+      choice.className = 'btn bag-choice' + (owned ? ' owned' : '');
+      choice.disabled = !canBuy;
+      let state;
+      if (owned) state = '사용 중';
+      else if (smaller) state = '가진 것보다 작음';
+      else if (!affordable) state = `${cost} RP · 부족`;
+      else state = `${cost} RP`;
+      choice.innerHTML =
+        `<span class="bag-choice-name">${itemIcon(7)}${product.name}</span>` +
+        `<span class="bag-choice-cap">${product.cap}칸</span>` +
+        `<span class="bag-choice-cost">${state}</span>`;
+      choice.addEventListener('click', (event) => { event.stopPropagation(); buyBag(product.level); });
+      panel.appendChild(choice);
     });
   }
 
@@ -4163,7 +4244,7 @@
     el['buy-committee'].addEventListener('click', () => chooseBuyer('committee'));
     el['buy-black'].addEventListener('click', () => chooseBuyer('black'));
     if (el['buy-family']) el['buy-family'].addEventListener('click', () => chooseBuyer('family'));
-    el['up-bag'].addEventListener('click', () => buyUpgrade('bag'));
+    el['up-bag'].addEventListener('click', () => openBagShop());
     el['up-light'].addEventListener('click', () => buyUpgrade('light'));
     el['up-weapon'].addEventListener('click', () => buyUpgrade('weapon'));
     el['btn-again'].addEventListener('click', startNewRun);
