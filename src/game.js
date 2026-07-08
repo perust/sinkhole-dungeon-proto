@@ -2,10 +2,10 @@
    도심 싱크홀 — 회수 잠수 (플레이어블 프로토타입)
 
    핵심 훅: "던전이 내가 훔친 물건을 다시 가져가려 한다."
-   루프:    챙기고 → 도망치고 → 팔고 → 강화 → 더 깊이.
+   루프:    챙기고 → 도망치고 → 팔고 → 장비를 챙겨 → 더 깊이.
 
-   - 메타 상태(meta): 런을 넘어 유지되는 영구 자산(RP, 강화 레벨, 최고 깊이).
-   - 런 상태(run):    한 번의 잠수 동안만 존재하는 상태(층, 조명, 가방, 위험, 작은 맵).
+   - 메타 상태(meta): 조사를 넘어 유지되는 영구 자산(RP, 장비 구매 상태, 최고 깊이).
+   - 조사 상태(run):  한 번의 조사 동안만 존재하는 상태(층, 조명, 가방, 위험, 작은 맵).
    각 층은 5~7개 노드짜리 작은 맵으로 생성된다. 노드에는 출구(exits),
    방 유형(kind), 선택적 아이템(item), 선택적 몬스터 이벤트(monster)가 있다.
    모든 수치는 조정 가능한 초기값이다.
@@ -78,7 +78,7 @@
   const FAMILY_KEEPSAKES = [
     { name: '가족 사진',     slots: 1, value: 4, tier: 'common', icon: 3, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '사진 뒤에 “아빠 꼭 돌아와”라고 적혀 있다.' },
     { name: '이름표 목걸이', slots: 1, value: 5, tier: 'common', icon: 0, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '목걸이에 아이 이름과 집 주소가 새겨져 있다.' },
-    { name: '아이 배낭',     slots: 1, value: 3, tier: 'common', icon: 1, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '배낭 안에 반쯤 쓴 색연필과 회수자 출입증이 들어 있다.' },
+    { name: '아이 배낭',     slots: 1, value: 3, tier: 'common', icon: 1, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '배낭 안에 반쯤 쓴 색연필과 위원회 출입증이 들어 있다.' },
   ];
   function pickFamilyKeepsake() { return { ...FAMILY_KEEPSAKES[Math.floor(Math.random() * FAMILY_KEEPSAKES.length)] }; }
 
@@ -114,13 +114,13 @@
   const WATCHPOST_LOGS = [
     '단말 로그: “회수물은 폐기가 아니라 재봉인 창고로 이송.” 날짜 칸은 지워져 있다.',
     '깨진 화면에 한 줄이 떠 있다 — “감시등 소등은 상부 지시.” 서명란은 비어 있다.',
-    '명단이 스친다. 회수자 몇 사람 이름 옆에 붉은 표시가 찍혀 있다.',
+    '명단이 스친다. 현장 인력 몇 사람 이름 옆에 붉은 표시가 찍혀 있다.',
   ];
 
   // 실종자 흔적방 튜닝값과 단서 로그. '사진만 확인'하면 단서 한 줄만 흘린다 — 비밀은 주지 않는다.
   const MISSING_TRACE_SPAWN_CHANCE = 0.24;  // 층마다 실종자 흔적방이 나타날 확률(드물게)
   const MISSING_TRACE_LOGS = [
-    '사진 뒤에 날짜가 적혀 있다 — 싱크홀이 열리기 사흘 전. 이 회수자는 그날 이후로 올라오지 않았다.',
+    '사진 뒤에 날짜가 적혀 있다 — 싱크홀이 열리기 사흘 전. 이 사람은 그날 이후로 올라오지 않았다.',
     '이름표에 “3구역 회수반”이 찍혀 있다. 위원회 실종 명단에서 지워진 번호다.',
     '편지 한 줄만 읽힌다 — “여보, 이번이 마지막이야.” 다음 줄은 물에 번져 지워졌다.',
   ];
@@ -145,7 +145,7 @@
   const MARKED_SUSPICION_CAP = 6;      // 표식 보정(양방향)이 한 판매에서 넘지 못하는 상한(유계)
 
   // 의심도 대가 v1: 의심도가 실제로 아프도록 두 문턱을 둔다. 값이 낮을 땐 아무 대가도 없고(비징벌),
-  // 문턱을 넘을수록 위원회 감시가 지상까지 따라붙어 런 시작과 뒷거래가 불리해진다. 보정은 전부 결정적·유계.
+  // 문턱을 넘을수록 위원회 감시가 지상까지 따라붙어 조사 시작과 뒷거래가 불리해진다. 보정은 전부 결정적·유계.
   const SUSPICION_TENSE = 35;          // 긴장선: 입구에 위원회 밴이 붙기 시작한다(가벼운 시작 압박)
   const SUSPICION_HOT   = 60;          // 과열선: 짐·차량이 검문 명단 위쪽에 오른다(무거운 시작 압박 + 뒷거래 불이익)
   const SUSPICION_TENSE_MENTAL = 8;    // 긴장선에서 검문을 피해 내려오느라 깎이는 시작 멘탈
@@ -375,15 +375,34 @@
     },
   ];
 
-  // 강화: 레벨에 비례해 비용 상승
+  // 장비 비용: 조명/장비는 단계가 오를수록 비싸지고, 가방은 정해진 크기의 제품을 산다.
   const UPGRADES = {
     bag:    { label: '가방',  cost: lv => 8  * lv },
     light:  { label: '조명',  cost: lv => 5  * lv },
     weapon: { label: '장비',  cost: lv => 10 * lv },
   };
 
+  const BAG_PRODUCTS = [
+    { level: 1, name: '작은 가방', cap: 3 },
+    { level: 2, name: '큰 가방',   cap: 5 },
+    { level: 3, name: '대형 가방', cap: 7 },
+    { level: 4, name: '특대 가방', cap: 9 },
+  ];
+  const MAX_BAG_LEVEL = BAG_PRODUCTS[BAG_PRODUCTS.length - 1].level;
+  const CABINET_BAG_CHANCE = 0.28;
+  function bagProduct(level = meta.bagLevel) {
+    const safe = Math.max(1, Math.min(MAX_BAG_LEVEL, Math.floor(Number(level)) || 1));
+    return BAG_PRODUCTS.find((bag) => bag.level === safe) || BAG_PRODUCTS[0];
+  }
+  function nextBagProduct() {
+    return meta.bagLevel < MAX_BAG_LEVEL ? bagProduct(meta.bagLevel + 1) : null;
+  }
+  function bagFindCandidate() {
+    return meta.bagLevel < MAX_BAG_LEVEL ? bagProduct(meta.bagLevel + 1) : null;
+  }
+
   /* ---------------- 생존자 v1 ---------------- */
-  // 던전에서 구출해 지상으로 데려온 사람들. 런을 넘어 유지되며(meta.survivors),
+  // 던전에서 구출해 지상으로 데려온 사람들. 조사를 넘어 유지되며(meta.survivors),
   // 각자 하나의 영구 효과를 준다. 정비공(장비 강화 할인)·의무병(기절 후유증 완화)·
   // 지도공(갈림길에서 앞쪽 방 미리보기)·전 위원회 직원(감시소 봉쇄 코드·공식 출구 통행 완화) 넷.
   const SURVIVORS = {
@@ -423,7 +442,7 @@
   };
   const SURVIVOR_IDS = Object.keys(SURVIVORS);
   const KNOWN_SURVIVORS = new Set(SURVIVOR_IDS);
-  // 구출하지 않고 남겨 둔 생존자의 뒤처리 상태. 'marked'=위치만 표시, 'abandoned'=그냥 지나감.
+  // 구출하지 않고 표시해 둔 생존자의 뒤처리 상태. 'marked'=위치만 표시, 'abandoned'=그냥 지나감.
   const SURVIVOR_OUTCOMES = new Set(['marked', 'abandoned']);
 
   const MECHANIC_DISCOUNT = 0.25;        // 정비공: 장비(weapon) 강화 비용을 이 비율만큼 깎는다
@@ -454,12 +473,12 @@
   const SURVIVOR_RESCUE_LIGHT = 8;       // 구출: 끌어내느라 드는 조명
   const SURVIVOR_RESCUE_MENTAL = 5;      // 구출: 끌어내느라 드는 멘탈
   const SURVIVOR_RESCUE_DANGER = 6;      // 구출: 소음으로 오르는 위험
-  // 미구출 후속 v1: 등진(abandoned) 생존자 기록당 딱 한 번, 다음 런에서 뒤늦게 돌아오는 대가.
-  const SURVIVOR_ABANDON_SUSPICION = 1;  // 등진 기록 하나당 다음 런에서 오르는 의심도(한 번만)
+  // 미구출 후속 v1: 등진(abandoned) 생존자 기록당 딱 한 번, 다음 조사에서 뒤늦게 돌아오는 대가.
+  const SURVIVOR_ABANDON_SUSPICION = 1;  // 등진 기록 하나당 다음 조사에서 오르는 의심도(한 번만)
   const SURVIVOR_STREET_RUMOR = '거리 소문: 어젯밤 누군가 두드리는 소리가 멈췄다.';
 
   /* ---------------- 왜곡 변이 v1 ---------------- */
-  // 아주 뜨거운 유물을 들고 지상으로 나오면 몸에 남는 영구 흔적. 런을 넘어 유지되며(meta.mutations),
+  // 아주 뜨거운 유물을 들고 지상으로 나오면 몸에 번지는 영구 흔적. 조사를 넘어 유지되며(meta.mutations),
   // 하나가 이득과 대가를 함께 준다. v1은 둘뿐이고, 더 큰 변이 트리는 후속으로 미룬다.
   //  - fissure-sight(균열 시야): 앞쪽 틈/계단/물건 방향을 낮은 정밀도로 짚어 주지만,
   //    균열 출구에서 길을 더 잘못 짚어 파손되기 쉬운 짐이 조금 더 긁힌다.
@@ -481,7 +500,7 @@
   const KNOWN_MUTATIONS = new Set(MUTATION_ORDER);
 
   const MUTATION_TRIGGER_HEAT = 15;    // 이 이상 뜨거운 유물을 하나라도 들고 나오면 변이 후보(안정화 코어·봉인 유물)
-  const MUTATION_TRIGGER_ROOMS = 3;    // 이번 런에서 이만큼 방을 밟았거나
+  const MUTATION_TRIGGER_ROOMS = 3;    // 이번 조사에서 이만큼 방을 밟았거나
   const MUTATION_TRIGGER_FLOOR = 2;    // 이 층 이상 내려갔으면 트리거 조건 충족(둘 중 하나)
   const FISSURE_SCRATCH_RATE = 0.20;   // 균열 시야가 있으면 균열 출구 긁힘 비율이 조금 커진다(기본 0.15 → 0.20)
   const FISSURE_EXIT_NOTE = '벽 틈이 너무 많이 보여 빠져나오는 길을 한번 잘못 짚었다.';
@@ -503,23 +522,23 @@
     contractIndex: 0,
     extractionCueSeen: false,
     endingSeen: false,
-    survivors: [],   // 구출해 지상으로 데려온 생존자 id 목록(런을 넘어 유지)
-    // 구출하지 않고 남겨 둔 생존자 기록(런을 넘어 유지). id → { outcome, reported }.
+    survivors: [],   // 구출해 지상으로 데려온 생존자 id 목록(조사를 넘어 유지)
+    // 구출하지 않고 표시해 둔 생존자 기록(조사를 넘어 유지). id → { outcome, reported }.
     // outcome: 'marked'|'abandoned'. reported: abandoned의 뒤늦은 대가를 이미 치렀는지.
-    // 여기에 있어도 meta.survivors에는 없으므로, 후속 런에서 다시 나타나 구출할 수 있다.
+    // 여기에 있어도 meta.survivors에는 없으므로, 후속 조사에서 다시 나타나 구출할 수 있다.
     survivorNotes: {},
-    mutations: [],   // 몸에 남은 왜곡 변이 id 목록(런을 넘어 유지). 알려진 id만, MUTATION_ORDER 순.
+    mutations: [],   // 몸에 번진 왜곡 변이 id 목록(조사를 넘어 유지). 알려진 id만, MUTATION_ORDER 순.
   };
 
   const hasSurvivor = (id) => meta.survivors.includes(id);
   const hasMutation = (id) => meta.mutations.includes(id);
-  // 구출하지 않고 남겨 둔 생존자를 기록한다. 같은 사람은 마지막 선택으로 덮어쓴다.
+  // 구출하지 않고 표시해 둔 생존자를 기록한다. 같은 사람은 마지막 선택으로 덮어쓴다.
   function noteSurvivor(id, outcome) {
     if (!KNOWN_SURVIVORS.has(id) || !SURVIVOR_OUTCOMES.has(outcome)) return;
     meta.survivorNotes[id] = { outcome, reported: false };
-    saveMeta(); // 선택 즉시 저장 — 이번 런이 실패로 끝나도 기록은 유지된다
+    saveMeta(); // 선택 즉시 저장 — 이번 조사가 실패로 끝나도 기록은 유지된다
   }
-  // 나중에 구출했으면 남겨 둔 기록을 지운다(같은 사람이 다시 나타나 구출된 경우).
+  // 나중에 구출했으면 표시해 둔 기록을 지운다(같은 사람이 다시 나타나 구출된 경우).
   function clearSurvivorNote(id) {
     if (meta.survivorNotes[id]) delete meta.survivorNotes[id];
   }
@@ -531,6 +550,7 @@
   }
   // 강화 비용: 정비공을 구출했으면 장비(weapon) 강화가 싸진다(결정적).
   function upgradeCost(type) {
+    if (type === 'bag' && meta.bagLevel >= MAX_BAG_LEVEL) return Infinity;
     const base = UPGRADES[type].cost(meta[type + 'Level']);
     if (type === 'weapon' && hasSurvivor('mechanic')) {
       return Math.max(1, Math.round(base * (1 - MECHANIC_DISCOUNT)));
@@ -538,11 +558,11 @@
     return base;
   }
 
-  // 지상 귀환 시 왜곡 변이 지급(런당 한 번). 조건이 맞으면 아직 없는 변이 중 MUTATION_ORDER 순으로
+  // 지상 귀환 시 왜곡 변이 지급(조사당 한 번). 조건이 맞으면 미보유 변이 중 MUTATION_ORDER 순으로
   // 첫 번째를 준다. 무작위 없음(테스트 결정성). 빈 가방이거나 조건 미달이면 아무것도 주지 않는다.
   function grantMutationOnReturn() {
     if (!run || run.mutationChecked) return null;
-    run.mutationChecked = true; // 이 런에서는 다시 판정하지 않는다
+    run.mutationChecked = true; // 이 조사에서는 다시 판정하지 않는다
     if (!run.bag.length) return null; // 빈손 귀환에서는 발동하지 않는다
     // 아주 뜨거운 유물(heat>=15)을 하나라도 들고 나와야 한다.
     if (!run.bag.some((it) => itemHeat(it) >= MUTATION_TRIGGER_HEAT)) return null;
@@ -552,12 +572,12 @@
     const nextId = MUTATION_ORDER.find((id) => !hasMutation(id));
     if (!nextId) return null; // 이미 v1 변이를 모두 가짐
     meta.mutations.push(nextId);
-    saveMeta(); // 지급 즉시 저장 — 이번 런 결과와 무관하게 몸에 새겨진다
+    saveMeta(); // 지급 즉시 저장 — 이번 조사 결과와 무관하게 몸에 새겨진다
     return MUTATIONS[nextId];
   }
 
   /* ---------------- 저장 / 이어하기 ---------------- */
-  // localStorage에 메타(런을 넘는 영구 자산)만 저장한다. 런 상태는 저장하지 않는다.
+  // localStorage에 메타(조사를 넘는 영구 자산)만 저장한다. 조사 상태는 저장하지 않는다.
   // SAVE_VERSION을 올리면 이전 구조의 저장값은 무시되고 기본값으로 새로 시작한다.
 
   const SAVE_KEY = 'sinkhole-dungeon-save';
@@ -630,7 +650,7 @@
     // 버전 불일치(이전/미래 구조) → 마이그레이션 대신 안전하게 폐기.
     if (data.version !== SAVE_VERSION) { clearSave(); return; }
 
-    meta.bagLevel    = safeInt(data.bagLevel,    1, 1);
+    meta.bagLevel    = safeInt(data.bagLevel,    1, 1, MAX_BAG_LEVEL);
     meta.lightLevel  = safeInt(data.lightLevel,  1, 1);
     meta.weaponLevel = safeInt(data.weaponLevel, 1, 1);
     meta.rp          = safeInt(data.rp,          0, 0);
@@ -641,15 +661,15 @@
     meta.extractionCueSeen = !!data.extractionCueSeen;
     // endingSeen: 구버전 저장값에는 없다 → 기본 false. 하위호환이라 SAVE_VERSION은 올리지 않는다.
     meta.endingSeen = !!data.endingSeen;
-    // truths: 배열이면서 현재 회수물에 실제로 존재하는 이름만 남기고 중복 제거.
+    // truths: 배열이면서 현재 회수물에 실제로 존재하는 이름만 두고 중복 제거.
     if (Array.isArray(data.truths)) {
       meta.truths = [...new Set(data.truths.filter((t) => KNOWN_TRUTHS.has(t)))];
     }
-    // survivors: 구버전 저장값에는 없다 → 기본 []. 알려진 id만 남기고 중복 제거(하위호환).
+    // survivors: 구버전 저장값에는 없다 → 기본 []. 알려진 id만 두고 중복 제거(하위호환).
     if (Array.isArray(data.survivors)) {
       meta.survivors = [...new Set(data.survivors.filter((id) => KNOWN_SURVIVORS.has(id)))];
     }
-    // survivorNotes: 구버전 저장값에는 없다 → 기본 {}. 알려진 id·유효 outcome만 남기고,
+    // survivorNotes: 구버전 저장값에는 없다 → 기본 {}. 알려진 id·유효 outcome만 두고,
     // 이미 구출한 사람은 기록에서 제외한다(하위호환·깨진 값 정리). SAVE_VERSION은 올리지 않는다.
     meta.survivorNotes = {};
     const rawNotes = data.survivorNotes;
@@ -662,7 +682,7 @@
         }
       }
     }
-    // mutations: 구버전 저장값에는 없다 → 기본 []. 알려진 id만 남기고 중복 제거,
+    // mutations: 구버전 저장값에는 없다 → 기본 []. 알려진 id만 두고 중복 제거,
     // 표시·지급 순서가 흔들리지 않게 MUTATION_ORDER 순으로 정렬한다. SAVE_VERSION은 올리지 않는다.
     if (Array.isArray(data.mutations)) {
       const known = new Set(data.mutations.filter((id) => KNOWN_MUTATIONS.has(id)));
@@ -703,7 +723,7 @@
 
   // 파생값
   const maxLight   = () => 100 + (meta.lightLevel  - 1) * 35;
-  const bagCap     = () => 3   + (meta.bagLevel    - 1) * 2;
+  const bagCap     = () => bagProduct().cap;
   const weaponFactor = () => 1 + (meta.weaponLevel - 1) * 0.25; // 위험 상승 둔화
   const usedSlots  = () => run.bag.reduce((s, i) => s + i.slots, 0);
   const bagValue   = () => run.bag.reduce((s, i) => s + i.value, 0);
@@ -739,7 +759,7 @@
       pendingEvent: null,  // 방 도착 후 플레이어가 고르는 짧은 환경 이벤트
       returnWalk: false,   // 귀환 걷기 연출 진행 중(마지막 탭에서 지상으로 나간다)
       exitRoute: 'official', // 지상으로 나가는 길: official|crack|blackpass (판매처 선택 전에 고른다)
-      exitNote: '',        // 선택한 출구의 결과 문구(강화 화면 요약에 노출)
+      exitNote: '',        // 선택한 출구의 결과 문구(장비 화면 요약에 노출)
       monsterCrisisCount: 0,
       previousNodeId: null,
       failContext: '',
@@ -754,10 +774,10 @@
       seenMentalAlerts: new Set(),
       seenBagAlerts: new Set(),
       maxFloor: 1,
-      roomsEntered: 0,   // 이번 런에서 처음 밟은 방 수(왜곡 변이 트리거 판정용)
-      mutationChecked: false, // 이번 귀환에서 변이 지급을 이미 판정했는가(런당 한 번)
-      mutationNote: '',  // 이번 런에서 새로 얻은 변이 안내 문구(강화 화면 요약에 노출)
-      markedNote: '',    // 이번 판매에서 표식(marked) 회수물 처리 결과 한 줄(강화 화면 요약에 노출)
+      roomsEntered: 0,   // 이번 조사에서 처음 밟은 방 수(왜곡 변이 트리거 판정용)
+      mutationChecked: false, // 이번 귀환에서 변이 지급을 이미 판정했는가(조사당 한 번)
+      mutationNote: '',  // 이번 조사에서 새로 얻은 변이 안내 문구(장비 화면 요약에 노출)
+      markedNote: '',    // 이번 판매에서 표식(marked) 회수물 처리 결과 한 줄(장비 화면 요약에 노출)
       grabbedCount: 0,
       droppedCount: 0,
       bought: false,     // 이번 귀환에서 강화를 샀는가
@@ -958,7 +978,7 @@
   }
 
   // 추격자를 한 칸 이동시킨다. 깨어 있으면 마지막으로 들린 소음(없으면 플레이어) 쪽으로,
-  // 잠들어 있으면 아주 가끔 인접 칸으로 배회한다. silent면 접근 큐를 남기지 않는다.
+  // 잠들어 있으면 아주 가끔 인접 칸으로 배회한다. silent면 접근 큐를 두지 않는다.
   function moveStalkerOneStep(opts) {
     const s = stalker();
     if (!s || !run || !run.floorMap) return;
@@ -1080,7 +1100,7 @@
     return currentNode().exits.includes(step) ? step : null;
   }
 
-  // 숨은 회수자의 '기척'을 4단계로 거칠게 요약한다. 정확한 거리·위험 수치는 절대 노출하지 않고,
+  // 숨은 괴물의 '기척'을 4단계로 거칠게 요약한다. 정확한 거리·위험 수치는 절대 노출하지 않고,
   // 화면 연출(가장자리 어둠·미세 깜빡임·짧은 진동)의 강도만 고르기 위한 값이다.
   //   none    안전 — 연출 없음
   //   far     추격이 붙었거나 위험이 어느 정도 — 아주 옅은 가장자리 어둠
@@ -1154,7 +1174,7 @@
     s.nearCued = false;
   }
 
-  // 끌개 v1: 버린 물건을 바닥 자국으로 남기고, 추격자가 그것을 되찾으러 오게 한다.
+  // 끌개 v1: 버린 물건을 바닥 자국으로 두고, 추격자가 그것을 되찾으러 오게 한다.
   // 한 층에 활성 자국은 하나뿐(새로 버리면 이전 자국은 덮인다). 인접 칸(추격자 반대쪽) 우선.
   function dropLootTrace(item) {
     if (!run || !run.floorMap || !item) return null;
@@ -1795,7 +1815,7 @@
     return true;
   }
 
-  /* ---------------- 런 진행 액션 ---------------- */
+  /* ---------------- 조사 진행 액션 ---------------- */
 
   // 최고 깊이를 갱신하고, 실제로 늘었을 때만 저장한다.
   function bumpMaxDepth(floor) {
@@ -1817,7 +1837,7 @@
     if (floor === 1) maybeQueueExtractionTutorial();
   }
 
-  // 다음 런이 시작될 때, 지난 런에서 등진(abandoned) 생존자 기록마다 딱 한 번 대가를 치른다.
+  // 다음 조사가 시작될 때, 지난 조사에서 등진(abandoned) 생존자 기록마다 딱 한 번 대가를 치른다.
   // 거리 소문 한 줄과 의심도 +1(기록당). 위치만 표시(marked)한 기록은 대가가 없다(안내만).
   function settleSurvivorNotes() {
     let reportedNow = 0;
@@ -1853,7 +1873,7 @@
   function startNewRun() {
     if (el['log']) el['log'].innerHTML = '<div class="log-line">아래가 열린다.</div>';
     run = newRun();
-    settleSurvivorNotes(); // 지난 런에서 등진 생존자의 뒤늦은 대가(거리 소문·의심도)를 반영
+    settleSurvivorNotes(); // 지난 조사에서 등진 생존자의 뒤늦은 대가(거리 소문·의심도)를 반영
     applySuspicionStart(); // 지상 의심도가 높으면 위원회 감시가 입구까지 따라붙어 시작이 불리해진다
     bumpMaxDepth(run.floor);
     enterFloor(1);
@@ -1934,7 +1954,7 @@
     );
   }
 
-  // 던전 진입 연출: 배경이 커지며 화면이 어두워진 뒤 새 런을 시작한다.
+  // 던전 진입 연출: 배경이 커지며 화면이 어두워진 뒤 새 조사를 시작한다.
   function beginEntering() {
     introMode = 'entering';
     markIntroSeen();
@@ -1966,12 +1986,12 @@
       renderIntroLine();
       return;
     }
-    // 재시작·기존 세이브: '들어가기' 버튼을 그대로 눌러 새 런을 시작한다.
+    // 재시작·기존 세이브: '들어가기' 버튼을 그대로 눌러 새 조사를 시작한다.
     if (introMode === 'ready') {
       beginEntering();
       return;
     }
-    // 단서를 다 모았지만 엔딩을 아직 확인하지 않았다면, 새 런 대신 엔딩을 먼저 보여준다.
+    // 단서를 다 모았지만 엔딩을 아직 확인하지 않았다면, 새 조사 대신 엔딩을 먼저 보여준다.
     if (meta.truths.length >= TRUTH_TOTAL && !meta.endingSeen) {
       renderEndingScreen();
       show('screen-ending');
@@ -2171,7 +2191,7 @@
       ev = {
         type: 'missing-trace',
         title: '실종자 흔적',
-        cue: '벽에 사진 몇 장과 이름표가 붙어 있다. 그 아래 작은 배낭이 놓였고, 접힌 가족 편지가 삐져나와 있다. 회수자 한 사람이 여기서 멈춘 것 같다.',
+        cue: '벽에 사진 몇 장과 이름표가 붙어 있다. 그 아래 작은 배낭이 놓였고, 접힌 가족 편지가 삐져나와 있다. 위원회 사람이 여기서 멈춘 것 같다.',
         choices: [
           eventChoice('keep', '조심히 챙긴다', '유품을 조용히 챙긴다 · 빛·멘탈 조금', 'good'),
           eventChoice('photo', '사진만 확인한다', '이름과 날짜만 눈에 담는다'),
@@ -2368,13 +2388,20 @@
         // 검은 손 변이: 휘어진 손잡이가 너무 쉽게 딸려 와 조명 소모가 준다(결정적).
         const blackHand = hasMutation('black-hand');
         run.light = Math.max(0, run.light - (blackHand ? 1 : 3));
-        if (!run.currentItem && !node.itemTaken) {
+        const foundBag = !run.currentItem && Math.random() < CABINET_BAG_CHANCE ? bagFindCandidate() : null;
+        if (foundBag) {
+          meta.bagLevel = foundBag.level;
+          saveMeta();
+          msg = `찌그러진 캐비닛 안에 멀쩡한 ${foundBag.name}${subjectParticle(foundBag.name)} 걸려 있다. 어깨끈을 조여 메자 가방 칸이 ${foundBag.cap}칸으로 늘었다.`;
+        } else if (!run.currentItem && !node.itemTaken) {
           node.item = node.item || pickFloorItem(run.floor, node);
           run.currentItem = node.item;
           msg = `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 안쪽에서 굴러 떨어졌다.`;
         } else {
           run.danger = Math.max(0, run.danger - 2);
-          msg = '문을 천천히 닫았다. 철판 속의 빈 소리가 가라앉는다.';
+          msg = meta.bagLevel >= MAX_BAG_LEVEL
+            ? '낡은 가방 하나가 걸려 있지만, 지금 멘 것보다 나을 게 없다.'
+            : '문을 천천히 닫았다. 철판 속의 빈 소리가 가라앉는다.';
         }
         if (blackHand) msg = `${msg} ${BLACKHAND_CABINET_NOTE}`;
       } else if (choiceId === 'noise') {
@@ -2456,7 +2483,7 @@
       } else if (choiceId === 'search') {
         run.light = Math.max(0, run.light - 3);
         if (tense) {
-          // 의심도가 높으면 뒤지는 게 위험하다 — 경보가 남고 의심도가 오른다.
+          // 의심도가 높으면 뒤지는 게 위험하다 — 경보가 표시되고 의심도가 오른다.
           run.danger = Math.min(100, run.danger + 10);
           meta.suspicion = Math.min(99, meta.suspicion + 3);
           saveMeta();
@@ -2506,17 +2533,17 @@
         run.danger = Math.min(100, run.danger + SURVIVOR_RESCUE_DANGER);
         emitNoise(node.id, { loud: false }); // 끌어내는 소리 — 작지 않은 소음
         if (!hasSurvivor(ev.survivorId)) meta.survivors.push(ev.survivorId);
-        clearSurvivorNote(ev.survivorId); // 예전에 남겨 뒀던 사람이면 그 기록을 지운다
-        saveMeta(); // 구출 즉시 저장 — 이번 런이 실패로 끝나도 구한 사람은 유지된다
+        clearSurvivorNote(ev.survivorId); // 예전에 표시해 뒀던 사람이면 그 기록을 지운다
+        saveMeta(); // 구출 즉시 저장 — 이번 조사가 실패로 끝나도 구한 사람은 유지된다
         msg = s.rescueLog || '갇혀 있던 사람을 끌어냈다.';
       } else if (choiceId === 'mark') {
         // 위치만 표시: 구출하지 않지만 표식을 새긴다. 소음·의심은 없고, 새긴 자리는 시작 화면에 기록된다.
         run.mental = Math.max(0, run.mental - 2);
         run.danger = Math.min(100, run.danger + 2);
         noteSurvivor(ev.survivorId, 'marked');
-        msg = '벽에 분필로 표시를 남기고 물러났다. 손이 비면 다시 오겠다고 스스로에게 말했다.';
+        msg = '벽에 분필로 표시를 두고 물러났다. 손이 비면 다시 오겠다고 스스로에게 말했다.';
       } else {
-        // 그냥 지나감: 지금은 조용하지만, 다음 런에서 거리 소문·의심도로 뒤늦게 돌아온다.
+        // 그냥 지나감: 지금은 조용하지만, 다음 조사에서 거리 소문·의심도로 뒤늦게 돌아온다.
         run.mental = Math.max(0, run.mental - 3);
         run.danger = Math.min(100, run.danger + 1);
         noteSurvivor(ev.survivorId, 'abandoned');
@@ -3126,7 +3153,7 @@
     let knockedOut = false;
     const risky = ev.risk.score >= 86;
     const veryRisky = ev.risk.score >= 102;
-    // TODO(끌개 v2): 귀환 중 버린 짐은 dropLootTrace로 자국을 남기지 않는다 — 이 시점엔 이미
+    // TODO(끌개 v2): 귀환 중 버린 짐은 dropLootTrace로 자국을 두지 않는다 — 이 시점엔 이미
     // 계단을 오르며 층을 떠나므로(startReturnWalk) 플레이어가 되찾을 수 없다. 되찾기 루프가
     // 성립하지 않아 v1에서는 조용히 잃는다. 층에 머물러 다시 내려갈 수 있게 되면 그때 연결한다.
     const loseCheapest = (fallback) => {
@@ -3218,11 +3245,11 @@
     run.lastSale = run.bag.slice();
     run.chasing = false;
     run.bought = false;
-    // 판매 전에 왜곡 변이 지급을 판정한다(런당 한 번). 뜨거운 유물을 들고 나왔으면 몸에 흔적이 생긴다.
+    // 판매 전에 왜곡 변이 지급을 판정한다(조사당 한 번). 뜨거운 유물을 들고 나왔으면 몸에 흔적이 생긴다.
     const gainedMutation = grantMutationOnReturn();
     if (gainedMutation) {
       run.mutationNote = gainedMutation.gainLog;
-      log(gainedMutation.gainLog, 'hot'); // 강화 화면 요약과 함께 던전 로그에도 함께 띄운다
+      log(gainedMutation.gainLog, 'hot'); // 장비 화면 요약과 함께 던전 로그에도 함께 띄운다
     }
     // 빈손 귀환도 판매 화면을 거친다: 출구 경로를 고르고 판매처(위원회/암시장)를 눌러야 강화로 넘어간다.
     // chooseBuyer가 raw 0을 안전 처리하므로 빈 가방이어도 문제없이 진행된다.
@@ -3389,7 +3416,7 @@
   function chooseBuyer(buyer) {
     const quote = saleQuote(buyer);
     playSfx('sale'); // 판매처/가족 선택 확인 펄스(위원회·암시장·가족 공용)
-    run.exitNote = quote.note; // 강화 화면 요약에 출구 결과를 적어 둔다
+    run.exitNote = quote.note; // 장비 화면 요약에 출구 결과를 적어 둔다
     run.markedNote = markedSaleNote(buyer); // 표식(marked) 회수물 처리 결과 한 줄(있을 때만)
     const previousTruthCount = meta.truths.length;
     meta.rp += quote.gained;
@@ -3410,7 +3437,7 @@
     if (previousTruthCount !== meta.truths.length) {
       log('암시장 정보상이 단서 하나를 넘겼다.', 'win');
     }
-    // 마지막 단서가 이번 판매로 처음 채워졌는가(아래→가득). 매 런 반복 발동을 막는다.
+    // 마지막 단서가 이번 판매로 처음 채워졌는가(아래→가득). 매 조사 반복 발동을 막는다.
     const endingUnlocked =
       previousTruthCount < TRUTH_TOTAL &&
       meta.truths.length >= TRUTH_TOTAL &&
@@ -3419,7 +3446,7 @@
     resolveContract(buyer);
     saveMeta(); // 판매처 선택 후 자동 저장 (RP·의심도·단서 반영)
     run.streetNews = makeStreetNews(buyer, quote);
-    // RP/의심도/의뢰/저장은 그대로 반영하고, 강화 화면도 미리 렌더한다(계속 버튼이 곧장 보여줄 수 있게).
+    // RP/의심도/의뢰/저장은 그대로 반영하고, 장비 화면도 미리 렌더한다(계속 버튼이 곧장 보여줄 수 있게).
     renderUpgradeScreen(quote.gained);
     if (endingUnlocked) {
       renderEndingScreen();
@@ -3444,18 +3471,22 @@
       if (lost > 0) { medicBonus = Math.max(1, Math.round(lost * MEDIC_CONSOLATION_RATE)); consolation += medicBonus; }
     }
     const previousSuspicion = meta.suspicion;
+    const lostBag = bagProduct();
+    const bagWasAboveStarter = meta.bagLevel > 1;
     meta.rp += consolation;
     meta.totalEarned += consolation;
     meta.suspicion = Math.max(0, Math.min(99, meta.suspicion + suspDelta));
-    saveMeta(); // 실패 보상 후 자동 저장
+    meta.bagLevel = 1; // 괴물에게 가방채로 빼앗긴다. 소프트락 방지를 위해 다음 조사는 작은 가방으로 재개.
+    saveMeta(); // 실패 보상·가방 상실 후 자동 저장
     el['fail-recovery'].innerHTML = `<b>${outcome.elapsed}</b><span>${outcome.title}</span><p>${outcome.body}</p>`;
     const suspChange = meta.suspicion - previousSuspicion;
     const suspText = suspChange === 0 ? '변화 없음' : signed(suspChange);
     el['fail-detail'].innerHTML = [
       run.failContext ? `마지막 순간: ${run.failContext}` : '',
       lost > 0
-        ? `잃은 짐 ${lost} RP · 남은 조각 +${consolation} RP`
-        : '빈손이라 잃은 회수품은 없었다.',
+        ? `괴물에게 ${lostBag.name}${objectParticle(lostBag.name)} 가방채로 빼앗겼다 · 위로금 +${consolation} RP`
+        : `괴물에게 빈 ${lostBag.name}${objectParticle(lostBag.name)} 빼앗겼다.`,
+      bagWasAboveStarter ? '다음 조사는 작은 가방으로 다시 시작한다.' : '다음 조사도 작은 가방으로 다시 시작한다.',
       outcome.loss,
       medic ? `의무병이 상처를 감싸고 뒤처리를 도왔다${medicBonus > 0 ? ` (+${medicBonus} RP)` : ''}.` : '',
       `의심도 ${suspText}`,
@@ -3471,19 +3502,22 @@
   function buyUpgrade(type) {
     if (run.bought) return;
     const lvKey = type + 'Level';
+    const nextBag = type === 'bag' ? nextBagProduct() : null;
+    if (type === 'bag' && !nextBag) return;
     const cost = upgradeCost(type); // 정비공 구출 시 장비 강화는 할인가로 계산된다
     if (meta.rp < cost) return;
     meta.rp -= cost;
     meta[lvKey] += 1;
     run.bought = true;
-    playSfx('upgrade'); // 강화 성공 — 부드럽게 오르는 차임
-    saveMeta(); // 강화 구매 후 자동 저장
-    log(`${UPGRADES[type].label}${objectParticle(UPGRADES[type].label)} 손봤다. 다음엔 더 버틴다.`, 'win');
+    playSfx('upgrade'); // 장비 마련 성공 — 부드럽게 오르는 차임
+    saveMeta(); // 구매 후 자동 저장
+    if (type === 'bag') log(`${nextBag.name}${objectParticle(nextBag.name)} 샀다. 다음 조사에서 ${nextBag.cap}칸까지 챙길 수 있다.`, 'win');
+    else log(`${UPGRADES[type].label}${objectParticle(UPGRADES[type].label)} 손봤다. 다음엔 더 버틴다.`, 'win');
     renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
     flashUpgradeSuccess(type); // 성공한 버튼에 짧은 반짝임 + 가벼운 진동감
   }
 
-  // 강화가 성공한 그 버튼에만 짧은 반짝임/진동 느낌을 준다. 실패·비활성 탭에는 붙지 않는다.
+  // 구매/손질이 성공한 그 버튼에만 짧은 반짝임/진동 느낌을 준다. 실패·비활성 탭에는 붙지 않는다.
   function flashUpgradeSuccess(type) {
     const btn = el['up-' + type];
     if (!btn) return;
@@ -4032,7 +4066,7 @@
       }
       el['sale-gain'].textContent = '+' + gained;
     }
-    // 출구 결과와, 이번 런에서 새로 얻은 변이 안내를 한 요약 영역에 함께 보여준다(둘 다 고정 문구).
+    // 출구 결과와, 이번 조사에서 새로 얻은 변이 안내를 한 요약 영역에 함께 보여준다(둘 다 고정 문구).
     if (el['run-summary']) {
       const summaryLines = [run.exitNote, run.markedNote, run.mutationNote].filter(Boolean);
       el['run-summary'].innerHTML = summaryLines.join('<br>');
@@ -4050,10 +4084,14 @@
       el['truth-news'].textContent = '';
     }
 
-    // 강화 버튼 3종. 정비공을 구출했으면 장비 설명에 할인을 자연스럽게 덧붙인다.
+    // 구매/손질 버튼 3종. 가방은 정해진 크기의 제품을 사고, 정비공을 구출했으면 장비 설명에 할인을 덧붙인다.
     const weaponSub = hasSurvivor('mechanic') ? `들키는 속도 -25% · 정비공 할인` : `들키는 속도 -25%`;
+    const currentBag = bagProduct();
+    const nextBag = nextBagProduct();
+    const bagTitle = nextBag ? `${nextBag.name} 구매` : `${currentBag.name} 사용 중`;
+    const bagSub = nextBag ? `${currentBag.cap}칸 → ${nextBag.cap}칸` : `${currentBag.cap}칸 · 더 큰 가방 없음`;
     const defs = [
-      ['up-bag',    'bag',    `가방 넓히기`,  `${bagCap()}칸 → ${bagCap() + 2}칸`],
+      ['up-bag',    'bag',    bagTitle,  bagSub],
       ['up-light',  'light',  `조명 손보기`,  `최대 조명 +35`],
       ['up-weapon', 'weapon', `장비 개조`,  weaponSub],
     ];
@@ -4061,7 +4099,7 @@
       const lvKey = type + 'Level';
       const cost = upgradeCost(type);
       const btn = el[id];
-      const affordable = meta.rp >= cost && !run.bought;
+      const affordable = cost !== Infinity && meta.rp >= cost && !run.bought;
       btn.disabled = !affordable;
       btn.classList.toggle('bought', run.bought);
       const upgradeIcon = type === 'bag' ? 7 : type === 'light' ? 8 : 9;
@@ -4075,7 +4113,7 @@
   // 단서를 다 모은 뒤 열리는 엔딩 화면. 문구가 전부 고정이라 run 없이도 안전하게 재표시할 수 있다(별도 갱신 불필요).
   function renderEndingScreen() {}
 
-  // 엔딩을 '확인함'으로 표시하고, 강화 루프로 돌아가 계속 플레이한다.
+  // 엔딩을 '확인함'으로 표시하고, 장비 루프로 돌아가 계속 플레이한다.
   function acknowledgeEnding() {
     meta.endingSeen = true;
     saveMeta();
@@ -4152,7 +4190,7 @@
     el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
   }
 
-  // 구출한 생존자와, 구출하지 않고 남겨 둔 자리를 시작 화면에 짧게 표시한다(둘 다 없으면 줄을 숨긴다).
+  // 구출한 생존자와, 구출하지 않고 표시해 둔 자리를 시작 화면에 짧게 표시한다(둘 다 없으면 줄을 숨긴다).
   function renderStartSurvivors() {
     const line = el['start-survivors'];
     if (!line) return;
