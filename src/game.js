@@ -181,6 +181,23 @@
     full: '가방이 꽉 찼다. 천이 팽팽하게 당겨져 있다.',
     blocked: '가방 입구가 벌어져 있다. 더 넣으면 찢어질 것 같다.',
   };
+  // 맨손(가방 없음)일 때는 '가방' 대신 맨손 상태에 맞는 문구를 쓴다 — 없는 가방을 두고 꽉 찼다고 하지 않게.
+  const NO_BAG_ALERTS = {
+    full: '손이 가득 찼다. 맨손이라 더는 못 든다.',
+    blocked: '맨손이라 더 쥘 자리가 없다. 손에 쥔 것만으로 벅차다.',
+  };
+  // 가방 용량 경고 문구를 고른다: 맨손이면 맨손용 문구, 가방을 멨으면 기존 문구.
+  function bagAlert(key) {
+    if (meta.bagLevel === NO_BAG_LEVEL && NO_BAG_ALERTS[key]) return NO_BAG_ALERTS[key];
+    return BAG_ALERTS[key];
+  }
+  function noBag() { return meta.bagLevel === NO_BAG_LEVEL; }
+  function packItemLine(item, mode = 'cautious') {
+    const obj = objectParticle(item.name);
+    if (mode === 'recovered') return noBag() ? `버리고 왔던 ${item.name}${obj} 다시 손에 쥐었다.` : `버리고 왔던 ${item.name}${obj} 다시 가방에 넣었다.`;
+    if (mode === 'direct') return noBag() ? `${item.name}까지 손에 쥐었다.` : `${item.name}까지 챙겼다.`;
+    return noBag() ? `숨을 죽이고 ${item.name}${obj} 두 손으로 단단히 쥐었다.` : `숨을 죽이고 ${item.name}${obj} 천천히 가방에 넣었다.`;
+  }
 
   // 회수물 스트립(loot-icons-strip.png)에서 물건별 아이콘 한 칸을 잘라 보여준다.
   // name을 넘기면 좁은 슬롯에서 이름이 잘려도 hover로 확인할 수 있게 title을 달되,
@@ -207,7 +224,7 @@
   const DESCEND_DANGER_BUMP= 8;   // 추격 중 강하 시 위험 점프
   const DROP_DANGER_FACTOR = 0.45;// 버리고 도망: 위험 ×0.45
   const DROP_DANGER_MINUS  = 6;
-  const LOOT_RETRIEVE_TICKS = 6;  // 끌개: 버린 물건을 놈이 거둬 가기까지의 유예(틱). 이후 가까우면 사라진다.
+  const LOOT_RETRIEVE_TICKS = 6;  // 끌개: 버린 물건을 어두운 형체가 거둬 가기까지의 유예(틱). 이후 가까우면 사라진다.
   const WAIT_LIGHT_COST     = 4;  // 기다리기: 시간이 흘러 조명 소모
   const START_MENTAL        = 80; // 침착함/판단력. 조명 상태에 따라 서서히 변한다.
   const MENTAL_BREAK_RECOVERY = 28; // 붕괴 후 간신히 다시 움직일 수 있는 기준선
@@ -247,7 +264,7 @@
         },
         cross: '갈림길을 지나던 검은 윤곽이 허리를 숙인다. 고개가 이쪽으로 천천히 돌아온다.',
         ambush: '문 옆 빈틈에서 구부러진 몸이 펴진다. 손끝이 조명 가장자리를 더듬는다.',
-        critical: '젖은 쇳소리가 등 뒤에서 끊긴다. 빛이 닿지 않는 곳에서 놈이 몸을 숙인다.',
+        critical: '젖은 쇳소리가 등 뒤에서 끊긴다. 빛이 닿지 않는 곳에서 어두운 형체가 몸을 숙인다.',
       },
       choices: (ctx) => [
         ctx.canLight && eventChoice('shine', '조명을 정면으로 비추며 물러난다', '', ctx.lightStrong ? 'good' : 'danger'),
@@ -265,7 +282,7 @@
           unknown: '바닥에 젖은 발자국이 따라 찍힌다. 내 발소리보다 반 박자 늦게 들린다.',
         },
         cross: '갈림길 바닥에 젖은 자국이 번진다. 보이지 않는 발소리가 이쪽으로 방향을 튼다.',
-        ambush: '바로 옆 물웅덩이에 새 발자국이 찍힌다. 놈은 숨소리보다 발소리에 먼저 반응한다.',
+        ambush: '바로 옆 물웅덩이에 새 발자국이 찍힌다. 어두운 형체는 숨소리보다 발소리에 먼저 반응한다.',
         critical: '등 뒤에서 물 밟는 소리가 들린다. 내 걸음에 맞춰 따라온다.',
       },
       choices: (ctx) => [
@@ -1218,7 +1235,7 @@
     let grace = false;
     if (!reached && loot.ticks >= LOOT_RETRIEVE_TICKS && stalkerAwake()) {
       const d = bfs(run.floorMap.nodes, loot.nodeId)[s.nodeId];
-      grace = d != null && d <= 1; // 놈이 바로 옆까지 왔을 때만 — 멀리서 사라지지 않게
+      grace = d != null && d <= 1; // 어두운 형체가 바로 옆까지 왔을 때만 — 멀리서 사라지지 않게
     }
     if (!reached && !grace) return;
     run.floorMap.droppedLoot = null;
@@ -1707,7 +1724,7 @@
     const cap = bagCap();
     if (slots >= cap && !run.seenBagAlerts.has('full')) {
       run.seenBagAlerts.add('full');
-      return queueSensoryAlert(BAG_ALERTS.full, 'hot');
+      return queueSensoryAlert(bagAlert('full'), 'hot');
     }
     if (slots >= Math.max(1, cap - 1) && !run.seenBagAlerts.has('heavy')) {
       run.seenBagAlerts.add('heavy');
@@ -1769,7 +1786,7 @@
         }
         s.quietSteps += 1; // 새 소음이 없으면 조용한 걸음이 쌓여 결국 다시 잠든다.
       }
-      // 끌개: 버린 물건 자국이 있으면 매 틱 유예를 세고, 놈이 닿으면 거둬 간다.
+      // 끌개: 버린 물건 자국이 있으면 매 틱 유예를 세고, 어두운 형체가 닿으면 거둬 간다.
       maybeRetrieveDroppedLoot();
     }
 
@@ -2280,7 +2297,7 @@
         if (enoughLight) {
           run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 30);
           run.mental = clamp(run.mental + 2, 0, 100);
-          msg = '빛을 정면에 고정했다. 구부러진 목이 멈춘다. 놈이 팔로 눈을 가리는 사이 벽 틈으로 빠져나왔다.';
+          msg = '빛을 정면에 고정했다. 구부러진 목이 멈춘다. 어두운 형체가 팔로 눈을 가리는 사이 벽 틈으로 빠져나왔다.';
         } else {
           run.danger = Math.min(100, run.danger + 14);
           msg = '빛이 힘없이 튄다. 검은 팔이 깜빡인 방향으로 먼저 뻗는다.';
@@ -2290,7 +2307,7 @@
         run.light = Math.max(0, run.light - 4);
         if (run.danger < 90 || run.mental >= 18) {
           run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 14);
-          msg = '놈이 몸을 접는 틈에 옆으로 빠져나왔다. 손끝이 벽만 길게 긁고 지나간다.';
+          msg = '어두운 형체가 몸을 접는 틈에 옆으로 빠져나왔다. 손끝이 벽만 길게 긁고 지나간다.';
         } else {
           run.danger = Math.min(100, run.danger + 10);
           msg = '비키려는 순간 발이 엉킨다. 길게 뻗은 팔이 퇴로를 가로막는다.';
@@ -2368,7 +2385,7 @@
       }
     } else {
       run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 10);
-      msg = '놈이 잠깐 물러난 틈에 빠져나왔다.';
+      msg = '어두운 형체가 잠깐 물러난 틈에 빠져나왔다.';
     }
 
     if (knockedOut) run.failContext = msg;
@@ -2576,11 +2593,12 @@
         run.danger = Math.max(0, run.danger - 2);
         msg = `${item.name}${objectParticle(item.name)} 그대로 두고 지나쳤다. 발소리를 죽인 채 물러난다.`;
       } else if (!roomFor(item)) {
-        // 가방이 가득 차 집을 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
+        // 가방이 가득 차(맨손이면 손이 가득 차) 집을 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
+        const alert = bagAlert('blocked');
         run.seenBagAlerts.add('blocked');
-        run.lastAction = BAG_ALERTS.blocked;
-        log(BAG_ALERTS.blocked, 'hot');
-        showDialogue(BAG_ALERTS.blocked, 'hot');
+        run.lastAction = alert;
+        log(alert, 'hot');
+        showDialogue(alert, 'hot');
         render();
         return;
       } else {
@@ -2597,7 +2615,7 @@
         const noiseWarn = applyPickupNoise(node.id, item, cautious);
         if (cautious) {
           run.danger = firstGrab ? Math.max(run.danger, GRAB_DANGER_BUMP) : Math.min(100, run.danger + GRAB_DANGER_BUMP);
-          msg = `숨을 죽이고 ${item.name}${objectParticle(item.name)} 천천히 가방에 넣었다.`;
+          msg = packItemLine(item, 'cautious');
           if (noiseWarn) msg += ` ${noiseWarn}`; // 소리 큰 물건은 조심해도 티가 난다.
         } else {
           run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP + 4);
@@ -2612,17 +2630,18 @@
     } else if (ev.type === 'dropped-loot') {
       const loot = droppedLootHere(node);
       if (!loot) {
-        msg = '버린 물건은 이미 어둠 속으로 사라졌다.'; // 그새 놈이 거둬 갔다.
+        msg = '버린 물건은 이미 어둠 속으로 사라졌다.'; // 그새 어두운 형체가 거둬 갔다.
       } else if (choiceId === 'leave') {
-        // 두고 물러난다 — 바닥의 자국을 따라 놈이 나중에 되찾으러 온다.
+        // 두고 물러난다 — 바닥의 자국을 따라 어두운 형체가 나중에 되찾으러 온다.
         run.danger = Math.max(0, run.danger - 2);
-        msg = `${loot.item.name}${objectParticle(loot.item.name)} 그대로 두고 물러났다. 바닥의 자국을 따라 놈이 되찾으러 올 것이다.`;
+        msg = `${loot.item.name}${objectParticle(loot.item.name)} 그대로 두고 물러났다. 바닥의 자국을 따라 어두운 형체가 되찾으러 올 것이다.`;
       } else if (!roomFor(loot.item)) {
-        // 가방이 가득 차 되챙길 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
+        // 가방이 가득 차(맨손이면 손이 가득 차) 되챙길 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
+        const alert = bagAlert('blocked');
         run.seenBagAlerts.add('blocked');
-        run.lastAction = BAG_ALERTS.blocked;
-        log(BAG_ALERTS.blocked, 'hot');
-        showDialogue(BAG_ALERTS.blocked, 'hot');
+        run.lastAction = alert;
+        log(alert, 'hot');
+        showDialogue(alert, 'hot');
         render();
         return;
       } else {
@@ -2638,7 +2657,7 @@
         applyPickupNoise(node.id, loot.item, true); // 되챙기는 소리가 난다(조심히 다뤄도 티가 날 수 있다).
         run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
         const brokenTail = loot.broken ? ' 깨진 모서리가 손끝을 스친다.' : '';
-        msg = `버리고 왔던 ${loot.item.name}${objectParticle(loot.item.name)} 다시 가방에 넣었다.${brokenTail}`;
+        msg = `${packItemLine(loot.item, 'recovered')}${brokenTail}`;
         maybeQueueBagAlert();
         maybeQueueLightAlert();
       }
@@ -2888,7 +2907,7 @@
     const s = stalker();
     if (s) {
       s.quietSteps += 1 + (Math.random() < 0.5 ? 1 : 0);
-      // 소리 없이 기다리는 동안에도 놈은 마지막 발소리 쪽으로 느리게 걷는다.
+      // 소리 없이 기다리는 동안에도 어두운 형체는 마지막 발소리 쪽으로 느리게 걷는다.
       // 단, 이미 바로 옆(거리 1)이면 무음 걸음으로 플레이어 칸에 올라앉지 않도록 움직이지 않는다.
       if (stalkerAwake() && stalkerDistance() > 1) moveStalkerOneStep({ silent: true });
     }
@@ -2910,10 +2929,11 @@
   function grab() {
     if (!run || run.dialogue || run.pendingEvent || !run.currentItem) return;
     if (!roomFor(run.currentItem)) {
+      const alert = bagAlert('blocked');
       run.seenBagAlerts.add('blocked');
-      run.lastAction = BAG_ALERTS.blocked;
-      log(BAG_ALERTS.blocked, 'hot');
-      showDialogue(BAG_ALERTS.blocked, 'hot');
+      run.lastAction = alert;
+      log(alert, 'hot');
+      showDialogue(alert, 'hot');
       render();
       return;
     }
@@ -2943,8 +2963,8 @@
       run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
       const dir = reversePathDirection(node);
       const cue = dir ? `${dir}에서 발소리가 가까워진다.` : '젖은 발소리가 가까워진다.';
-      run.lastAction = `${item.name}까지 챙겼다. ${cue}${tail}`;
-      log(`${item.name}까지 챙겼다. ${cue}${tail}`, 'hot');
+      run.lastAction = `${packItemLine(item, 'direct')} ${cue}${tail}`;
+      log(`${packItemLine(item, 'direct')} ${cue}${tail}`, 'hot');
       showDialogue(run.lastAction, 'hot');
     }
     maybeQueueBagAlert();
@@ -2971,7 +2991,7 @@
     if (run.dialogue || !run.chasing || run.bag.length === 0) return;
     clearDialogue();
     // 가장 비싼 물건을 떨군다 → 위험 급감. 이제 물건은 사라지지 않고 바닥 자국으로 바뀐다(끌개):
-    // 던전은 미끼가 아니라 '되찾을 물건'을 좇는다. 놈보다 먼저 닿으면 다시 집을 수 있다.
+    // 던전은 미끼가 아니라 '되찾을 물건'을 좇는다. 어두운 형체보다 먼저 닿으면 다시 집을 수 있다.
     let idx = 0;
     run.bag.forEach((it, i) => { if (it.value > run.bag[idx].value) idx = i; });
     const dropped = run.bag.splice(idx, 1)[0];
