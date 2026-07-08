@@ -375,24 +375,24 @@
     },
   ];
 
-  // 조명/장비는 단계가 오를수록 비싸진다. 가방은 순차 강화가 아니라 아래 BAG_PRODUCTS에서 크기를 골라 산다.
+  // 조명/장비는 단계가 오를수록 비싸진다. 가방은 정해진 크기 제품 중 하나를 고른다.
   const UPGRADES = {
     light:  { label: '조명',  cost: lv => 5  * lv },
     weapon: { label: '장비',  cost: lv => 10 * lv },
   };
 
-  // 가방은 크기별 제품이다. level 0(맨손)은 시작·상실 시의 빈손 상태 — 주머니와 한 손만 쓴다(작은 가방보다 좁다).
+  // 가방은 크기별 제품이다. level 0은 시작·상실 시의 맨손 상태다.
   // level 1~4는 구매·발견 가능한 실제 가방으로, 값이 제품마다 고정이라 큰 가방을 곧장 사면 그만큼 더 든다.
   const BAG_PRODUCTS = [
-    { level: 0, name: '맨손',     cap: 2, desc: '주머니와 한 손' },
+    { level: 0, name: '맨손',     cap: 1 },
     { level: 1, name: '작은 가방', cap: 3, cost: 8 },
     { level: 2, name: '큰 가방',   cap: 5, cost: 20 },
     { level: 3, name: '대형 가방', cap: 7, cost: 40 },
     { level: 4, name: '특대 가방', cap: 9, cost: 64 },
   ];
   const MAX_BAG_LEVEL = BAG_PRODUCTS[BAG_PRODUCTS.length - 1].level;
-  const NO_BAG_LEVEL = 0; // 맨손 — 가방을 아직 안 샀거나 괴물에게 빼앗긴 상태
-  const CABINET_BAG_CHANCE = 0.28;
+  const NO_BAG_LEVEL = 0; // 맨손 — 가방을 아직 안 샀거나 어두운 형체에게 빼앗긴 상태
+  const CABINET_BAG_FIND_RATES = { 1: 0.20, 2: 0.08, 3: 0.035, 4: 0.015 }; // 큰 가방일수록 발견 확률이 낮다.
   function bagProduct(level = meta.bagLevel) {
     const safe = Math.max(NO_BAG_LEVEL, Math.min(MAX_BAG_LEVEL, Math.floor(Number(level)) || 0));
     return BAG_PRODUCTS.find((bag) => bag.level === safe) || BAG_PRODUCTS[0];
@@ -403,11 +403,17 @@
     const product = BAG_PRODUCTS.find((bag) => bag.level === level);
     return product && product.cost != null ? product.cost : Infinity;
   }
-  // 캐비닛에서 나오는 가방: 지금 것보다 큰 제품 중 하나를 무작위로 고른다(없으면 null).
+  // 캐비닛에서 나오는 가방: 지금 것보다 큰 제품만 후보가 되며, 큰 가방일수록 낮은 확률로 발견된다.
   function bagFindCandidate() {
-    const larger = purchasableBags().filter((bag) => bag.level > meta.bagLevel);
-    if (!larger.length) return null;
-    return larger[Math.floor(Math.random() * larger.length)];
+    const candidates = purchasableBags().filter((bag) => bag.level > meta.bagLevel);
+    if (!candidates.length) return null;
+    const roll = Math.random();
+    let acc = 0;
+    for (const bag of candidates) {
+      acc += CABINET_BAG_FIND_RATES[bag.level] || 0;
+      if (roll < acc) return bag;
+    }
+    return null;
   }
 
   /* ---------------- 생존자 v1 ---------------- */
@@ -1110,7 +1116,7 @@
     return currentNode().exits.includes(step) ? step : null;
   }
 
-  // 숨은 괴물의 '기척'을 4단계로 거칠게 요약한다. 정확한 거리·위험 수치는 절대 노출하지 않고,
+  // 숨은 어두운 형체의 '기척'을 4단계로 거칠게 요약한다. 정확한 거리·위험 수치는 절대 노출하지 않고,
   // 화면 연출(가장자리 어둠·미세 깜빡임·짧은 진동)의 강도만 고르기 위한 값이다.
   //   none    안전 — 연출 없음
   //   far     추격이 붙었거나 위험이 어느 정도 — 아주 옅은 가장자리 어둠
@@ -2399,11 +2405,11 @@
         // 검은 손 변이: 휘어진 손잡이가 너무 쉽게 딸려 와 조명 소모가 준다(결정적).
         const blackHand = hasMutation('black-hand');
         run.light = Math.max(0, run.light - (blackHand ? 1 : 3));
-        const foundBag = !run.currentItem && Math.random() < CABINET_BAG_CHANCE ? bagFindCandidate() : null;
+        const foundBag = !run.currentItem ? bagFindCandidate() : null;
         if (foundBag) {
           meta.bagLevel = foundBag.level;
           saveMeta();
-          msg = `찌그러진 캐비닛 안에 멀쩡한 ${foundBag.name}${subjectParticle(foundBag.name)} 걸려 있다. 어깨끈을 조여 메자 가방 칸이 ${foundBag.cap}칸으로 늘었다.`;
+          msg = `찌그러진 캐비닛 안에 멀쩡한 ${foundBag.name}${subjectParticle(foundBag.name)} 걸려 있다. ${foundBag.name}${objectParticle(foundBag.name)} 멨다. ${foundBag.cap}칸 정도의 공간이 생겼다.`;
         } else if (!run.currentItem && !node.itemTaken) {
           node.item = node.item || pickFloorItem(run.floor, node);
           run.currentItem = node.item;
@@ -3488,7 +3494,7 @@
     meta.rp += consolation;
     meta.totalEarned += consolation;
     meta.suspicion = Math.max(0, Math.min(99, meta.suspicion + suspDelta));
-    meta.bagLevel = NO_BAG_LEVEL; // 가방이 있었으면 통째로 빼앗기고, 없었으면 그대로 맨손. 다음 조사는 맨손으로 재개.
+    meta.bagLevel = NO_BAG_LEVEL; // 가방이 있었으면 통째로 사라지고, 없었으면 그대로 맨손. 다음 조사는 가방 없이 재개.
     saveMeta(); // 실패 보상·가방 상실 후 자동 저장
     el['fail-recovery'].innerHTML = `<b>${outcome.elapsed}</b><span>${outcome.title}</span><p>${outcome.body}</p>`;
     const suspChange = meta.suspicion - previousSuspicion;
@@ -3497,12 +3503,12 @@
       run.failContext ? `마지막 순간: ${run.failContext}` : '',
       hadBag
         ? (lost > 0
-            ? `괴물에게 ${lostBag.name}${objectParticle(lostBag.name)} 가방채로 빼앗겼다 · 위로금 +${consolation} RP`
-            : `괴물에게 빈 ${lostBag.name}${objectParticle(lostBag.name)} 빼앗겼다.`)
+            ? `어두운 형체가 후려쳐 기절했다. ${lostBag.name}과 안에 든 물건이 사라져있었다. · 위로금 +${consolation} RP`
+            : `어두운 형체가 후려쳐 기절했다. 빈 ${lostBag.name}${subjectParticle(lostBag.name)} 사라져있었다.`)
         : (lost > 0
-            ? `괴물이 후려쳐 넘어뜨리고 손에 쥔 것을 털어 갔다 · 위로금 +${consolation} RP`
-            : '괴물이 후려쳐 넘어뜨렸다. 맨손이라 가져갈 가방도 없었다.'),
-      hadBag ? '다음 조사는 맨손으로 다시 시작한다.' : '다음 조사도 맨손으로 다시 시작한다.',
+            ? `어두운 형체가 후려쳐 기절했다. 주머니에 숨겨놓은 물건이 사라져있었다. · 위로금 +${consolation} RP`
+            : '어두운 형체가 후려쳐 기절했다. 가진게 없어 사라진 물건은 없었다.'),
+      '다음 조사는 가방 없이 가야할지도 모르겠다.',
       outcome.loss,
       medic ? `의무병이 상처를 감싸고 뒤처리를 도왔다${medicBonus > 0 ? ` (+${medicBonus} RP)` : ''}.` : '',
       `의심도 ${suspText}`,
@@ -3552,7 +3558,7 @@
     bagShopOpen = false;
     playSfx('upgrade'); // 가방 마련 성공 — 부드럽게 오르는 차임
     saveMeta(); // 구매 후 자동 저장
-    log(`${product.name}${objectParticle(product.name)} 샀다. 다음 조사에서 ${product.cap}칸까지 챙길 수 있다.`, 'win');
+    log(`${product.name}${objectParticle(product.name)} 샀다. ${product.cap}칸 정도의 공간이 생겼다.`, 'win');
     renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
     flashUpgradeSuccess('bag'); // 가방 구매 버튼에 짧은 반짝임 + 가벼운 진동감
   }
@@ -4156,11 +4162,11 @@
       btn.classList.toggle('bought', run.bought);
       btn.classList.toggle('open', open);
       btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      const currentDesc = currentBag.desc ? currentBag.desc : `${currentBag.cap}칸`;
+      const currentText = currentBag.level === NO_BAG_LEVEL ? '현재: 맨손' : `현재: ${currentBag.name} · ${currentBag.cap}칸`;
       const hint = run.bought ? '오늘은 여기까지' : (open ? '접기' : '고르기');
       btn.innerHTML =
         `<span class="up-title">${itemIcon(7)}가방 구매</span>` +
-        `<span class="up-sub">현재: ${currentBag.name} · ${currentDesc}</span>` +
+        `<span class="up-sub">${currentText}</span>` +
         `<span class="up-cost">${hint}</span>`;
     }
     const panel = el['bag-shop'];
