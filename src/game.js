@@ -1506,6 +1506,7 @@
   function show(screenId) {
     document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
     el[screenId].classList.add('active');
+    syncAmbience(); // 화면이 바뀌면 배경 앰비언스도 맞춘다(던전 화면 밖이면 멈춘다)
   }
 
   /* ---------------- 사운드 (WebAudio · 코드 생성 · 파일 없음) ----------------
@@ -1516,6 +1517,14 @@
   let audioCtx = null;
   let masterGain = null;
   let soundOff = false;
+
+  // 층별 배경 앰비언스 루프 상태 — run.lastPresenceSfx와 같은 엣지 트리거 패턴으로
+  // 현재 재생 중인 테마('ruins'/'lab'/'deep') 또는 'off'만 추적해 바뀔 때만 전환한다.
+  let ambienceTheme = 'off';
+  let ambienceGain = null;     // 테마 그래프 전체를 문(게이트)하는 게인 — 전환/정지는 이 하나만 램프한다
+  let ambienceSources = null;  // 정지 시 stop()을 걸어야 하는 소스 노드(오실레이터/버퍼) 목록
+  let ambienceAllNodes = null; // 정지 후 disconnect할 전체 노드 목록(필터·LFO 포함, 누수 방지)
+  const AMBIENCE_GAIN = 0.04;  // 앰비언스 전용 게인 — 마스터 게인(0.16)을 그대로 통과하므로 훨씬 낮게 잡는다
 
   // 저장된 무음 선호를 읽는다(막힌 환경이면 소리 켜짐 기본).
   function loadSoundPref() {
@@ -1529,6 +1538,7 @@
     try { window.localStorage.setItem(SOUND_KEY, soundOff ? '1' : '0'); }
     catch (e) { /* 저장 차단 환경 무시 */ }
     if (!soundOff) ensureAudio();
+    syncAmbience(); // 끄면 즉시 멈추고, 켜면(제스처 안이므로) 현재 화면에 맞게 다시 채운다
   }
 
   // 첫 제스처에 컨텍스트를 만들거나 깨운다. 실패해도 조용히 포기한다.
@@ -1641,6 +1651,142 @@
       default:
         break;
     }
+  }
+
+  /* ---------------- 배경 앰비언스 (층 테마별 루프) ----------------
+     조사 중(던전 화면)에서만 아주 조용히 깔리는 배경 루프. 단발 큐(tone/noiseBurst)보다
+     훨씬 낮은 전용 게인(AMBIENCE_GAIN)으로 마스터 게인을 통과시킨다. 지상 화면에서는
+     완전히 멈춘다(게인 램프 후 stop+disconnect). setInterval 폴링 없이 루프 버퍼/오실레이터
+     + LFO만으로 지속음을 만들고, 페이드는 항상 게인 램프로 처리한다. */
+
+  // 1층 도시 잔해 — 저역 필터를 씌운 노이즈 루프에 느린 게인 LFO를 얹어 바람/잔해 울림처럼 흔든다.
+  function buildRuinsAmbience(ctx, out) {
+    const dur = 4;
+    const frames = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 240; // 낮고 따뜻한 잔해 울림
+    const g = ctx.createGain();
+    g.gain.value = 1;
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.06; // 약 16초 주기로 밀려오듯 느리게
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.32;
+    lfo.connect(lfoGain); lfoGain.connect(g.gain);
+    src.connect(lp); lp.connect(g); g.connect(out);
+    src.start(); lfo.start();
+    return { sources: [src, lfo], nodes: [src, lp, g, lfo, lfoGain] };
+  }
+
+  // 2층 연구시설 — 낮은 사인 험에 삼각파 배음을 살짝 얹고, 아주 느린 LFO로 미세하게만 흔든다.
+  function buildLabAmbience(ctx, out) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = 100; // 창백한 전기 험
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'triangle';
+    osc2.frequency.value = 100.6; // 살짝 어긋나 결을 준다
+    const g2 = ctx.createGain();
+    g2.gain.value = 0.3;
+    const g = ctx.createGain();
+    g.gain.value = 1;
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.045; // 아주 느린 미세 변동(호흡하듯)
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.1;
+    lfo.connect(lfoGain); lfoGain.connect(g.gain);
+    osc.connect(g); osc2.connect(g2); g2.connect(g); g.connect(out);
+    osc.start(); osc2.start(); lfo.start();
+    return { sources: [osc, osc2, lfo], nodes: [osc, osc2, g, g2, lfo, lfoGain] };
+  }
+
+  // 3층 이상 심층 — 아주 살짝 어긋난 두 저음 오실레이터가 만드는 맥놀이(비트)로 뒤틀린 드론을 낸다.
+  function buildDeepAmbience(ctx, out) {
+    const osc1 = ctx.createOscillator();
+    osc1.type = 'sine';
+    osc1.frequency.value = 46;
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.value = 49; // 3Hz 어긋남이 느린 맥놀이를 만든다
+    const g = ctx.createGain();
+    g.gain.value = 1;
+    osc1.connect(g); osc2.connect(g); g.connect(out);
+    osc1.start(); osc2.start();
+    return { sources: [osc1, osc2], nodes: [osc1, osc2, g] };
+  }
+
+  const AMBIENCE_BUILDERS = { ruins: buildRuinsAmbience, lab: buildLabAmbience, deep: buildDeepAmbience };
+
+  // 층 번호 → 앰비언스 테마. floorThemeClass와 동일한 경계를 쓴다(1층 ruins·2층 lab·3층+ deep).
+  function floorAmbienceTheme(floor) {
+    if (floor >= 3) return 'deep';
+    if (floor === 2) return 'lab';
+    return 'ruins';
+  }
+
+  // 현재 앰비언스를 게인 램프로 내리고 소스 노드를 멈춘 뒤 그래프 전체를 해제한다(누수 방지).
+  function stopAmbience(fadeSec) {
+    const gainNode = ambienceGain;
+    const sources = ambienceSources;
+    const nodes = ambienceAllNodes;
+    ambienceGain = null; ambienceSources = null; ambienceAllNodes = null;
+    ambienceTheme = 'off';
+    if (!audioCtx || !gainNode) return;
+    try {
+      const t0 = audioCtx.currentTime;
+      const dur = fadeSec != null ? fadeSec : 0.7;
+      gainNode.gain.cancelScheduledValues(t0);
+      gainNode.gain.setValueAtTime(Math.max(0.0001, gainNode.gain.value), t0);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      const stopAt = t0 + dur + 0.05;
+      const cleanup = () => { try { (nodes || []).forEach((n) => n.disconnect()); gainNode.disconnect(); } catch (e) { /* 무시 */ } };
+      if (sources && sources.length) {
+        sources.forEach((n) => { try { n.stop(stopAt); } catch (e) { /* 무시 */ } });
+        sources[sources.length - 1].onended = cleanup; // 실제 정지 뒤에만 해제한다
+      } else {
+        cleanup();
+      }
+    } catch (e) { /* 무시 */ }
+  }
+
+  // 테마 그래프를 새로 짜고 게인을 0에서 서서히 올린다(스며들 듯 시작).
+  function startAmbience(theme) {
+    const ctx = ensureAudio();
+    if (!ctx || !masterGain) return;
+    const build = AMBIENCE_BUILDERS[theme];
+    if (!build) return;
+    try {
+      const g = ctx.createGain();
+      const t0 = ctx.currentTime;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(AMBIENCE_GAIN, t0 + 1.2);
+      g.connect(masterGain);
+      const built = build(ctx, g);
+      ambienceGain = g;
+      ambienceSources = built.sources;
+      ambienceAllNodes = built.nodes.concat([g]);
+      ambienceTheme = theme;
+    } catch (e) { ambienceTheme = 'off'; }
+  }
+
+  // 현재 화면·층에 맞춰 앰비언스를 맞춘다. 던전 화면일 때만 층 테마를 재생하고 그 외엔 멈춘다.
+  // ambienceTheme로 엣지 트리거만 잡으므로 매 렌더 호출돼도 실제 전환은 상태가 바뀔 때만 일어난다.
+  function syncAmbience() {
+    const dungeonActive = !!(el['screen-dungeon'] && el['screen-dungeon'].classList.contains('active'));
+    const desired = (dungeonActive && run && !soundOff) ? floorAmbienceTheme(run.floor) : 'off';
+    if (desired === ambienceTheme) return;
+    if (desired === 'off') { stopAmbience(); return; }
+    if (!ensureAudio()) { ambienceTheme = 'off'; return; }
+    if (ambienceTheme !== 'off') stopAmbience(0.5); // 이전 테마를 짧게 내리고 새 테마로 넘어간다
+    startAmbience(desired);
   }
 
   // 첫 사용자 제스처에 오디오를 깨운다(자동재생 금지 준수). 한 번 쓰면 리스너를 뗀다.
@@ -3699,6 +3845,7 @@
       el['stage'].classList.remove(...FLOOR_THEME_CLASSES);
       el['stage'].classList.add(floorThemeClass(run.floor));
       renderPresenceFx();
+      syncAmbience(); // 층 테마에 맞춰 배경 앰비언스도 동기화(엣지 트리거라 같은 테마면 아무 일도 없다)
     }
     renderStage();
     renderDepthRail();
@@ -4283,6 +4430,11 @@
     // 첫 사용자 제스처에 오디오 컨텍스트를 깨운다(자동재생 금지). 한 번 쓰면 스스로 뗀다.
     document.addEventListener('pointerdown', unlockAudioOnce);
     document.addEventListener('touchstart', unlockAudioOnce);
+    // 탭이 숨겨지면 앰비언스를 멈추고, 돌아오면 현재 화면에 맞춰 다시 채운다(리소스 절약).
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopAmbience(0.25);
+      else syncAmbience();
+    });
     el['btn-enter'].addEventListener('click', handleStartButton);
     if (el['screen-start']) el['screen-start'].addEventListener('click', handleStartScreenTap);
     if (el['btn-meta']) el['btn-meta'].addEventListener('click', (event) => {
