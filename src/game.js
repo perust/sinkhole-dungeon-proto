@@ -530,12 +530,14 @@
   const SURVIVOR_ABANDON_SUSPICION = 1;  // 등진 기록 하나당 다음 조사에서 오르는 의심도(한 번만)
   const SURVIVOR_STREET_RUMOR = '거리 소문: 어젯밤 누군가 두드리는 소리가 멈췄다.';
 
-  /* ---------------- 왜곡 변이 v1 ---------------- */
+  /* ---------------- 왜곡 변이 v2-lite ---------------- */
   // 아주 뜨거운 유물을 들고 지상으로 나오면 몸에 번지는 영구 흔적. 조사를 넘어 유지되며(meta.mutations),
-  // 하나가 이득과 대가를 함께 준다. v1은 둘뿐이고, 더 큰 변이 트리는 후속으로 미룬다.
+  // 하나가 이득과 대가를 함께 준다. v2-lite는 셋(트리 분기 없이 순서대로 지급), 더 큰 변이 트리는 후속으로 미룬다.
   //  - fissure-sight(균열 시야): 앞쪽 틈/계단/물건 방향을 낮은 정밀도로 짚어 주지만,
   //    균열 출구에서 길을 더 잘못 짚어 파손되기 쉬운 짐이 조금 더 긁힌다.
   //  - black-hand(검은 손): 캐비닛을 더 쉽게 열지만, 공식 출구 검문에서 손이 눈에 띄어 의심도가 조금 더 오른다.
+  //  - muffled-skin(젖은 살갗): 물건을 집는 소음이 한 단계 죽어 들지만, 위원회에 정식 반납할 때
+  //    접수관 눈에 띄어 안전 제출로 눅는 의심도가 조금 덜 줄어든다.
   const MUTATIONS = {
     'fissure-sight': {
       id: 'fissure-sight',
@@ -547,9 +549,14 @@
       name: '검은 손',
       gainLog: '손등에 검은 얼룩이 번졌다. 손가락이 전보다 쉽게 틈을 비집는다.',
     },
+    'muffled-skin': {
+      id: 'muffled-skin',
+      name: '젖은 살갗',
+      gainLog: '살갗이 짙은 물기에 덮였다. 손끝에 닿는 것들이 소리를 덜 낸다.',
+    },
   };
   // 지급은 이 순서대로 첫 번째 미보유 변이를 준다(무작위 없음 — 테스트 결정성).
-  const MUTATION_ORDER = ['fissure-sight', 'black-hand'];
+  const MUTATION_ORDER = ['fissure-sight', 'black-hand', 'muffled-skin'];
   const KNOWN_MUTATIONS = new Set(MUTATION_ORDER);
 
   const MUTATION_TRIGGER_HEAT = 15;    // 이 이상 뜨거운 유물을 하나라도 들고 나오면 변이 후보(안정화 코어·봉인 유물)
@@ -560,6 +567,9 @@
   const BLACKHAND_CHECKPOINT_SUSP = 1; // 검은 손이 있으면 공식 출구 검문에서 의심도가 1 더 오른다(과하지 않게)
   const BLACKHAND_CHECKPOINT_NOTE = '검은 손이 드러나 검문관이 손등을 한 번 더 훑어봤다.';
   const BLACKHAND_CABINET_NOTE = '휘어진 손잡이가 검은 손에 너무 쉽게 딸려 온다.';
+  const MUFFLED_PICKUP_NOTE = '부딪치는 소리가 살갗에 스며 낮게 가라앉았다.'; // 젖은 살갗 완화가 실제로 소음 압박을 낮췄을 때만 붙는 한 줄
+  const MUFFLED_COMMITTEE_SUSP = 1; // 젖은 살갗이 있으면 위원회 정식 반납의 안전 완화가 1 줄어든다(과하지 않게, 제출 자체가 의심도를 올리진 않는다)
+  const MUFFLED_COMMITTEE_NOTE = '접수창 불빛에 살갗이 번들거려 접수관이 한 번 더 쳐다봤다.';
 
   /* ---------------- 상태 ---------------- */
 
@@ -832,6 +842,7 @@
       mutationChecked: false, // 이번 귀환에서 변이 지급을 이미 판정했는가(조사당 한 번)
       mutationNote: '',  // 이번 조사에서 새로 얻은 변이 안내 문구(장비 화면 요약에 노출)
       markedNote: '',    // 이번 판매에서 표식(marked) 회수물 처리 결과 한 줄(장비 화면 요약에 노출)
+      muffledNote: '',   // 젖은 살갗 대가가 이번 판매에 적용됐을 때 한 줄(장비 화면 요약에 노출)
       grabbedCount: 0,
       droppedCount: 0,
       bought: false,     // 이번 귀환에서 강화를 샀는가
@@ -1079,6 +1090,16 @@
     s.stepCounter = 0;
   }
 
+  // 젖은 살갗 변이: 줍기 압박 계산에서만 소음을 한 단계 낮게 취급한다(high→medium, medium→low, low는 그대로).
+  // 던전 힌트 문구·줍기 버튼 부제는 물건 자체의 성질이라 이 헬퍼를 쓰지 않고 itemNoise를 그대로 쓴다.
+  function effectivePickupNoise(item) {
+    const noise = itemNoise(item);
+    if (!hasMutation('muffled-skin')) return noise;
+    if (noise === 'high') return 'medium';
+    if (noise === 'medium') return 'low';
+    return noise;
+  }
+
   // 집기 소음 처리: 아이템 noise와 조심/재빨리에 따라 추격 압박을 다르게 준다.
   // - careful: 어느 noise든 즉시 한 칸 끌어당기지 않는다(loud=false).
   //     · low/medium: 깨우고 이 칸을 기억시키는 정도.
@@ -1088,7 +1109,8 @@
   //     low는 재빨라도 즉시 한 칸까지는 아니다(loud=false) — 대신 호출부에서 위험만 더 오른다.
   // 반환: 상황 문구에 덧붙일 경고(없으면 '').
   function applyPickupNoise(nodeId, item, cautious) {
-    const noise = itemNoise(item);
+    const rawNoise = itemNoise(item);
+    const noise = effectivePickupNoise(item); // 젖은 살갗이 있으면 여기서만 한 단계 낮아진다
     const loud = !cautious && noise !== 'low';
     emitNoise(nodeId, { loud });
     if (cautious && noise === 'high') {
@@ -1098,7 +1120,10 @@
       if (stalkerDistance() > 1) moveStalkerOneStep({ silent: true });
       return '금속이 부딪치는 둔탁한 소리가 어둠에 퍼졌다.';
     }
-    return '';
+    // 완화가 실제로 행동을 바꿨을 때만(조심+high가 medium으로 내려가 접근을 피했거나,
+    // 재빨리+medium이 low로 내려가 즉시 끌어당김이 풀렸을 때) 한 줄을 덧붙인다.
+    const muffled = noise !== rawNoise && ((cautious && rawNoise === 'high') || (!cautious && rawNoise === 'medium'));
+    return muffled ? MUFFLED_PICKUP_NOTE : '';
   }
 
   // 위기 탈출 성공 뒤: 추격자를 플레이어에게서 minDist 엣지 이상 떨어뜨린다.
@@ -3558,6 +3583,8 @@
       // 표식 물건은 위원회 추적 명단에 오른 회수물이라, 정식 반납하면 그 명단이 함께 지워져 의심도가 조금 더 눅는다(유계).
       const markedCount = run.bag.filter(itemMarked).length;
       if (markedCount) suspDelta -= Math.min(MARKED_SUSPICION_CAP, markedCount * MARKED_COMMITTEE_RELIEF);
+      // 젖은 살갗 변이: 정식 반납의 안전 완화가 1 줄어든다(대가). 제출 자체가 의심도를 올리진 않는다(0 초과 금지).
+      if (hasMutation('muffled-skin')) suspDelta = Math.min(0, suspDelta + MUFFLED_COMMITTEE_SUSP);
     } else if (buyer === 'family') {
       // 유품은 가족에게(사례로 값의 일부만), 나머지는 위원회 반납가로 조용히 넘긴다.
       const familyItems = run.bag.filter(itemFamily);
@@ -3586,7 +3613,9 @@
     }
     gained = Math.max(0, gained + eff.gainDelta);
     suspDelta += eff.suspDelta;
-    return { gained, suspDelta, note: eff.note, route: eff.route };
+    // 젖은 살갗 대가가 실제로 적용됐을 때만(위원회 반납) 접수창 한 줄을 덧붙인다.
+    const muffledNote = buyer === 'committee' && hasMutation('muffled-skin') ? MUFFLED_COMMITTEE_NOTE : '';
+    return { gained, suspDelta, note: eff.note, route: eff.route, muffledNote };
   }
 
   // 판매처를 'NPC와의 짧은 대화'로 보여주는 한 줄. 왜 그 값·의심도가 나오는지 숫자 대신 사람 말로 전한다.
@@ -3632,6 +3661,7 @@
     playSfx('sale'); // 판매처/가족 선택 확인 펄스(위원회·암시장·가족 공용)
     run.exitNote = quote.note; // 장비 화면 요약에 출구 결과를 적어 둔다
     run.markedNote = markedSaleNote(buyer); // 표식(marked) 회수물 처리 결과 한 줄(있을 때만)
+    run.muffledNote = quote.muffledNote || ''; // 젖은 살갗 대가가 적용됐을 때 한 줄(있을 때만)
     const previousTruthCount = meta.truths.length;
     meta.rp += quote.gained;
     meta.totalEarned += quote.gained;
@@ -4314,7 +4344,7 @@
     }
     // 출구 결과와, 이번 조사에서 새로 얻은 변이 안내를 한 요약 영역에 함께 보여준다(둘 다 고정 문구).
     if (el['run-summary']) {
-      const summaryLines = [run.exitNote, run.markedNote, run.mutationNote].filter(Boolean);
+      const summaryLines = [run.exitNote, run.markedNote, run.mutationNote, run.muffledNote].filter(Boolean);
       el['run-summary'].innerHTML = summaryLines.join('<br>');
     }
     el['sale-balance'].textContent = meta.rp;
