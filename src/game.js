@@ -24,24 +24,36 @@
   ];
 
   // 회수물 6종 — 층이 깊을수록 무겁고(칸) 비싸다(RP).
-  // 아이템 태그 v1:
-  //   heat   — 암시장 판매 시 물건 하나가 더하는 의심도(등급이 아니라 물건별로 다르다).
+  // 아이템 태그 v1 — 태그는 등급이 아니라 물건마다 붙는다.
+  // 같은 rare여도 데이터칩은 조용하고(low) 연구 노트는 소리가 난다(medium).
+  //   heat   — 암시장 판매 시 물건 하나가 더하는 의심도. MUTATION_TRIGGER_HEAT 이상이면
+  //            손에 남는 열기로 한 줄 흘린다(itemTraitHint) — 수치는 감춘다.
   //   noise  — 집는 순간의 소음 압박('low'|'medium'|'high'). 조심/재빨리와 함께 추격 압박을 정한다.
-  //   fragile— 버리고 도망 시 깨져 값이 거의 남지 않는 물건(true).
+  //   fragile— 깨지기 쉬운 물건(true). 버리고 도망친 뒤 되챙기면 깨진 채로 돌아와 값이 크게 떨어지고
+  //            (BROKEN_VALUE_RATE), 균열 출구에서는 성한 것만 긁힌다.
   //   marked — 위원회가 추적 중인 회수물(true). 정식 반납이면 그 물건이 공개 수배·검문 목록에서 빠져
   //            의심도가 조금 더 눅고, 암시장에 넘기면 표식된 물건이 뒷골목에 다시 떠올라 꼬리가 조금 더 잡힌다.
+  //   hints  — 태그를 물건마다 다른 감각 문구로 흘린다. 없으면 태그별 기본 문구를 쓴다.
   const ITEM_TABLE = {
     1: [
       { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0, heat: 3,  noise: 'medium', fragile: false, truth: true, truthText: '배터리에는 위원회 마크가 지워진 흔적이 있다.' },
       { name: '배관 부품',     slots: 1, value: 5,  tier: 'common', icon: 1, heat: 2,  noise: 'low',    fragile: false, truth: true, truthText: '도시 배관은 사고 전부터 아래로 이어져 있었다.' },
     ],
     2: [
-      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, heat: 9,  noise: 'low',    fragile: true,  marked: true, truth: true, truthText: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
-      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, heat: 7,  noise: 'medium', fragile: true,  truth: true, truthText: '연구 노트에는 ‘어둠붙이’가 빛과 소리에 다르게 반응한다고 적혀 있다.' },
+      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, heat: 9,  noise: 'low',    fragile: true,  marked: true, truth: true,
+        hints: { fragile: '케이스에 실금이 가 있다' },
+        truthText: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
+      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, heat: 7,  noise: 'medium', fragile: true,  truth: true,
+        hints: { fragile: '종이가 눅어 손대면 바스러질 것 같다' },
+        truthText: '연구 노트에는 ‘어둠붙이’가 빛과 소리에 다르게 반응한다고 적혀 있다.' },
     ],
     3: [
-      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4, heat: 15, noise: 'high',   fragile: false, truth: true, truthText: '코어는 싱크홀을 막는 장치가 아니라 더 깊게 여는 열쇠다.' },
-      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5, heat: 20, noise: 'high',   fragile: true,  marked: true, truth: true, truthText: '봉인 유물의 문양은 지상 허가증의 직인과 같다.' },
+      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4, heat: 15, noise: 'high',   fragile: false, truth: true,
+        hints: { noise: '안에서 낮은 진동음이 새어 나온다', heat: '쥐고 있으면 손바닥이 미지근해진다' },
+        truthText: '코어는 싱크홀을 막는 장치가 아니라 더 깊게 여는 열쇠다.' },
+      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5, heat: 20, noise: 'high',   fragile: true,  marked: true, truth: true,
+        hints: { noise: '기울일 때마다 안쪽 벽을 구르며 부딪치는 소리가 난다', fragile: '문양을 따라 금이 번져 있다', heat: '표면이 체온보다 따뜻하다' },
+        truthText: '봉인 유물의 문양은 지상 허가증의 직인과 같다.' },
     ],
   };
 
@@ -54,6 +66,12 @@
   function itemFragile(it) { return !!(it && it.fragile); }
   function itemFamily(it) { return !!(it && it.family); }
   function itemMarked(it) { return !!(it && it.marked); }
+  // broken은 ITEM_TABLE에 없다 — 깨진 채 되챙긴 사본에만 붙는 실행 중 태그다(breakItem).
+  function itemBroken(it) { return !!(it && it.broken); }
+  // 원본을 건드리지 않고 깨진 사본을 만든다. name·truth·truthText가 그대로라 단서 해금은 유지된다.
+  function breakItem(it) {
+    return { ...it, value: Math.max(1, Math.round(it.value * BROKEN_VALUE_RATE)), broken: true };
+  }
   // 단서 여부(태그)와 해금 문구(텍스트)를 분리한다. 구버전 물건은 truth가 문자열이었다 →
   // itemTruth는 문자열도 참으로 보고, itemTruthText는 그 문자열을 그대로 문구로 돌려준다(하위호환).
   function itemTruth(it) {
@@ -75,10 +93,12 @@
   // ITEM_TABLE 밖에 두어 단서 총량(TRUTH_TOTAL=6)에 영향이 없다. truth 필드가 없어
   // 암시장에 팔아도 비밀을 풀지 않는다(chooseBuyer는 truth 있는 물건만 단서로 센다).
   // family:true 태그로 지상 귀환 시 '가족에게 돌려준다' 경로가 열린다. 값·heat는 낮다(개인 유품).
+  // 유품도 물건마다 태그가 다르다: 사진은 찢어지고(fragile), 목걸이는 쇠사슬이 잘그락거린다(noise).
+  // heat는 셋 다 1 — 개인 유품이라 암시장에서도 눈에 띄지 않는다.
   const FAMILY_KEEPSAKES = [
-    { name: '가족 사진',     slots: 1, value: 4, tier: 'common', icon: 3, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '사진 뒤에 “아빠 꼭 돌아와”라고 적혀 있다.' },
-    { name: '이름표 목걸이', slots: 1, value: 5, tier: 'common', icon: 0, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '목걸이에 아이 이름과 집 주소가 새겨져 있다.' },
-    { name: '아이 배낭',     slots: 1, value: 3, tier: 'common', icon: 1, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '배낭 안에 반쯤 쓴 색연필과 위원회 출입증이 들어 있다.' },
+    { name: '가족 사진',     slots: 1, value: 4, tier: 'common', icon: 3, heat: 1, noise: 'low',    fragile: true,  family: true, hints: { fragile: '접힌 자리가 닳아 곧 찢어질 것 같다' }, familyNote: '사진 뒤에 “아빠 꼭 돌아와”라고 적혀 있다.' },
+    { name: '이름표 목걸이', slots: 1, value: 5, tier: 'common', icon: 0, heat: 1, noise: 'medium', fragile: false, family: true, familyNote: '목걸이에 아이 이름과 집 주소가 새겨져 있다.' },
+    { name: '아이 배낭',     slots: 1, value: 3, tier: 'common', icon: 1, heat: 1, noise: 'low',    fragile: false, family: true, familyNote: '배낭 안에 반쯤 쓴 색연필과 위원회 출입증이 들어 있다.' },
   ];
   function pickFamilyKeepsake() { return { ...FAMILY_KEEPSAKES[Math.floor(Math.random() * FAMILY_KEEPSAKES.length)] }; }
 
@@ -131,6 +151,7 @@
   const EXIT_CHECKPOINT_SUSP_ADD = 3;   // 공식 출구 검문에 걸렸을 때 오르는 의심도
   const EXIT_CRACK_SUSP_RELIEF = 2;     // 균열 출구로 검문을 피해 덜어내는 의심도
   const EXIT_SCRATCH_RATE = 0.15;       // 균열 출구에서 파손되기 쉬운 물건이 긁혀 깎이는 값 비율
+  const BROKEN_VALUE_RATE = 0.5;        // 깨진 채 되챙긴 물건이 지키는 값 비율(물건당 한 번만 적용)
   const EXIT_PASSAGE_FEE = 8;           // 암시장 통로 통행료(RP)
   const EXIT_PASSAGE_BLACK_RELIEF = 4;  // 암시장 통로로 뒷골목에 바로 붙어 줄어드는 암시장 의심도
 
@@ -2078,11 +2099,15 @@
   }
 
   // 인던 물건 힌트: RP·수치는 감추고 '소리가 클 것 같다 / 깨질 것 같다'만 짧게 흘린다.
+  // 물건에 hints가 있으면 그 문구를 쓰고, 없으면 태그별 기본 문구로 떨어진다.
   function itemTraitHint(item) {
     const bits = [];
-    if (itemMarked(item)) bits.push('위원회 직인이 작게 찍혀 있다');
-    if (itemNoise(item) === 'high') bits.push('금속이 부딪치면 소리가 클 것 같다');
-    if (itemFragile(item)) bits.push('모서리가 금 가 있다');
+    const hints = (item && item.hints) || {};
+    if (itemMarked(item)) bits.push(hints.marked || '위원회 직인이 작게 찍혀 있다');
+    if (itemNoise(item) === 'high') bits.push(hints.noise || '금속이 부딪치면 소리가 클 것 같다');
+    if (itemFragile(item)) bits.push(hints.fragile || '모서리가 금 가 있다');
+    // 아주 뜨거운 물건은 손에 남는 열기로만 알린다(의심도 수치는 끝까지 감춘다).
+    if (itemHeat(item) >= MUTATION_TRIGGER_HEAT) bits.push(hints.heat || '쥐고 있으면 손바닥이 미지근해진다');
     return bits.join('. ');
   }
 
@@ -2538,7 +2563,8 @@
       }
     } else if (ev.type === 'missing-trace') {
       if (choiceId === 'keep') {
-        // 조심히 챙긴다: 빛·멘탈을 조금 쓰고 유품을 드러낸다. 실제 줍기는 일반 줍기 흐름이 맡는다(그때 소음은 low).
+        // 조심히 챙긴다: 빛·멘탈을 조금 쓰고 유품을 드러낸다.
+        // 실제 줍기는 일반 줍기 흐름이 맡는다 — 거기서는 늘 조심히 다루므로 유품 noise는 큰 소리로 번지지 않는다.
         run.light = Math.max(0, run.light - 3);
         run.mental = Math.max(0, run.mental - 2);
         if (!run.currentItem && !node.itemTaken) {
@@ -2646,7 +2672,10 @@
         return;
       } else {
         // 되챙기기: 같은 물건이 가방으로 돌아온다(복제 아님). 되찾으면 버림 카운트도 되돌린다.
-        run.bag.push(loot.item);
+        // 깨진 물건은 깨진 채로 돌아온다 — 값이 크게 떨어진다. 이미 깨진 물건을 또 버렸다 주워도
+        // 더 부서지진 않는다(itemBroken 확인). 단서·표식은 사본이 그대로 지닌다.
+        const taken = loot.broken && !itemBroken(loot.item) ? breakItem(loot.item) : loot.item;
+        run.bag.push(taken);
         run.floorMap.droppedLoot = null;
         run.grabbedCount += 1;
         run.droppedCount = Math.max(0, run.droppedCount - 1);
@@ -2654,10 +2683,11 @@
         run.light = Math.max(0, run.light - GRAB_LIGHT_COST);
         playGrabFx();
         run.chasing = true;
-        applyPickupNoise(node.id, loot.item, true); // 되챙기는 소리가 난다(조심히 다뤄도 티가 날 수 있다).
+        applyPickupNoise(node.id, taken, true); // 되챙기는 소리가 난다(조심히 다뤄도 티가 날 수 있다).
         run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
-        const brokenTail = loot.broken ? ' 깨진 모서리가 손끝을 스친다.' : '';
-        msg = `${packItemLine(loot.item, 'recovered')}${brokenTail}`;
+        // 깨진 물건은 값이 떨어진 채로 돌아온다 — 수치 대신 '성한 값은 못 받는다'로만 알린다.
+        const brokenTail = itemBroken(taken) ? ' 깨진 모서리가 손끝을 스친다. 성한 값은 못 받을 것이다.' : '';
+        msg = `${packItemLine(taken, 'recovered')}${brokenTail}`;
         maybeQueueBagAlert();
         maybeQueueLightAlert();
       }
@@ -3299,7 +3329,8 @@
   function routeEffect() {
     const route = run.exitRoute || 'official';
     if (route === 'crack') {
-      const fragileValue = run.bag.reduce((s, it) => s + (itemFragile(it) ? it.value : 0), 0);
+      // 이미 깨진 물건은 되챙길 때 값을 한 번 치렀다 — 균열 출구에서 또 긁지 않는다(이중 차감 방지).
+      const fragileValue = run.bag.reduce((s, it) => s + (itemFragile(it) && !itemBroken(it) ? it.value : 0), 0);
       // 균열 시야 변이: 틈이 너무 많이 보여 빠져나오는 길을 잘못 짚어 긁힘 비율이 조금 커진다(결정적).
       const fissure = hasMutation('fissure-sight');
       const scratch = Math.round(fragileValue * (fissure ? FISSURE_SCRATCH_RATE : EXIT_SCRATCH_RATE));
@@ -4026,7 +4057,9 @@
       run.lastSale.forEach((it) => {
         const row = document.createElement('div');
         row.className = 'sale-item';
-        row.innerHTML = `<span class="sale-name">${itemIcon(it.icon, it.name)}${it.name}</span><span class="v">${it.value} RP</span>`;
+        // 깨진 물건은 이름 옆에 한 마디만 붙인다. 값은 이미 떨어진 채로 찍힌다.
+        const brokenTag = itemBroken(it) ? ' · 깨짐' : '';
+        row.innerHTML = `<span class="sale-name">${itemIcon(it.icon, it.name)}${it.name}${brokenTag}</span><span class="v">${it.value} RP</span>`;
         list.appendChild(row);
       });
     }
