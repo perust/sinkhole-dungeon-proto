@@ -542,7 +542,7 @@
     'fissure-sight': {
       id: 'fissure-sight',
       name: '균열 시야',
-      gainLog: '벽 틈이 더 선명하게 보인다. 어느 쪽에 무언가 있는지 어렴풋이 짚인다.',
+      gainLog: '벽 틈이 더 선명하게 보인다. 물건과 계단이 있는 쪽이 어렴풋이 짚인다.',
     },
     'black-hand': {
       id: 'black-hand',
@@ -1289,7 +1289,7 @@
     const obj = `${item.name}${objectParticle(item.name)}`;
     const line = loot.broken
       ? `깨진 채 버린 ${obj}, 어둠이 조각째 훑어 가는 소리가 났다.`
-      : `버리고 온 ${obj}, 어둠 저편에서 무언가 도로 끌어가는 소리가 났다.`;
+      : `버리고 온 ${obj}, 어둠 저편으로 바닥을 긁으며 끌려가는 소리가 났다.`;
     // 플레이어가 같은/인접 칸일 때만 상황판에도 띄운다(멀면 로그만 — 대사로 도배하지 않는다).
     const nearDist = bfs(run.floorMap.nodes, run.currentNodeId)[loot.nodeId];
     const near = nearDist != null && nearDist <= 1;
@@ -2718,7 +2718,7 @@
           meta.suspicion = Math.min(99, meta.suspicion + 3);
           saveMeta();
           emitNoise(node.id, { loud: true });
-          msg = '단말을 뒤지자 화면이 붉게 번쩍이며 경보음이 짧게 울렸다. 어둠 저편에서 무언가 방향을 튼다.';
+          msg = '단말을 뒤지자 화면이 붉게 번쩍이며 경보음이 짧게 울렸다. 어둠 저편에서 젖은 발소리가 방향을 튼다.';
         } else if (!run.currentItem && !node.itemTaken && Math.random() < 0.5) {
           const found = pickFloorItem(run.floor, node);
           node.item = found;
@@ -2778,7 +2778,7 @@
         run.mental = Math.max(0, run.mental - 3);
         run.danger = Math.min(100, run.danger + 1);
         noteSurvivor(ev.survivorId, 'abandoned');
-        msg = '못 본 척 등을 돌렸다. 뒤에서 무언가를 두드리는 소리가 한참 따라왔다.';
+        msg = '못 본 척 등을 돌렸다. 뒤에서 그 사람이 두드리는 소리가 한참 따라왔다.';
       }
     } else if (ev.type === 'item-encounter') {
       const item = run.currentItem;
