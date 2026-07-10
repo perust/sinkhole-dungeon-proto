@@ -1758,9 +1758,17 @@ html, body { touch-action: manipulation; }
   display: block;
   margin-top: 8px;
   color: rgba(231,236,246,.55);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   text-align: right;
+  animation: dialogueHintPulse 2s ease-in-out infinite;
+}
+@keyframes dialogueHintPulse {
+  0%, 100% { opacity: .45; }
+  50%      { opacity: .85; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dialogue-hint { animation: none; }
 }
 
 /* 로그를 stage 하단 오버레이로 — 별도 높이를 먹지 않게 한다. */
@@ -1900,6 +1908,19 @@ html, body { touch-action: manipulation; }
   grid-template-columns: 42px 1fr;
   align-items: center;
   gap: 8px;
+  transition: transform .08s ease, filter .12s ease, box-shadow .12s ease;
+}
+#screen-dungeon #dock .room-btn:active {
+  transform: scale(.96);
+  filter: brightness(1.16);
+  box-shadow: inset 0 0 0 999px rgba(255,255,255,.07);
+}
+@media (prefers-reduced-motion: reduce) {
+  #screen-dungeon #dock .room-btn:active {
+    transform: none;
+    filter: brightness(1.16);
+    box-shadow: inset 0 0 0 999px rgba(255,255,255,.1);
+  }
 }
 #screen-dungeon #dock .room-btn b { font-size: 15px; letter-spacing: .2px; }
 #screen-dungeon #dock .room-btn span { opacity: .72; }
@@ -1923,7 +1944,7 @@ html, body { touch-action: manipulation; }
 #screen-dungeon #dock #room-choices.spatial .dir-se { grid-area: se; }
 #screen-dungeon #dock #room-choices.spatial .room-btn.dir-wait,
 #screen-dungeon #dock #room-choices.spatial .room-pad-center { grid-area: wait; }
-#screen-dungeon #dock #room-choices.spatial .room-btn .choice-text b { font-size: 12px; line-height: 1.05; }
+#screen-dungeon #dock #room-choices.spatial .room-btn .choice-text b { font-size: 13px; line-height: 1.1; }
 #screen-dungeon #dock #room-choices.spatial .room-btn .choice-text > span { display: none; }
 #screen-dungeon #dock #room-choices.event-choices {
   grid-template-columns: 1fr;
@@ -1943,7 +1964,7 @@ html, body { touch-action: manipulation; }
 }
 #screen-dungeon #dock #room-choices.event-choices .event-btn .choice-text > span {
   font-size: 12px;
-  opacity: .66;
+  opacity: .78;
   margin-top: 1px;
 }
 #screen-dungeon #dock .room-pad-empty,
@@ -1952,7 +1973,7 @@ html, body { touch-action: manipulation; }
   border-radius: 16px;
   display: grid;
   place-items: center;
-  opacity: .22;
+  opacity: .13;
   border: 1px dashed rgba(160,176,208,.22);
   background: rgba(5,7,12,.22);
 }
