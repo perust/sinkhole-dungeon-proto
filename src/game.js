@@ -145,7 +145,7 @@
     '편지 한 줄만 읽힌다 — “여보, 이번이 마지막이야.” 다음 줄은 물에 번져 지워졌다.',
   ];
 
-  // 출구 선택 v1: 지상으로 나가는 세 갈래 길. 보정값은 결정적(무작위 없음)이라 판매 견적에 그대로 반영된다.
+  // 출구 선택 v1: 출구를 빠져나가는 세 갈래 길. 보정값은 결정적(무작위 없음)이라 판매 견적에 그대로 반영된다.
   const EXIT_CHECKPOINT_HEAT = 12;      // 이 이상 뜨거운 짐이면 공식 출구 검문대가 걸고 넘어진다
   const EXIT_CHECKPOINT_SUSP = 45;      // 지상 의심도가 이 이상이어도 검문이 깐깐해진다
   const EXIT_CHECKPOINT_SUSP_ADD = 3;   // 공식 출구 검문에 걸렸을 때 오르는 의심도
@@ -821,8 +821,8 @@
       currentNodeId: 0,    // 현재 위치한 노드 id
       holdEvent: null,     // 활성 몬스터 대기 이벤트({type:'cross'|'ambush', node})
       pendingEvent: null,  // 방 도착 후 플레이어가 고르는 짧은 환경 이벤트
-      returnWalk: false,   // 귀환 걷기 연출 진행 중(마지막 탭에서 지상으로 나간다)
-      exitRoute: 'official', // 지상으로 나가는 길: official|crack|blackpass (판매처 선택 전에 고른다)
+      returnWalk: false,   // 귀환 걷기 연출 진행 중(마지막 탭에서 출구 앞에 선다)
+      exitRoute: 'official', // 출구를 빠져나가는 길: official|crack|blackpass (판매처 선택 전에 고른다)
       exitNote: '',        // 선택한 출구의 결과 문구(장비 화면 요약에 노출)
       monsterCrisisCount: 0,
       previousNodeId: null,
@@ -2268,6 +2268,11 @@
   function eventChoice(id, label, sub, tone = '') {
     return { id, label, sub, tone };
   }
+
+  // 위기/상황 선택지 글리프: 톤만 가른다 — 위험(!)·차분(•)·가늠 안 됨(?).
+  // 버튼 테두리와 같은 색 언어를 배지에도 쓰되, 수치·확률·결과는 드러내지 않는다.
+  const EVENT_TONE_GLYPH = { danger: '!', good: '•' };
+  const eventToneGlyph = (tone) => EVENT_TONE_GLYPH[tone] || '?';
 
   // 인던 물건 힌트: RP·수치는 감추고 '소리가 클 것 같다 / 깨질 것 같다'만 짧게 흘린다.
   // 물건에 hints가 있으면 그 문구를 쓰고, 없으면 태그별 기본 문구로 떨어진다.

@@ -1207,7 +1207,7 @@ body {
   transform-origin: center;
 }
 
-/* 출구 선택 v1: 판매처 선택 전, 지상으로 나가는 세 갈래 길 */
+/* 출구 선택 v1: 판매처 선택 전, 출구를 빠져나가는 세 갈래 길 */
 .route-choice { margin-top: 12px; }
 .route-hint { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
 .route-btns { display: flex; gap: 8px; }
