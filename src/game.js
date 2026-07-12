@@ -4083,7 +4083,7 @@
         dock.innerHTML = run.pendingEvent.choices.map((choice) => {
           const tone = choice.tone ? ` ${choice.tone}` : '';
           const sub = choice.sub ? `<span>${choice.sub}</span>` : '';
-          return `<button class="btn room-btn event-btn${tone}" data-act="event" data-choice="${choice.id}"><i class="dir-glyph">?</i><span class="choice-text"><b>${choice.label}</b>${sub}</span></button>`;
+          return `<button class="btn room-btn event-btn${tone}" data-act="event" data-choice="${choice.id}"><i class="dir-glyph" aria-hidden="true">${eventToneGlyph(choice.tone)}</i><span class="choice-text"><b>${choice.label}</b>${sub}</span></button>`;
         }).join('');
         dock.dataset.choiceSig = sig;
         dock.querySelectorAll('[data-act="event"]').forEach((btn) => {

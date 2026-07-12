@@ -1962,6 +1962,17 @@ html, body { touch-action: manipulation; }
   background: rgba(255,209,102,.12);
   border-color: rgba(255,209,102,.32);
 }
+/* 톤 글리프는 버튼 테두리와 같은 색 언어를 쓴다 — 위험(!)은 붉게, 차분(•)은 초록. 기본(?)은 노란 그대로. */
+#screen-dungeon #dock #room-choices.event-choices .event-btn.danger .dir-glyph {
+  color: var(--danger);
+  background: rgba(255,82,110,.12);
+  border-color: rgba(255,82,110,.34);
+}
+#screen-dungeon #dock #room-choices.event-choices .event-btn.good .dir-glyph {
+  color: var(--good);
+  background: rgba(90,209,127,.12);
+  border-color: rgba(90,209,127,.32);
+}
 #screen-dungeon #dock #room-choices.event-choices .event-btn .choice-text > span {
   font-size: 12px;
   opacity: .78;
