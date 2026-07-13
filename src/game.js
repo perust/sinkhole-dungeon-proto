@@ -6,7 +6,7 @@
 
    - 메타 상태(meta): 런을 넘어 유지되는 영구 자산(RP, 강화 레벨, 최고 깊이).
    - 런 상태(run):    한 번의 잠수 동안만 존재하는 상태(층, 조명, 가방, 위험, 작은 맵).
-   각 층은 5~7개 노드짜리 작은 맵으로 생성된다. 노드에는 출구(exits),
+   각 층은 8~11개 노드짜리 맵으로 생성된다. 노드에는 출구(exits),
    방 유형(kind), 선택적 아이템(item), 선택적 몬스터 이벤트(monster)가 있다.
    모든 수치는 조정 가능한 초기값이다.
    ============================================================ */
@@ -117,8 +117,8 @@
 
   const BAG_ALERTS = {
     heavy: '가방 끈이 어깨를 세게 누른다. 뛰면 금방 균형을 잃을 것 같다.',
-    full: '가방이 꽉 찼다. 천이 팽팽하게 당겨져 있다.',
-    blocked: '가방 입구가 벌어져 있다. 더 넣으면 찢어질 것 같다.',
+    full: '더 넣을 곳이 없다. 돌아가서 짐을 정리하자.',
+    blocked: '더 넣을 곳이 없다. 돌아가서 짐을 정리하자.',
   };
 
   function itemIcon(index) {
@@ -365,6 +365,7 @@
     extractionCueSeen: false,
     endingSeen: false,
     survivors: [],   // 구출해 지상으로 데려온 생존자 id 목록(런을 넘어 유지)
+    minimapMode: 'rotate', // rotate: 바라보는 방향 12시 / fixed: 지도 고정
   };
 
   const hasSurvivor = (id) => meta.survivors.includes(id);
@@ -431,6 +432,7 @@
         extractionCueSeen: !!meta.extractionCueSeen,
         endingSeen: !!meta.endingSeen,
         survivors: meta.survivors,
+        minimapMode: meta.minimapMode === 'fixed' ? 'fixed' : 'rotate',
       };
       window.localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -472,6 +474,7 @@
     if (Array.isArray(data.survivors)) {
       meta.survivors = [...new Set(data.survivors.filter((id) => KNOWN_SURVIVORS.has(id)))];
     }
+    meta.minimapMode = data.minimapMode === 'fixed' ? 'fixed' : 'rotate';
   }
 
   function clearSave() {
@@ -486,7 +489,7 @@
     Object.assign(meta, {
       rp: 0, bagLevel: 1, lightLevel: 1, weaponLevel: 1,
       maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0, extractionCueSeen: false,
-      endingSeen: false, survivors: [],
+      endingSeen: false, survivors: [], minimapMode: 'rotate',
     });
     renderStartScreen();
   }
@@ -519,8 +522,14 @@
     return run ? Math.round((run.light / maxLight()) * 100) : 0;
   }
 
+  function effectiveLightPercent() {
+    if (!run || run.lightOn === false) return 0;
+    return lightPercent();
+  }
+
   function lightState() {
     const pct = lightPercent();
+    if (run && run.lightOn === false && pct > 0) return { key: 'off', label: '꺼둠' };
     if (pct <= 0) return { key: 'blackout', label: '암전' };
     if (pct < 20) return { key: 'dying', label: '꺼져감' };
     if (pct < 45) return { key: 'flicker', label: '깜빡임' };
@@ -532,6 +541,7 @@
     return {
       floor: 1,
       light: maxLight(),
+      lightOn: true,
       mental: START_MENTAL,
       bag: [],
       danger: 0,
@@ -539,8 +549,10 @@
       currentItem: null,   // 현재 노드에 놓인, 아직 안 집은 물건
       floorMap: null,      // 이번 층의 작은 맵
       currentNodeId: 0,    // 현재 위치한 노드 id
+      facing: 'n',          // 손전등/시선 방향. 좌우 버튼은 이동이 아니라 이 값을 돌린다.
       holdEvent: null,     // 활성 몬스터 대기 이벤트({type:'cross'|'ambush', node})
       pendingEvent: null,  // 방 도착 후 플레이어가 고르는 짧은 환경 이벤트
+      encounterTime: 0,     // 어두운 형체 조우 중 남은 초. 선택지 표시 중에도 줄어든다.
       returnWalk: false,   // 귀환 걷기 연출 진행 중(마지막 탭에서 지상으로 나간다)
       exitRoute: 'official', // 지상으로 나가는 길: official|crack|blackpass (판매처 선택 전에 고른다)
       exitNote: '',        // 선택한 출구의 결과 문구(강화 화면 요약에 노출)
@@ -600,6 +612,9 @@
   ];
   const MAP_DIRECTION_BY_KEY = Object.fromEntries(MAP_DIRECTIONS.map((d) => [d.key, d]));
   const MAP_DIRECTION_ORDER = ['n', 'ne', 'nw', 'e', 'w', 'se', 'sw', 's'];
+  const CARDINAL_DIRECTIONS = ['n', 'e', 's', 'w'];
+  const FACING_LABELS = { n: '북쪽', e: '동쪽', s: '남쪽', w: '서쪽' };
+  const ENCOUNTER_SECONDS = 6.0;
 
   const posKey = (pos) => `${pos.x},${pos.y}`;
   const sign = (n) => (n > 0 ? 1 : n < 0 ? -1 : 0);
@@ -629,6 +644,93 @@
     const dy = sign(to.pos.y - from.pos.y);
     const dir = MAP_DIRECTIONS.find((d) => d.dx === dx && d.dy === dy);
     return dir ? dir.key : null;
+  }
+
+  function cardinalVector(key) {
+    return MAP_DIRECTION_BY_KEY[key] || MAP_DIRECTION_BY_KEY.n;
+  }
+
+  function turnFacing(delta) {
+    if (!run || run.moving || run.dialogue || run.returnWalk || run.pendingEvent) return;
+    const i = CARDINAL_DIRECTIONS.indexOf(run.facing || 'n');
+    run.facing = CARDINAL_DIRECTIONS[(i + delta + CARDINAL_DIRECTIONS.length) % CARDINAL_DIRECTIONS.length];
+    run.lastAction = `${FACING_LABELS[run.facing]}으로 조명을 돌렸다.`;
+    log(run.lastAction);
+    render();
+  }
+
+  function directionScore(from, to, facingKey) {
+    if (!from || !to || !from.pos || !to.pos) return -Infinity;
+    const f = cardinalVector(facingKey || (run && run.facing) || 'n');
+    const dx = sign(to.pos.x - from.pos.x);
+    const dy = sign(to.pos.y - from.pos.y);
+    return dx * f.dx + dy * f.dy;
+  }
+
+  function relativeExit(rel) {
+    if (!run || !run.floorMap) return null;
+    const node = currentNode();
+    if (!node) return null;
+    const f = cardinalVector(run.facing || 'n');
+    let best = null;
+    let bestScore = -Infinity;
+    node.exits.forEach((id) => {
+      const to = nodeById(id);
+      if (!to || !to.pos || !node.pos) return;
+      const dx = sign(to.pos.x - node.pos.x);
+      const dy = sign(to.pos.y - node.pos.y);
+      const front = dx * f.dx + dy * f.dy;
+      const side = dx * (-f.dy) + dy * f.dx;
+      let score = -Infinity;
+      if (rel === 'front') score = front * 3 - Math.abs(side);
+      if (rel === 'back') score = -front * 3 - Math.abs(side);
+      if (rel === 'left') score = -side * 3 + Math.max(0, front);
+      if (rel === 'right') score = side * 3 + Math.max(0, front);
+      if (score > bestScore) { bestScore = score; best = id; }
+    });
+    if (best == null) return null;
+    if ((rel === 'front' || rel === 'back') && bestScore < 1.5) return null;
+    if ((rel === 'left' || rel === 'right') && bestScore < 1.2) return null;
+    return best;
+  }
+
+  function visibleStalkerInLight() {
+    if (!run || !run.floorMap || effectiveLightPercent() <= 0) return false;
+    const s = stalker();
+    if (!s || !stalkerAwake()) return false;
+    const node = currentNode();
+    const target = nodeById(s.nodeId);
+    if (!node || !target || !node.pos || !target.pos) return false;
+    const dist = bfs(run.floorMap.nodes, run.currentNodeId)[s.nodeId];
+    if (!Number.isFinite(dist) || dist > 3) return false;
+    return directionScore(node, target, run.facing) > 0.35;
+  }
+
+  function currentRoomHasCover() {
+    const node = currentNode();
+    return !!node && ['storage', 'office', 'watchpost', 'door'].includes(node.kind);
+  }
+
+  function roomPropLabel(node) {
+    if (!node) return '';
+    return {
+      office: '찌그러진 캐비닛',
+      watchpost: '꺼진 감시 단말',
+      storage: '낮은 사물함',
+      door: '비상등 문틀',
+      hall: '무너진 잔해',
+      vent: '낮은 환풍구',
+      crack: '젖은 균열',
+      corridor: '긴 복도',
+      stairs: '아래 계단',
+      entry: '입구 표식',
+    }[node.kind] || '';
+  }
+
+  function toggleMinimapMode() {
+    meta.minimapMode = meta.minimapMode === 'fixed' ? 'rotate' : 'fixed';
+    saveMeta();
+    render();
   }
 
   function placeNeighbor(nodes, fromId, toId, preferred = []) {
@@ -903,13 +1005,38 @@
     s.nearCued = false;
   }
 
-  // 끌개 v1: 버린 물건을 바닥 자국으로 남기고, 추격자가 그것을 되찾으러 오게 한다.
-  // 한 층에 활성 자국은 하나뿐(새로 버리면 이전 자국은 덮인다). 인접 칸(추격자 반대쪽) 우선.
+  function droppedLoots() {
+    if (!run || !run.floorMap) return [];
+    if (!Array.isArray(run.floorMap.droppedLoot)) {
+      run.floorMap.droppedLoot = run.floorMap.droppedLoot ? [run.floorMap.droppedLoot] : [];
+    }
+    return run.floorMap.droppedLoot;
+  }
+
+  function addDroppedLoot(item, nodeId, options = {}) {
+    if (!run || !run.floorMap || !item || nodeId == null) return null;
+    const loot = {
+      id: `loot-${Date.now().toString(36)}-${Math.floor(Math.random() * 100000).toString(36)}`,
+      nodeId,
+      item,
+      ticks: 0,
+      broken: itemFragile(item) || !!options.broken,
+      source: options.source || 'drop',
+    };
+    droppedLoots().push(loot);
+    return loot;
+  }
+
+  function removeDroppedLoot(loot) {
+    if (!run || !run.floorMap || !loot) return;
+    run.floorMap.droppedLoot = droppedLoots().filter((entry) => entry !== loot && entry.id !== loot.id);
+  }
+
+  // 끌개 v2: 버린 물건 여러 개를 각 칸 바닥 자국으로 둔다. 추격자는 가까운 물건도 되찾으러 간다.
   function dropLootTrace(item) {
     if (!run || !run.floorMap || !item) return null;
     const nodeId = baitAdjacentNodeId();
-    run.floorMap.droppedLoot = { nodeId, item, ticks: 0, broken: itemFragile(item) };
-    // 추격자를 물건 쪽으로 돌린다 — 플레이어가 아니라 훔친 물건을 좇게 한다.
+    const loot = addDroppedLoot(item, nodeId, { source: 'bait' });
     const s = stalker();
     if (s) {
       s.lastHeardId = nodeId;
@@ -917,42 +1044,56 @@
       s.stepCounter = 0;  // 새 목표이므로 이동 주기를 처음부터
       s.nearCued = false;
     }
-    return run.floorMap.droppedLoot;
+    return loot;
+  }
+
+  // 가방에서 직접 꺼내 놓은 물건은 현재 칸 바닥에 둔다. 물건을 바꿔 담기 위한 정리 동작이다.
+  function dropLootHere(item) {
+    if (!run || !run.floorMap || !item) return null;
+    const nodeId = run.currentNodeId;
+    const loot = addDroppedLoot(item, nodeId, { source: 'manual' });
+    const s = stalker();
+    if (s && stalkerAwake()) {
+      s.lastHeardId = nodeId;
+      s.nearCued = false;
+    }
+    return loot;
   }
 
   // 끌개 회수 판정(틱마다): 추격자가 버린 물건 칸에 닿거나, 깨어 가까이서 유예가 다하면 거둬 간다.
   function maybeRetrieveDroppedLoot() {
-    const loot = run && run.floorMap ? run.floorMap.droppedLoot : null;
-    if (!loot) return;
-    loot.ticks += 1;
+    const loots = droppedLoots();
+    if (!loots.length) return;
     const s = stalker();
     if (!s) return;
-    const reached = s.nodeId === loot.nodeId;
-    let grace = false;
-    if (!reached && loot.ticks >= LOOT_RETRIEVE_TICKS && stalkerAwake()) {
-      const d = bfs(run.floorMap.nodes, loot.nodeId)[s.nodeId];
-      grace = d != null && d <= 1; // 놈이 바로 옆까지 왔을 때만 — 멀리서 사라지지 않게
+    for (const loot of [...loots]) {
+      loot.ticks += 1;
+      const reached = s.nodeId === loot.nodeId;
+      let grace = false;
+      if (!reached && loot.ticks >= LOOT_RETRIEVE_TICKS && stalkerAwake()) {
+        const d = bfs(run.floorMap.nodes, loot.nodeId)[s.nodeId];
+        grace = d != null && d <= 1;
+      }
+      if (!reached && !grace) continue;
+      removeDroppedLoot(loot);
+      const item = loot.item;
+      const obj = `${item.name}${objectParticle(item.name)}`;
+      const line = loot.broken
+        ? `깨진 채 버린 ${obj}, 어둠이 조각째 훑어 가는 소리가 났다.`
+        : `버리고 온 ${obj}, 어둠 저편에서 다시 끌어가는 소리가 났다.`;
+      const nearDist = bfs(run.floorMap.nodes, run.currentNodeId)[loot.nodeId];
+      const near = nearDist != null && nearDist <= 1;
+      log(line, near ? 'hot' : undefined);
+      if (near) run.lastAction = line;
     }
-    if (!reached && !grace) return;
-    run.floorMap.droppedLoot = null;
-    const item = loot.item;
-    const obj = `${item.name}${objectParticle(item.name)}`;
-    const line = loot.broken
-      ? `깨진 채 버린 ${obj}, 어둠이 조각째 훑어 가는 소리가 났다.`
-      : `버리고 온 ${obj}, 어둠 저편에서 무언가 도로 끌어가는 소리가 났다.`;
-    // 플레이어가 같은/인접 칸일 때만 상황판에도 남긴다(멀면 로그만 — 대사로 도배하지 않는다).
-    const nearDist = bfs(run.floorMap.nodes, run.currentNodeId)[loot.nodeId];
-    const near = nearDist != null && nearDist <= 1;
-    log(line, near ? 'hot' : undefined);
-    if (near) run.lastAction = line;
   }
 
-  // 각 층 진입 시 5~7개 노드짜리 작은 맵을 만든다.
+  // 각 층 진입 시 8~11개 노드짜리 조금 큰 맵을 만든다.
   // - 0번은 입구. 가장 깊은 잎 노드는 계단(다음 층 입구)으로 둔다(마지막 층 제외).
   // - 계단은 항상 차수 1(잎)이라, 계단 직전 노드를 반드시 지나가야 한다.
   function generateFloorMap(floor) {
     const isLast = floor >= FLOORS.length;
-    const count = 5 + Math.floor(Math.random() * 3); // 5..7
+    const count = 8 + Math.floor(Math.random() * 4); // 8..11
     const nodes = [];
     for (let i = 0; i < count; i++) {
       nodes.push({
@@ -1025,7 +1166,7 @@
     // 9) 숨은 이동 추격자 하나를 배치한다.
     const stalker = seedStalker(nodes, 0, stairsId, floor);
 
-    return { nodes, entryId: 0, stairsId, count, travelledEdges: new Set(), stalker, droppedLoot: null };
+    return { nodes, entryId: 0, stairsId, count, travelledEdges: new Set(), stalker, droppedLoot: [] };
   }
 
   function monsterKindForEvent(type, floor, node) {
@@ -1081,7 +1222,7 @@
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
     'room-choices', 'dock', 'dock-actions',
-    'bag-slots', 'choice-cue', 'mini-map', 'recovery-point', 'chaser', 'stage', 'stage-situation', 'dialogue-card', 'dialogue-copy', 'depth-rail', 'log',
+    'bag-slots', 'choice-cue', 'mini-map', 'mini-mode', 'recovery-point', 'stage-objects', 'chaser', 'stage', 'stage-situation', 'dialogue-card', 'dialogue-copy', 'depth-rail', 'log',
     'btn-grab', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
@@ -1293,13 +1434,22 @@
 
   function tick() {
     if (!run) return;
-    if (run.dialogue) {
+    const liveEncounter = run.pendingEvent && run.pendingEvent.type === 'monster-encounter';
+    if (liveEncounter) {
+      run.encounterTime = Math.max(0, (run.encounterTime || 0) - TICK_MS / 1000);
+      if (run.encounterTime <= 0) {
+        run.failContext = '어두운 형체가 조명 안으로 끝까지 걸어 들어왔다.';
+        log('어두운 형체가 바로 앞까지 왔다.', 'hot');
+        failRun();
+        return;
+      }
+    } else if (run.dialogue) {
       render();
       return;
     }
 
-    // 조명은 잠수 내내 천천히 닳는다.
-    run.light = Math.max(0, run.light - FLOORS[run.floor - 1].drain);
+    // 조명은 켜 둔 동안 천천히 닳는다. 꺼두면 배터리는 아끼지만 시야/멘탈 압박이 커진다.
+    if (run.lightOn !== false) run.light = Math.max(0, run.light - FLOORS[run.floor - 1].drain);
 
     updateMentalByLight();
     if (run.mentalGraceTicks > 0) run.mentalGraceTicks -= 1;
@@ -1334,6 +1484,11 @@
     // 추격 여부는 추격자가 깨어 있는지로만 결정한다.
     run.chasing = stalkerAwake();
 
+    // 조명 정면에 깨어 있는 어두운 형체가 잡히면, 접촉 전에도 짧은 실시간 조우를 연다.
+    if (!pausingEventOpen && run.chasing && visibleStalkerInLight() && stalkerDistance() <= 2) {
+      if (startMonsterEncounter('sight', currentNode(), s && s.kind)) return;
+    }
+
     // 위험은 추격자와의 거리로만 오르내린다: 멀면 0, 붙으면(거리 0) 조우.
     if (!pausingEventOpen) {
       const dist = stalkerDistance();
@@ -1361,7 +1516,7 @@
   function updateMentalByLight(extra = 1) {
     if (!run) return;
     if (run.mentalGraceTicks > 0) return;
-    const pct = lightPercent();
+    const pct = effectiveLightPercent();
     let delta;
     if (pct >= 75) delta = 0.025;
     else if (pct >= 45) delta = -0.015;
@@ -1400,6 +1555,7 @@
   function enterFloor(floor) {
     run.floorMap = generateFloorMap(floor);
     run.currentNodeId = run.floorMap.entryId;
+    run.facing = directionKeyBetween(run.floorMap.nodes[run.floorMap.entryId], nodeById(run.floorMap.nodes[run.floorMap.entryId].exits[0])) || 'n';
     run.holdEvent = null;
     const entry = currentNode();
     entry.entered = true; // 입구 환경 효과는 없음
@@ -1550,17 +1706,23 @@
     advanceIntro();
   }
 
-  // 노드 도착: 환경 효과 1회 적용 → 아이템 노출 → 몬스터 이벤트 발동.
-  function arriveAtNode() {
-    const node = currentNode();
+  function applyNodeEntryEffects(node) {
+    if (!node) return false;
     const firstVisit = !node.entered;
-    if (!node.entered) {
+    if (firstVisit) {
       node.entered = true;
       if (node.light) run.light = Math.max(0, Math.min(maxLight(), run.light + node.light));
       if (node.danger > 0) run.danger = Math.min(100, run.danger + node.danger);
       else if (node.danger < 0) run.danger = Math.max(0, run.danger + node.danger);
     }
     run.currentItem = node.item && !node.itemTaken ? node.item : null;
+    return firstVisit;
+  }
+
+  // 노드 도착: 환경 효과 1회 적용 → 아이템 노출 → 몬스터 이벤트 발동.
+  function arriveAtNode() {
+    const node = currentNode();
+    const firstVisit = applyNodeEntryEffects(node);
     maybeStartRoomEvent(node);
     if (run.pendingEvent) {
       // 방 이벤트가 상황(cue)을 이어받는다 — 별도 도착 대사로 끊지 않고 선택지와 함께 보여준다.
@@ -1607,8 +1769,13 @@
 
   // 끌개: 되찾을 수 있는, 내가 버린 물건이 이 칸에 아직 남아 있는가.
   function droppedLootHere(node) {
-    const loot = run && run.floorMap ? run.floorMap.droppedLoot : null;
-    return loot && node && loot.nodeId === node.id ? loot : null;
+    if (!node) return null;
+    return droppedLoots().find((loot) => loot.nodeId === node.id) || null;
+  }
+
+  function droppedLootCountHere(node) {
+    if (!node) return 0;
+    return droppedLoots().filter((loot) => loot.nodeId === node.id).length;
   }
 
   // 생존자 조우: 아직 구출 안 한 사람이 남아 있을 때만, 드물게 이 방에서 열린다.
@@ -1642,16 +1809,22 @@
     // 버린 물건은 이미 방 이벤트를 끝낸 칸이라도 다시 집을 수 있어야 하므로 roomEventResolved 앞에서 처리한다.
     const loot = droppedLootHere(node);
     if (loot && !run.currentItem) {
-      const item = loot.item;
-      const brokenHint = loot.broken ? ' 모서리가 깨졌지만, 아직 바닥에 걸려 있다.' : '';
+      const loots = droppedLoots().filter((entry) => entry.nodeId === node.id);
+      const count = loots.length;
+      const first = loots[0];
+      const item = first.item;
+      const moreHint = count > 1 ? ` 이 칸에 내려놓은 짐이 ${count}개 있다.` : '';
+      const brokenHint = first.broken ? ' 모서리가 깨졌지만, 아직 바닥에 걸려 있다.' : '';
+      const takeChoices = loots.slice(0, 4).map((entry) => eventChoice(`take-back:${entry.id}`, `${entry.item.name} 챙기기`, `${entry.item.slots}칸${entry.broken ? ' · 깨짐' : ''}`, 'good'));
+      if (loots.length > 4) takeChoices.push(eventChoice('list-more', '나머지는 둔다', `남은 짐 ${loots.length - 4}개는 다음에 정리한다`));
       run.pendingEvent = {
         type: 'dropped-loot',
-        title: '버리고 온 물건',
-        cue: `버리고 도망쳤던 ${item.name}${subjectParticle(item.name)} 아직 이 자리에 있다.${brokenHint} 지금이라면 되챙길 수 있다.`,
+        title: '내려놓은 짐',
+        cue: `바닥에 내려놓은 ${item.name}${subjectParticle(item.name)} 보인다.${moreHint}${brokenHint} 필요한 것만 다시 챙길 수 있다.`,
         node: node.id,
         tone: 'hot',
         choices: [
-          eventChoice('take-back', '다시 챙긴다', loot.broken ? '깨진 채로 회수한다' : '조용히 되챙긴다', 'good'),
+          ...takeChoices,
           eventChoice('leave', '그냥 둔다', '두고 물러난다'),
         ],
       };
@@ -1666,18 +1839,21 @@
     if (run.currentItem) {
       // 물건이 보이면 선택지를 '집기/지나치기'로 물건에 묶는다 → 뒤따르는 별도 줍기 버튼이 없다.
       const item = run.currentItem;
+      const loots = droppedLoots().filter((entry) => entry.nodeId === node.id).slice(0, 2);
       // 서브라벨을 물건 성질에 맞춘다: 깨질 물건은 조심히, 소리 큰 물건은 재빨리 챙길 때 크게 울린다.
       const carefulSub = itemFragile(item) ? '조용히, 깨지지 않게 다룬다' : '조용하지만 시간이 걸린다';
       const grabSub = itemNoise(item) === 'high' ? '빠르지만 크게 울린다' : '빠르지만 소리가 난다';
+      const choices = [
+        eventChoice('careful', '조심히 집는다', carefulSub, 'good'),
+        eventChoice('grab', '재빨리 챙긴다', grabSub, 'danger'),
+        ...loots.map((entry) => eventChoice(`take-back:${entry.id}`, `${entry.item.name} 되챙기기`, `내려놓은 짐 · ${entry.item.slots}칸${entry.broken ? ' · 깨짐' : ''}`, 'good')),
+        eventChoice('skip', '그냥 지나간다', '건드리지 않는다'),
+      ];
       ev = {
         type: 'item-encounter',
         title: '눈앞의 회수물',
         cue: itemEncounterCue(node, item),
-        choices: [
-          eventChoice('careful', '조심히 집는다', carefulSub, 'good'),
-          eventChoice('grab', '재빨리 챙긴다', grabSub, 'danger'),
-          eventChoice('skip', '그냥 지나간다', '건드리지 않는다'),
-        ],
+        choices,
       };
     } else if (node.kind === 'office') {
       ev = {
@@ -1771,10 +1947,118 @@
     return run.bag.splice(idx, 1)[0];
   }
 
+  function moveDuringEncounter(targetId, message) {
+    const from = currentNode();
+    const to = nodeById(targetId);
+    if (!from || !to || !from.exits.includes(targetId)) return false;
+    markTravelledEdge(from.id, targetId);
+    run.previousNodeId = from.id;
+    run.currentNodeId = targetId;
+    const firstVisit = applyNodeEntryEffects(to);
+    if (firstVisit) run.encounterArrivalNode = targetId;
+    if (message) run.lastAction = message;
+    return true;
+  }
+
   function resolveMonsterEncounter(ev, choiceId) {
     const kind = MONSTER_ARCHETYPES[ev.monsterKind] || MONSTER_ARCHETYPES.longFace;
     let msg = '';
     let knockedOut = false;
+    const s = stalker();
+
+    if (choiceId === 'backstep') {
+      const targetId = relativeExit('back');
+      if (targetId == null || (s && s.nodeId === targetId)) {
+        msg = '뒷걸음친 순간 등 뒤 어둠에서 차가운 손이 어깨를 눌렀다.';
+        knockedOut = true;
+      } else {
+        moveDuringEncounter(targetId, '정면의 어두운 형체를 보며 한 걸음 물러났다.');
+        if (s) { s.lastHeardId = run.currentNodeId; s.quietSteps = 0; }
+        run.danger = Math.max(run.danger, 72);
+        msg = '정면의 어두운 형체를 보며 뒤로 빠졌다. 발소리는 아직 빛 끝을 따라온다.';
+      }
+      if (knockedOut) run.failContext = msg;
+      return { msg, knockedOut };
+    }
+    if (choiceId === 'side-left' || choiceId === 'side-right') {
+      const targetId = relativeExit(choiceId === 'side-left' ? 'left' : 'right');
+      const load = usedSlots() / Math.max(1, bagCap());
+      const chance = 0.78 - load * 0.28 + (run.mental >= 35 ? 0.08 : -0.12) + (effectiveLightPercent() >= 35 ? 0.06 : -0.08);
+      if (targetId == null) {
+        msg = '몸을 틀었지만 빠질 틈이 없다. 어두운 형체가 바로 앞까지 왔다.';
+        knockedOut = true;
+      } else if (Math.random() < chance) {
+        moveDuringEncounter(targetId, '옆으로 몸을 밀어 넣었다.');
+        if (s) { s.lastHeardId = run.currentNodeId; s.quietSteps = 0; }
+        run.light = Math.max(0, run.light - 7);
+        run.mental = Math.max(0, run.mental - 5);
+        run.danger = Math.max(run.danger, 66);
+        msg = '문틀을 긁으며 옆방으로 뛰어들었다. 어두운 형체는 뒤쪽 복도에서 따라온다.';
+      } else {
+        const lost = takeCheapestBagItem();
+        if (lost) {
+          run.droppedCount += 1;
+          dropLootTrace(lost);
+          run.danger = Math.min(96, run.danger + 10);
+          msg = `${lost.name}${subjectParticle(lost.name)} 가방에서 빠졌다. 몸은 옆방으로 넘어갔지만 발소리가 바로 뒤에 붙었다.`;
+          moveDuringEncounter(targetId, msg);
+        } else {
+          msg = '몸을 틀었지만 늦었다. 어두운 형체의 팔이 조명 앞을 덮었다.';
+          knockedOut = true;
+        }
+      }
+      if (knockedOut) run.failContext = msg;
+      return { msg, knockedOut };
+    }
+    if (choiceId === 'glare') {
+      if (run.light >= 18) {
+        run.light = Math.max(0, run.light - 16);
+        run.encounterTime = Math.min(ENCOUNTER_SECONDS, (run.encounterTime || 0) + 2.2);
+        run.danger = Math.max(55, run.danger - 12);
+        msg = '빛을 정면에 고정했다. 어두운 형체가 잠깐 멈췄지만 고개는 계속 이쪽을 향한다.';
+      } else {
+        run.light = Math.max(0, run.light - 6);
+        run.encounterTime = Math.max(0.8, (run.encounterTime || 0) - 1.4);
+        run.danger = Math.min(98, run.danger + 12);
+        msg = '빛이 두 번 깜빡였다. 어두운 형체는 멈추지 않고 더 가까워졌다.';
+      }
+      return { msg, knockedOut, keepEncounter: true };
+    }
+    if (choiceId === 'throw-bag') {
+      const bait = takeCheapestBagItem();
+      if (bait) {
+        run.droppedCount += 1;
+        dropLootTrace(bait);
+        run.danger = Math.max(0, run.danger - 30);
+        run.encounterTime = Math.min(ENCOUNTER_SECONDS, (run.encounterTime || 0) + 1.5);
+        msg = `${bait.name}${objectParticle(bait.name)} 어둠 반대편으로 던졌다. 어두운 형체의 고개가 금속음 쪽으로 꺾인다.`;
+      } else {
+        msg = '던질 짐이 없다. 빈손이 조명 아래서 떨린다.';
+        run.danger = Math.min(98, run.danger + 8);
+      }
+      return { msg, knockedOut };
+    }
+    if (choiceId === 'hide-dark') {
+      if (!currentRoomHasCover()) {
+        msg = '숨을 곳이 없다. 조명만 흔들렸다.';
+        run.danger = Math.min(98, run.danger + 8);
+      } else {
+        const noisy = usedSlots() >= Math.max(2, Math.ceil(bagCap() * 0.7));
+        run.lightOn = false;
+        if (noisy && Math.random() < 0.45) {
+          msg = '캐비닛 문을 닫는 순간 가방 안 금속이 부딪쳤다. 어두운 형체가 그 소리로 고개를 돌렸다.';
+          knockedOut = true;
+        } else {
+          const st = stalker();
+          if (st) { st.quietSteps = DORMANT_AFTER; st.lastHeardId = null; }
+          run.chasing = false;
+          run.danger = Math.max(0, run.danger - 45);
+          msg = '캐비닛 뒤로 몸을 넣고 조명을 껐다. 발소리가 문 앞에서 멈췄다가 멀어진다.';
+        }
+      }
+      if (knockedOut) run.failContext = msg;
+      return { msg, knockedOut };
+    }
 
     if (ev.monsterKind === 'longFace') {
       if (choiceId === 'shine') {
@@ -1900,7 +2184,7 @@
       if (outcome && typeof outcome.apply === 'function') outcome.apply();
       run.mental = MENTAL_BREAK_RECOVERY;
       run.mentalGraceTicks = MENTAL_BREAK_GRACE_TICKS;
-      if (lightPercent() <= 0) run.light = Math.max(run.light, maxLight() * (MENTAL_BREAK_MIN_LIGHT_PCT / 100));
+      if (effectiveLightPercent() <= 0) { run.light = Math.max(run.light, maxLight() * (MENTAL_BREAK_MIN_LIGHT_PCT / 100)); run.lightOn = true; }
       if (run.lastMentalLoss) msg = `${outcome.after} ${run.lastMentalLoss}${subjectParticle(run.lastMentalLoss)} 손에서 빠져나갔다.`;
       else msg = outcome ? outcome.after : '간신히 정신을 붙잡았다.';
     } else if (ev.type === 'cabinet') {
@@ -2027,7 +2311,34 @@
       }
     } else if (ev.type === 'item-encounter') {
       const item = run.currentItem;
-      if (!item) {
+      if (choiceId && choiceId.startsWith('take-back:')) {
+        const requestedId = choiceId.slice('take-back:'.length);
+        const loot = droppedLoots().find((entry) => node && entry.nodeId === node.id && entry.id === requestedId);
+        if (!loot) {
+          msg = '내려놓은 짐은 이미 어둠 속으로 사라졌다.';
+        } else if (!roomFor(loot.item)) {
+          run.seenBagAlerts.add('blocked');
+          run.lastAction = BAG_ALERTS.blocked;
+          log(BAG_ALERTS.blocked, 'hot');
+          showDialogue(BAG_ALERTS.blocked, 'hot');
+          render();
+          return;
+        } else {
+          run.bag.push(loot.item);
+          removeDroppedLoot(loot);
+          run.grabbedCount += 1;
+          run.droppedCount = Math.max(0, run.droppedCount - 1);
+          run.light = Math.max(0, run.light - Math.max(2, GRAB_LIGHT_COST - 1));
+          playGrabFx();
+          run.chasing = true;
+          applyPickupNoise(node.id, loot.item, true);
+          run.danger = Math.min(100, run.danger + Math.max(2, GRAB_DANGER_BUMP - 2));
+          const brokenTail = loot.broken ? ' 깨진 모서리가 손끝을 스친다.' : '';
+          msg = `눈앞의 회수물은 그대로 두고, 내려놓았던 ${loot.item.name}${objectParticle(loot.item.name)} 먼저 가방에 넣었다.${brokenTail}`;
+          maybeQueueBagAlert();
+          maybeQueueLightAlert();
+        }
+      } else if (!item) {
         msg = '물건은 이미 챙겼다.';
       } else if (choiceId === 'skip') {
         // 지금은 지나친다. 자국은 남아, 다시 이 방을 지날 때 조용히 집을 수 있다.
@@ -2064,18 +2375,26 @@
           const cue = dir ? `${dir}에서 발소리가 붙는다.` : '뒤쪽에서 발소리가 붙는다.';
           msg = `${item.name}${objectParticle(item.name)} 재빨리 낚아챘다. ${cue}`;
         }
+        if (usedSlots() >= bagCap() && !run.seenBagAlerts.has('full')) {
+          run.seenBagAlerts.add('full');
+          msg += ` ${BAG_ALERTS.full}`;
+        }
         maybeQueueBagAlert();
         maybeQueueLightAlert();
         maybeQueueMentalAlert();
       }
     } else if (ev.type === 'dropped-loot') {
-      const loot = droppedLootHere(node);
+      const lootsHere = droppedLoots().filter((entry) => node && entry.nodeId === node.id);
+      const requestedId = choiceId && choiceId.startsWith('take-back:') ? choiceId.slice('take-back:'.length) : '';
+      const loot = requestedId ? lootsHere.find((entry) => entry.id === requestedId) : lootsHere[0];
       if (!loot) {
-        msg = '버린 물건은 이미 어둠 속으로 사라졌다.'; // 그새 놈이 거둬 갔다.
-      } else if (choiceId === 'leave') {
-        // 두고 물러난다 — 자국은 남는다. 놈이 나중에 되찾으러 올 몫이다.
+        msg = '내려놓은 짐은 이미 어둠 속으로 사라졌다.'; // 그새 어두운 형체가 거둬 갔다.
+      } else if (choiceId === 'leave' || choiceId === 'list-more') {
+        // 두고 물러난다 — 자국은 유지된다. 어두운 형체가 나중에 되찾으러 올 몫이다.
         run.danger = Math.max(0, run.danger - 2);
-        msg = `${loot.item.name}${objectParticle(loot.item.name)} 그대로 두고 물러났다. 자국은 바닥에 남는다.`;
+        msg = choiceId === 'list-more'
+          ? `남은 짐은 그대로 두었다. 바닥의 자국만 다시 확인했다.`
+          : `${loot.item.name}${objectParticle(loot.item.name)} 그대로 두고 물러났다. 바닥의 자국만 다시 확인했다.`;
       } else if (!roomFor(loot.item)) {
         // 가방이 가득 차 되챙길 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
         run.seenBagAlerts.add('blocked');
@@ -2087,7 +2406,7 @@
       } else {
         // 되챙기기: 같은 물건이 가방으로 돌아온다(복제 아님). 되찾으면 버림 카운트도 되돌린다.
         run.bag.push(loot.item);
-        run.floorMap.droppedLoot = null;
+        removeDroppedLoot(loot);
         run.grabbedCount += 1;
         run.droppedCount = Math.max(0, run.droppedCount - 1);
         run.currentItem = null;
@@ -2098,6 +2417,10 @@
         run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
         const brokenTail = loot.broken ? ' 깨진 모서리가 손끝을 스친다.' : '';
         msg = `버리고 왔던 ${loot.item.name}${objectParticle(loot.item.name)} 다시 가방에 넣었다.${brokenTail}`;
+        if (usedSlots() >= bagCap() && !run.seenBagAlerts.has('full')) {
+          run.seenBagAlerts.add('full');
+          msg += ` ${BAG_ALERTS.full}`;
+        }
         maybeQueueBagAlert();
         maybeQueueLightAlert();
       }
@@ -2114,12 +2437,14 @@
       if (choiceId === 'charge') {
         const gain = node && node.kind === 'storage' ? 22 : 15;
         run.light = clamp(run.light + gain, 0, maxLight());
+        run.lightOn = true;
         run.mental = clamp(run.mental + 3, 0, 100);
         msg = node && node.kind === 'storage'
           ? '비상 배터리를 연결했다. 손전등 빛이 조금 밝아진다.'
           : '비상등의 남은 빛을 끌어왔다. 앞쪽 윤곽이 잠깐 선명해진다.';
       } else if (choiceId === 'wipe') {
         run.light = clamp(run.light + 7, 0, maxLight());
+        run.lightOn = true;
         run.mental = clamp(run.mental + 5, 0, 100);
         msg = '렌즈의 흙탕물을 닦아냈다. 앞뒤의 깊이가 조금 돌아온다.';
       } else {
@@ -2136,12 +2461,25 @@
         failRun();
         return;
       }
+      if (result.keepEncounter) {
+        run.lastAction = msg;
+        log(msg, 'hot');
+        clearDialogue();
+        render();
+        return;
+      }
     }
+    const arrivedFromEncounter = ev.type === 'monster-encounter' && run.encounterArrivalNode === run.currentNodeId;
+    run.encounterArrivalNode = null;
     run.pendingEvent = null;
     run.lastAction = msg || '상황을 정리했다.';
-    const actionTone = /울렸다|따라온다|없다|어둠붙이|젖은 발소리|손가락|얼굴|붙는다/.test(run.lastAction) ? 'hot' : undefined;
+    const actionTone = /울렸다|따라온다|없다|어두운 형체|젖은 발소리|손가락|얼굴|붙는다/.test(run.lastAction) ? 'hot' : undefined;
     log(run.lastAction, actionTone);
     showDialogue(run.lastAction, actionTone || (ev.type === 'mental-break' ? 'good' : ''));
+    if (arrivedFromEncounter && !run.currentItem) {
+      maybeStartRoomEvent(currentNode());
+      if (run.pendingEvent) { render(); return; }
+    }
     if (ev.type !== 'monster-encounter' && ev.type !== 'mental-break' && node && node.monster && !node.monsterResolved) {
       triggerMonster(node);
       if (run.pendingEvent) return;
@@ -2167,15 +2505,14 @@
   }
 
   function monsterChoices(monsterKind) {
-    const kind = MONSTER_ARCHETYPES[monsterKind] || MONSTER_ARCHETYPES.longFace;
-    const ctx = {
-      canLight: run.light >= 6,
-      lightStrong: run.light >= 18,
-      mentalOk: run.mental >= 18,
-      hasBag: run.bag.length > 0,
-    };
-    const choices = kind.choices(ctx);
-    return choices.length ? choices : [eventChoice('hold', '버틴다', '', 'danger')];
+    const choices = [];
+    if (relativeExit('back') != null) choices.push(eventChoice('backstep', '뒤로 물러난다', '정면을 본 채 뒷방으로 빠진다', 'good'));
+    if (relativeExit('left') != null) choices.push(eventChoice('side-left', '왼쪽으로 뛰어든다', '문틀에 걸리면 잡힌다', 'danger'));
+    if (relativeExit('right') != null) choices.push(eventChoice('side-right', '오른쪽으로 뛰어든다', '가방이 무거우면 늦다', 'danger'));
+    choices.push(eventChoice('glare', '조명을 고정한다', '몇 초만 늦출 수 있다', run.light >= 18 ? 'good' : 'danger'));
+    if (run.bag.length > 0) choices.push(eventChoice('throw-bag', '짐을 던진다', '소리를 반대쪽으로 보낸다', 'good'));
+    if (currentRoomHasCover()) choices.push(eventChoice('hide-dark', '조명을 끄고 숨는다', '캐비닛 뒤로 몸을 넣는다', 'good'));
+    return choices.length ? choices : [eventChoice('glare', '조명을 고정한다', '빛이 약하면 위험하다', 'danger')];
   }
 
   function startMonsterEncounter(reason, node, kindOverride) {
@@ -2196,6 +2533,7 @@
 
     run.holdEvent = null;
     run.chasing = true;
+    run.encounterTime = Math.max(3.2, ENCOUNTER_SECONDS - Math.max(0, run.danger - 70) / 18);
     run.monsterCrisisCount += 1;
     run.pendingEvent = {
       type: 'monster-encounter',
@@ -2208,7 +2546,7 @@
     };
     run.lastAction = run.pendingEvent.cue;
     log(run.pendingEvent.cue, 'hot');
-    showDialogue(run.pendingEvent.cue, 'hot');
+    clearDialogue();
     render();
     return true;
   }
@@ -2323,6 +2661,24 @@
       run.danger = Math.min(100, run.danger + SIGHT_MOVE_DANGER);
     }
 
+    if (effectiveLightPercent() <= 0) {
+      const load = usedSlots() / Math.max(1, bagCap());
+      const stumbleChance = 0.14 + load * 0.22 + (target.kind === 'stairs' ? 0.14 : 0);
+      run.mental = Math.max(0, run.mental - 3);
+      run.danger = Math.min(100, run.danger + 6 + Math.round(load * 6));
+      emitNoise(node.id, { loud: load > 0.65 });
+      if (Math.random() < stumbleChance) {
+        run.lastAction = target.kind === 'stairs'
+          ? '꺼진 조명으로 계단을 찾다가 발끝이 허공을 긁었다. 내려가기 전에 숨을 다시 고른다.'
+          : '꺼진 조명 속에서 벽에 어깨를 부딪쳤다. 금속음이 낮게 번지고 발걸음이 멈췄다.';
+        log(run.lastAction, 'hot');
+        showDialogue(run.lastAction, 'hot');
+        render();
+        return;
+      }
+      log('조명을 끈 채 더듬어 움직였다. 배터리는 아꼈지만 발소리가 길게 끌렸다.', 'hot');
+    }
+
     if (target.kind === 'stairs') { descend(); return; }
 
     const fromId = node.id;
@@ -2337,6 +2693,67 @@
       run.currentNodeId = targetId;
       arriveAtNode();
     }, 'move', MOVE_MS);
+  }
+
+  function chooseBackstep(targetId) {
+    if (!run || run.moving || run.dialogue || run.pendingEvent) return;
+    const s = stalker();
+    if (s && s.nodeId === targetId && stalkerAwake()) {
+      run.failContext = '뒷걸음친 순간 등 뒤에서 어두운 형체가 어깨를 눌렀다.';
+      failRun();
+      return;
+    } else if (s && s.nodeId === targetId) {
+      run.danger = Math.min(100, run.danger + 12);
+      run.lastAction = '등 뒤 어둠이 차갑게 닿았다. 발목 뒤로 찬 공기가 붙는다.';
+      log(run.lastAction, 'hot');
+    }
+    chooseExit(targetId);
+  }
+
+  function chooseHideInCover() {
+    if (!run || run.moving || run.dialogue || run.pendingEvent || !currentRoomHasCover()) return;
+    clearDialogue();
+    const noisyBag = usedSlots() >= Math.max(2, Math.ceil(bagCap() * 0.7));
+    const pressure = stalkerAwake() && (stalkerDistance() <= 2 || run.danger >= 55);
+    run.lightOn = false;
+    if (pressure && noisyBag && Math.random() < 0.45) {
+      run.danger = Math.min(100, run.danger + 20);
+      run.lastAction = '캐비닛 문을 닫는 순간 가방 안 금속이 부딪쳤다. 어두운 형체가 그 소리로 고개를 돌렸다.';
+      log(run.lastAction, 'hot');
+      startMonsterEncounter('critical', currentNode(), stalker() && stalker().kind);
+      return;
+    }
+    const s = stalker();
+    if (s) { s.quietSteps = DORMANT_AFTER; s.lastHeardId = null; s.nearCued = false; }
+    run.chasing = false;
+    run.danger = Math.max(0, run.danger - (pressure ? 35 : 12));
+    run.lastAction = '캐비닛 뒤로 몸을 넣고 조명을 껐다. 발소리가 문 앞에서 멈췄다가 멀어진다.';
+    log(run.lastAction);
+    showDialogue(run.lastAction);
+    render();
+  }
+
+  function toggleHandLight() {
+    if (!run || run.moving || run.dialogue || run.pendingEvent || run.returnWalk) return;
+    if (run.light <= 0) {
+      run.lastAction = '스위치를 눌렀지만 손전등은 켜지지 않는다.';
+      log(run.lastAction, 'hot');
+      showDialogue(run.lastAction, 'hot');
+      render();
+      return;
+    }
+    run.lightOn = run.lightOn === false;
+    if (run.lightOn) {
+      run.light = Math.max(0, run.light - 1);
+      run.danger = Math.min(100, run.danger + (stalkerAwake() ? 4 : 1));
+      run.lastAction = '조명을 다시 켰다. 앞쪽 윤곽이 돌아오지만, 빛이 복도를 긁는다.';
+      log(run.lastAction);
+    } else {
+      run.danger = Math.max(0, run.danger - (stalkerAwake() ? 8 : 2));
+      run.lastAction = '조명을 껐다. 길은 사라졌지만, 숨소리는 낮아졌다.';
+      log(run.lastAction);
+    }
+    render();
   }
 
   // 대기. 발소리를 흘려보낸다. 시간이 흘러 조명이 조금 닳고, 조용한 걸음이 쌓여 추격자는 결국 잠든다.
@@ -2440,6 +2857,24 @@
     const droppedObject = `${dropped.name}${objectParticle(dropped.name)}`;
     const shatter = itemFragile(dropped) ? ' 깨지는 소리가 났다.' : '';
     run.lastAction = `${droppedObject} 던지고 반대쪽으로 뛰었다.${shatter} 발소리가 던진 물건 쪽으로 돌아선다.`;
+    log(run.lastAction);
+    showDialogue(run.lastAction);
+    render();
+  }
+
+  function dropBagItem(index) {
+    if (!run || run.moving || run.returnWalk || run.dialogue || run.pendingEvent || run.bag.length === 0) return;
+    const itemIndex = safeInt(index, -1, 0, run.bag.length - 1);
+    if (itemIndex < 0) return;
+    clearDialogue();
+    const dropped = run.bag.splice(itemIndex, 1)[0];
+    if (!dropped) return;
+    run.droppedCount += 1;
+    dropLootHere(dropped);
+    if (run.chasing) run.danger = Math.max(0, run.danger - 4);
+    run.seenBagAlerts.delete('full');
+    run.seenBagAlerts.delete('blocked');
+    run.lastAction = `${dropped.name}${objectParticle(dropped.name)} 가방에서 꺼내 바닥에 놓았다. 빈칸이 생겼다.`;
     log(run.lastAction);
     showDialogue(run.lastAction);
     render();
@@ -2930,7 +3365,8 @@
     if (el['risk-panel']) {
       el['risk-panel'].className = `risk-panel ${risk.key} minimal`;
       el['risk-chip'].textContent = risk.label;
-      el['risk-copy'].textContent = risk.copy;
+      const encounter = run.pendingEvent && run.pendingEvent.type === 'monster-encounter';
+      el['risk-copy'].textContent = encounter ? `어두운 형체 접근 ${Math.ceil(run.encounterTime || 0)}초` : risk.copy;
     }
 
     // 가방 슬롯
@@ -2977,10 +3413,10 @@
   function renderBag() {
     const cap = bagCap();
     const cells = [];
-    // 각 물건이 차지하는 칸을 색으로 채운다.
-    run.bag.forEach((item) => {
+    // 각 물건이 차지하는 칸을 색으로 채운다. 채워진 칸은 같은 itemIndex를 공유해 어느 칸을 눌러도 그 물건을 버린다.
+    run.bag.forEach((item, itemIndex) => {
       for (let s = 0; s < item.slots; s++) {
-        cells.push({ color: TIER_COLOR[item.tier], icon: item.icon, label: s === 0 ? item.name : '' });
+        cells.push({ color: TIER_COLOR[item.tier], icon: item.icon, label: s === 0 ? item.name : '', item, itemIndex });
       }
     });
     while (cells.length < cap) cells.push(null);
@@ -2988,10 +3424,24 @@
     el['bag-slots'].innerHTML = '';
     cells.forEach((c) => {
       const d = document.createElement('div');
-      d.className = 'slot' + (c ? ' filled' : '');
+      d.className = 'slot' + (c ? ' filled droppable' : '');
       if (c) {
-      d.style.setProperty('--tier-color', c.color);
-      d.innerHTML = itemIcon(c.icon) + (c.label ? `<span class="slot-label">${c.label}</span>` : '');
+        d.style.setProperty('--tier-color', c.color);
+        d.setAttribute('role', 'button');
+        d.setAttribute('tabindex', '0');
+        d.setAttribute('aria-label', `${c.item.name} 버리기`);
+        d.dataset.itemIndex = String(c.itemIndex);
+        d.innerHTML = itemIcon(c.icon) + (c.label ? `<span class="slot-label">${c.label}</span>` : '');
+        const handleDrop = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          dropBagItem(d.dataset.itemIndex);
+        };
+        d.addEventListener('click', handleDrop);
+        d.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          handleDrop(event);
+        });
       }
       el['bag-slots'].appendChild(d);
     });
@@ -3097,7 +3547,7 @@
     if (run.pendingEvent) {
       const sig = `event:${run.currentNodeId}:${run.pendingEvent.type}:${run.pendingEvent.choices.map((choice) => choice.id).join(',')}`;
       if (dock.dataset.choiceSig !== sig) {
-        dock.classList.remove('spatial');
+        dock.classList.remove('spatial', 'facing-pad');
         dock.classList.add('event-choices');
         dock.innerHTML = run.pendingEvent.choices.map((choice) => {
           const tone = choice.tone ? ` ${choice.tone}` : '';
@@ -3116,51 +3566,55 @@
       return;
     }
 
-    const s = stalker();
-    const towardId = stalkerTowardExit(); // 깨어 가까이 붙은 추격자 쪽 출구(없으면 null) — 서 있는 동안에도 갱신되게 서명에 포함한다.
-    const waitSig = `wait:${stalkerAwake() ? 1 : 0}:${s ? s.quietSteps : 0}`;
-    const moveSig = `move:${run.currentNodeId}:${waitSig}:${node.exits.join(',')}:t${towardId == null ? '-' : towardId}`;
+    const frontId = relativeExit('front');
+    const backId = relativeExit('back');
+    const towardId = stalkerTowardExit();
+    const moveSig = `face:${run.currentNodeId}:${run.facing}:${frontId == null ? '-' : frontId}:${backId == null ? '-' : backId}:t${towardId == null ? '-' : towardId}:${run.lightOn === false ? 'off' : 'on'}:${lightPercent() <= 0 ? 'dead' : 'charged'}`;
     if (dock.dataset.choiceSig === moveSig) {
       if (el['choice-cue']) el['choice-cue'].textContent = cue;
       return;
     }
 
     dock.classList.remove('event-choices');
-
-    const exitsByDir = new Map();
-    const cues = [];
-    const usedDirs = new Set();
-    let waitButton = '';
-
-    if (stalkerAwake()) {
-      waitButton = `<button class="btn room-btn good dir-wait" data-act="wait"><i class="dir-glyph">•</i><span class="choice-text"><b>멈춤</b></span></button>`;
-      cues.push('• 발소리를 보내며 기다린다');
-    }
-
-    node.exits.forEach((nid, index) => {
-      const t = nodeById(nid);
-      const stairs = t.kind === 'stairs';
-      const dir = directionForExit(node, t, index, usedDirs);
-      const copy = movementChoiceCopy(dir, t);
-      cues.push(`${dir.glyph} ${copy.label}`);
-      const toward = towardId != null && nid === towardId; // 최대 한 개 출구만 표시된다(다음 걸음은 유일하므로).
-      const cls = toward ? `${dir.cls} toward-threat` : dir.cls;
-      const aria = toward ? `${copy.aria} · 기척이 가까운 쪽` : copy.aria;
-      exitsByDir.set(dir.key, `<button class="btn room-btn ${cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${aria}"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${copy.label}</b></span></button>`);
-    });
-
-    const out = DIR_SLOTS.map((dir) => exitsByDir.get(dir.key) || `<div class="room-pad-empty ${dir.cls}" aria-hidden="true"><i class="dir-glyph">${dir.glyph}</i></div>`);
-    out.splice(4, 0, waitButton || '<div class="room-pad-center" aria-hidden="true"></div>');
-    dock.innerHTML = out.join('');
+    dock.classList.add('spatial', 'facing-pad');
+    const front = frontId != null ? nodeById(frontId) : null;
+    const back = backId != null ? nodeById(backId) : null;
+    const frontTone = frontId != null && frontId === towardId ? ' toward-threat' : '';
+    const frontLabel = front ? (front.kind === 'stairs' ? '계단으로' : '앞으로') : '막힘';
+    const backLabel = back ? '뒤로' : '뒤 막힘';
+    const lightToggleLabel = run.lightOn === false ? '조명 켜기' : '조명 끄기';
+    const lightToggleSub = run.lightOn === false ? '배터리를 쓰고 시야를 되찾는다' : '빛을 숨겨 기척을 낮춘다';
+    const centerControl = run.lightOn === false
+      ? `<button class="btn room-btn dir-wait good" data-act="toggle-light"><i class="dir-glyph">◉</i><span class="choice-text"><b>${lightToggleLabel}</b><span>${lightToggleSub}</span></span></button>`
+      : (currentRoomHasCover()
+        ? '<button class="btn room-btn dir-wait good" data-act="hide-cover"><i class="dir-glyph">•</i><span class="choice-text"><b>조명 끄고 숨기</b><span>캐비닛 뒤로 숨는다</span></span></button>'
+        : (stalkerAwake()
+          ? '<button class="btn room-btn dir-wait good" data-act="wait"><i class="dir-glyph">•</i><span class="choice-text"><b>멈춤</b><span>숨을 죽이고 발소리를 보낸다</span></span></button>'
+          : `<button class="btn room-btn dir-wait" data-act="toggle-light"><i class="dir-glyph">◉</i><span class="choice-text"><b>${lightToggleLabel}</b><span>${lightToggleSub}</span></span></button>`));
+    dock.innerHTML = [
+      '<div class="room-pad-empty dir-nw" aria-hidden="true"></div>',
+      `<button class="btn room-btn dir-n${frontTone}" data-act="forward" ${front ? '' : 'disabled'}><i class="dir-glyph">↑</i><span class="choice-text"><b>${frontLabel}</b><span>${front ? front.label : '벽이 막고 있다'}</span></span></button>`,
+      '<div class="room-pad-empty dir-ne" aria-hidden="true"></div>',
+      '<button class="btn room-btn dir-w" data-act="turn-left"><i class="dir-glyph">↶</i><span class="choice-text"><b>왼쪽 보기</b><span>조명을 돌린다</span></span></button>',
+      centerControl,
+      '<button class="btn room-btn dir-e" data-act="turn-right"><i class="dir-glyph">↷</i><span class="choice-text"><b>오른쪽 보기</b><span>조명을 돌린다</span></span></button>',
+      '<div class="room-pad-empty dir-sw" aria-hidden="true"></div>',
+      `<button class="btn room-btn dir-s danger" data-act="backstep" ${back ? '' : 'disabled'}><i class="dir-glyph">↓</i><span class="choice-text"><b>${backLabel}</b><span>${back ? '보이지 않는 쪽으로 물러난다' : '뒤가 막혔다'}</span></span></button>`,
+      '<div class="room-pad-empty dir-se" aria-hidden="true"></div>',
+    ].join('');
     dock.dataset.choiceSig = moveSig;
-    dock.classList.toggle('spatial', true);
     if (el['choice-cue']) el['choice-cue'].textContent = cue;
     dock.querySelectorAll('[data-act]').forEach((btn) => {
       btn.addEventListener('click', (event) => {
         event.stopPropagation();
         const act = btn.dataset.act;
-        if (act === 'wait') chooseWait();
-        else chooseExit(parseInt(btn.dataset.to, 10));
+        if (act === 'turn-left') turnFacing(-1);
+        else if (act === 'turn-right') turnFacing(1);
+        else if (act === 'forward' && frontId != null) chooseExit(frontId);
+        else if (act === 'backstep' && backId != null) chooseBackstep(backId);
+        else if (act === 'hide-cover') chooseHideInCover();
+        else if (act === 'wait') chooseWait();
+        else if (act === 'toggle-light') toggleHandLight();
       });
     });
   }
@@ -3171,24 +3625,31 @@
     const nodes = run.floorMap.nodes;
     const current = currentNode();
     if (!current || !current.pos) { svg.innerHTML = ''; return; }
+    if (el['mini-mode']) {
+      const modeLabel = meta.minimapMode === 'fixed' ? '고정 지도' : '회전 지도';
+      el['mini-mode'].textContent = `현재: ${modeLabel}`;
+      el['mini-mode'].setAttribute('aria-label', `미니맵 모드 바꾸기, 현재 ${modeLabel}`);
+    }
 
-    // Radar behavior: the player is fixed at the center and only already
-    // travelled nodes/edges are drawn. Unknown branches and unvisited exits stay
-    // hidden; currently active exits may only add tiny center ticks in the same
-    // directions as the movement pad, never target nodes or full path length.
     const seen = (id) => nodes[id] && nodes[id].entered;
     const visibleNodes = nodes.filter((n) => seen(n.id) || n.id === run.currentNodeId);
     const center = { x: 60, y: 45 };
     const pad = 14;
-    const maxDx = Math.max(1, ...visibleNodes.map((n) => Math.abs((n.pos || current.pos).x - current.pos.x)));
-    const maxDy = Math.max(1, ...visibleNodes.map((n) => Math.abs((n.pos || current.pos).y - current.pos.y)));
+    const f = cardinalVector(run.facing || 'n');
+    const right = { dx: -f.dy, dy: f.dx };
+    const relative = (pos) => {
+      const dx = pos.x - current.pos.x;
+      const dy = pos.y - current.pos.y;
+      if (meta.minimapMode === 'fixed') return { dx, dy };
+      return { dx: dx * right.dx + dy * right.dy, dy: -(dx * f.dx + dy * f.dy) };
+    };
+    const rels = visibleNodes.map((n) => relative((n.pos || current.pos)));
+    const maxDx = Math.max(1, ...rels.map((p) => Math.abs(p.dx)));
+    const maxDy = Math.max(1, ...rels.map((p) => Math.abs(p.dy)));
     const cell = Math.min(22, (center.x - pad) / maxDx, (center.y - pad) / maxDy);
     const coords = nodes.map((n) => {
-      const p = n.pos || current.pos;
-      return {
-        x: center.x + (p.x - current.pos.x) * cell,
-        y: center.y + (p.y - current.pos.y) * cell,
-      };
+      const r = relative((n.pos || current.pos));
+      return { x: center.x + r.dx * cell, y: center.y + r.dy * cell };
     });
 
     const travelled = run.floorMap.travelledEdges || new Set();
@@ -3200,46 +3661,35 @@
       html += `<line class="seen" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
     });
 
-    if (!run.moving && !run.pendingEvent) {
-      const usedDirs = new Set();
-      const stubStart = 5.5;
-      const stubEnd = 15;
-      const stairMark = 18;
-      current.exits.forEach((nid, index) => {
-        const target = nodeById(nid);
-        if (!target) return;
-        const slot = directionForExit(current, target, index, usedDirs);
-        const dir = slot && MAP_DIRECTION_BY_KEY[slot.key];
-        if (!dir) return;
-        const len = Math.hypot(dir.dx, dir.dy) || 1;
-        const ux = dir.dx / len;
-        const uy = dir.dy / len;
-        const isTravelled = travelled.has(edgeKey(current.id, nid));
-        const isSeen = seen(nid);
-        const isStairs = target.kind === 'stairs';
-
-        if (!isSeen && !isTravelled) {
-          html += `<line class="exit-hint" x1="${center.x + ux * stubStart}" y1="${center.y + uy * stubStart}" x2="${center.x + ux * stubEnd}" y2="${center.y + uy * stubEnd}"/>`;
-        }
-
-        // Stairs are visible structures, but not map reveal. Mark only the
-        // current exit direction near the center; never draw the stair node or
-        // any destination-floor geometry for an unvisited stair.
-        if (isStairs) {
-          const x = center.x + ux * stairMark;
-          const y = center.y + uy * stairMark;
-          const angle = Math.atan2(uy, ux) * 180 / Math.PI;
-          const state = isSeen || isTravelled ? ' travelled' : '';
-          html += `<g class="stair-marker${state}" transform="translate(${x} ${y}) rotate(${angle})"><path d="M -5 4 H -2 V 1 H 1 V -2 H 4"/><path d="M -4 -4 L 4 -4"/></g>`;
-        }
-      });
+    const frontId = relativeExit('front');
+    if (frontId != null) {
+      const p = coords[frontId];
+      html += `<line class="flashlight-cone" x1="${center.x}" y1="${center.y}" x2="${p.x}" y2="${p.y}"/>`;
     }
+    current.exits.forEach((nid) => {
+      const target = nodeById(nid);
+      if (!target) return;
+      const p = coords[nid];
+      if (!seen(nid) && !travelled.has(edgeKey(current.id, nid))) {
+        html += `<line class="exit-hint" x1="${center.x}" y1="${center.y}" x2="${center.x + (p.x-center.x)*0.36}" y2="${center.y + (p.y-center.y)*0.36}"/>`;
+      }
+      if (target.kind === 'stairs') html += `<circle class="stair-dot" cx="${p.x}" cy="${p.y}" r="3.8"/>`;
+    });
 
     visibleNodes.forEach((n) => {
       const p = coords[n.id];
       const cls = n.id === run.currentNodeId ? 'current' : 'seen';
       html += `<circle class="${cls}" cx="${p.x}" cy="${p.y}" r="${cls === 'current' ? 4.4 : 3}"/>`;
     });
+    const angle = meta.minimapMode === 'fixed'
+      ? ({ n: -90, e: 0, s: 90, w: 180 }[run.facing || 'n'] || -90)
+      : -90;
+    html += `<path class="player-facing" transform="translate(${center.x} ${center.y}) rotate(${angle})" d="M 7 0 L -4 -5 L -2 0 L -4 5 Z"/>`;
+    if (visibleStalkerInLight()) {
+      const st = stalker();
+      const p = coords[st.nodeId];
+      html += `<text class="stalker-mark" x="${p.x}" y="${p.y - 6}" text-anchor="middle">!</text>`;
+    }
     svg.innerHTML = html;
   }
 
@@ -3285,14 +3735,58 @@
     renderReturnScreen(); // 견적·의심도·출구 문구를 선택한 길에 맞춰 다시 그린다
   }
 
+  function renderStageObjects(node, pct) {
+    const box = el['stage-objects'];
+    if (!box) return;
+    if (!node || pct <= 0) { box.innerHTML = ''; return; }
+    const objects = [];
+    const prop = roomPropLabel(node);
+    if (prop) objects.push({ cls: `prop ${node.kind || ''}`, label: prop });
+    const loots = droppedLoots().filter((loot) => loot.nodeId === node.id);
+    loots.slice(0, 4).forEach((loot) => objects.push({ cls: 'loot', label: loot.item.name, icon: itemIcon(loot.item.icon) }));
+    if (loots.length > 4) objects.push({ cls: 'loot more', label: `+${loots.length - 4}` });
+    box.innerHTML = objects.map((obj) => `<span class="stage-object ${obj.cls}">${obj.icon || ''}<b>${obj.label}</b></span>`).join('');
+  }
+
   function renderStage() {
     const rpEl = el['recovery-point'];
     const node = currentNode();
+    const front = relativeExit('front') != null ? nodeById(relativeExit('front')) : null;
+    const left = relativeExit('left') != null ? nodeById(relativeExit('left')) : null;
+    const right = relativeExit('right') != null ? nodeById(relativeExit('right')) : null;
+    const pct = effectiveLightPercent();
+    if (el['stage']) {
+      el['stage'].classList.toggle('light-off', pct <= 0);
+      el['stage'].classList.toggle('light-dim', pct > 0 && pct < 35);
+      el['stage'].classList.toggle('light-flicker', pct > 0 && pct < 20);
+      el['stage'].dataset.facing = run.facing || 'n';
+      el['stage'].dataset.roomKind = node ? node.kind : '';
+      el['stage'].dataset.prop = pct > 0 ? roomPropLabel(node) : '';
+      el['stage'].classList.toggle('has-dropped-loot', droppedLootCountHere(node) > 0 && pct > 0);
+      el['stage'].classList.toggle('has-object-layer', pct > 0 && !!node);
+      el['stage'].dataset.droppedCount = String(droppedLootCountHere(node));
+      const view = el['stage'].querySelector('.fp-view');
+      if (view) {
+        view.dataset.prop = pct > 0 ? roomPropLabel(node) : '';
+        view.dataset.dropped = droppedLootCountHere(node) > 0 && pct > 0 ? `내려놓은 짐 ×${droppedLootCountHere(node)}` : '';
+      }
+      renderStageObjects(node, pct);
+    }
+    const setDoor = (sel, target, fallback) => {
+      const d = document.querySelector(sel);
+      if (!d) return;
+      d.classList.toggle('open', !!target && pct > 0);
+      d.classList.toggle('structure', !!target && target.kind !== 'corridor');
+      d.dataset.label = target && pct > 0 ? (target.kind === 'stairs' ? '계단' : target.label) : fallback;
+    };
+    setDoor('.fp-door.fp-left', left, '왼쪽 어둠');
+    setDoor('.fp-door.fp-center', front, pct <= 0 ? '조명 꺼짐' : '정면 벽');
+    setDoor('.fp-door.fp-right', right, '오른쪽 어둠');
     if (run.moving) {
       rpEl.className = 'recovery-point empty';
       rpEl.style.borderColor = '';
       rpEl.innerHTML = '<span class="rp-name">앞으로…</span>';
-    } else if (run.currentItem) {
+    } else if (run.currentItem && pct > 0) {
       const it = run.currentItem;
       rpEl.className = 'recovery-point';
       rpEl.style.borderColor = TIER_COLOR[it.tier];
@@ -3300,11 +3794,13 @@
     } else {
       rpEl.className = 'recovery-point empty';
       rpEl.style.borderColor = '';
-      const hint = node && node.kind === 'entry' ? '입구' : node ? node.label : '…';
+      const cover = currentRoomHasCover() ? ' · 숨을 곳' : '';
+      const shape = visibleStalkerInLight() ? ' · 어두운 형체' : '';
+      const hint = pct <= 0 ? '조명이 꺼졌다' : front ? `${front.label}${cover}${shape}` : (node ? `${node.label}${cover}${shape}` : '…');
       rpEl.innerHTML = `<span class="rp-name">${hint}</span>`;
     }
 
-    // 어둠붙이: 위험이 클수록 플레이어(왼쪽)에 가까워진다. 조우 위기 중에는
+    // 어두운 형체: 위험이 클수록 플레이어(왼쪽)에 가까워진다. 조우 위기 중에는
     // 중앙 시야에 고정해 '무엇을 만났는지'를 먼저 보여준다.
     const chaser = el['chaser'];
     const monsterCrisisOpen = !!(run.pendingEvent && run.pendingEvent.type === 'monster-encounter');
@@ -3408,6 +3904,18 @@
     setMetaPanel(el['meta-panel'].hidden);
   }
 
+  function handleKeyControl(event) {
+    if (!run || !el['screen-dungeon'] || !el['screen-dungeon'].classList.contains('active')) return;
+    const key = event.key.toLowerCase();
+    if (['arrowleft','arrowright','arrowup','arrowdown','a','d','w','s','l'].includes(key)) event.preventDefault();
+    if (key === 'arrowleft' || key === 'a') turnFacing(-1);
+    else if (key === 'arrowright' || key === 'd') turnFacing(1);
+    else if (key === 'arrowup' || key === 'w') { const id = relativeExit('front'); if (id != null) chooseExit(id); }
+    else if (key === 'arrowdown' || key === 's') { const id = relativeExit('back'); if (id != null) chooseBackstep(id); }
+    else if (key === 'l') toggleHandLight();
+    else if (key === ' ' || key === 'e') grab();
+  }
+
   function bind() {
     el['btn-enter'].addEventListener('click', handleStartButton);
     if (el['screen-start']) el['screen-start'].addEventListener('click', handleStartScreenTap);
@@ -3419,6 +3927,8 @@
       toggleMetaPanel();
     });
     if (el['screen-dungeon']) el['screen-dungeon'].addEventListener('click', handleDungeonDialogueTap);
+    if (el['mini-mode']) el['mini-mode'].addEventListener('click', (event) => { event.stopPropagation(); toggleMinimapMode(); });
+    window.addEventListener('keydown', handleKeyControl);
     el['btn-grab'].addEventListener('click', (event) => { event.stopPropagation(); grab(); });
     el['btn-drop'].addEventListener('click', (event) => { event.stopPropagation(); dropAndFlee(); });
     el['btn-return'].addEventListener('click', (event) => { event.stopPropagation(); attemptReturnToSurface(); });

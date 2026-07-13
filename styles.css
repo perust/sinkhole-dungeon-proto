@@ -377,6 +377,12 @@ body {
   overflow: hidden; text-align: center; line-height: 1.05;
 }
 .slot.filled { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+.slot.droppable { cursor: pointer; }
+.slot.droppable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.slot.droppable:hover { filter: brightness(1.12); }
 
 /* 무대 (추격 연출) ----------------------------------------- */
 .stage {
@@ -1818,3 +1824,153 @@ html, body { touch-action: manipulation; }
   #screen-upgrade .up-btn { padding: 7px 9px; }
   #screen-upgrade #btn-again { min-height: 48px; }
 }
+
+
+/* Doom-ish flashlight navigation pass ------------------------- */
+.mini-mode {
+  position: absolute;
+  left: 9px;
+  top: 76px;
+  z-index: 5;
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid rgba(87,224,200,.34);
+  border-radius: 999px;
+  background: rgba(8,12,22,.72);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 900;
+}
+.mini-map .flashlight-cone { stroke: rgba(255,209,102,.75); stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(255,209,102,.65)); }
+.mini-map .player-facing { fill: var(--accent); filter: drop-shadow(0 0 4px rgba(87,224,200,.65)); }
+.mini-map .stalker-mark { fill: var(--danger); font-size: 16px; font-weight: 1000; filter: drop-shadow(0 0 5px rgba(255,82,110,.8)); }
+.mini-map .stair-dot { fill: rgba(255,209,102,.72); stroke: rgba(255,209,102,.95); }
+.stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: radial-gradient(ellipse at 50% 42%, rgba(255,209,102,.20), rgba(255,209,102,.06) 28%, rgba(0,0,0,.46) 72%, rgba(0,0,0,.82));
+  mix-blend-mode: screen;
+}
+.stage.light-dim::before { opacity: .48; }
+.stage.light-flicker::before { animation: flashlightFlicker .55s steps(2,end) infinite; }
+.stage.light-off::before { opacity: .05; }
+.stage.light-off .fp-view, .stage.light-off .recovery-point { filter: brightness(.18) saturate(.4); }
+@keyframes flashlightFlicker { 0%,100%{opacity:.34} 50%{opacity:.9} }
+.fp-door::after {
+  content: attr(data-label);
+  position: absolute;
+  left: 50%; top: 50%; transform: translate(-50%,-50%);
+  color: rgba(238,243,255,.82);
+  font-size: 10px;
+  font-weight: 900;
+  text-shadow: 0 2px 8px #000;
+  white-space: nowrap;
+}
+.fp-door.open { box-shadow: inset 0 0 0 1px rgba(87,224,200,.35), 0 0 22px rgba(87,224,200,.13); }
+.fp-door.structure { border-color: rgba(255,209,102,.36); }
+.room-choices.facing-pad { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
+.room-choices.facing-pad .room-btn { text-align: center; min-height: 54px; }
+.room-pad-center {
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(87,224,200,.22); border-radius: 14px;
+  color: var(--muted); font-size: 11px; font-weight: 900;
+  background: rgba(87,224,200,.045);
+}
+.room-btn:disabled { opacity: .38; cursor: not-allowed; }
+.stage .fp-view::after {
+  content: attr(data-prop);
+  position: absolute;
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+  min-width: 82px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255,209,102,.28);
+  border-radius: 12px 12px 5px 5px;
+  background: linear-gradient(180deg, rgba(255,209,102,.13), rgba(8,12,22,.68));
+  color: rgba(238,243,255,.78);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+  text-shadow: 0 2px 8px #000;
+  box-shadow: 0 16px 32px rgba(0,0,0,.32);
+  opacity: .9;
+}
+.stage[data-prop=""] .fp-view::after { display: none; }
+.stage.has-object-layer .fp-view::after { display: none; }
+.stage[data-room-kind="office"] .fp-view::after,
+.stage[data-room-kind="watchpost"] .fp-view::after,
+.stage[data-room-kind="storage"] .fp-view::after,
+.stage[data-room-kind="door"] .fp-view::after { border-color: rgba(87,224,200,.38); background: linear-gradient(180deg, rgba(87,224,200,.14), rgba(8,12,22,.74)); }
+.stage[data-room-kind="hall"] .fp-view::after,
+.stage[data-room-kind="crack"] .fp-view::after { border-color: rgba(255,82,110,.32); background: linear-gradient(180deg, rgba(255,82,110,.12), rgba(8,12,22,.76)); }
+.stage.has-dropped-loot .fp-view::before {
+  content: attr(data-dropped);
+  position: absolute;
+  left: 50%;
+  bottom: 11%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,209,102,.42);
+  background: rgba(8,12,22,.78);
+  color: var(--warn);
+  font-size: 10px;
+  font-weight: 1000;
+  text-shadow: 0 2px 6px #000;
+}
+.stage-objects {
+  position: absolute;
+  left: 9%;
+  right: 9%;
+  bottom: 82px;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.stage-object {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 136px;
+  padding: 5px 8px;
+  border: 1px solid rgba(238,243,255,.18);
+  border-radius: 999px;
+  background: rgba(8,12,22,.72);
+  color: rgba(238,243,255,.82);
+  font-size: 10px;
+  font-weight: 900;
+  text-shadow: 0 2px 6px #000;
+  box-shadow: 0 10px 24px rgba(0,0,0,.28);
+}
+.stage-object .loot-icon { width: 17px; height: 17px; flex: 0 0 auto; }
+.stage-object.loot { border-color: rgba(255,209,102,.38); color: var(--warn); }
+.stage-object.prop.office,
+.stage-object.prop.watchpost,
+.stage-object.prop.storage,
+.stage-object.prop.door { border-color: rgba(87,224,200,.34); color: var(--accent); }
+.stage-object.prop::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  opacity: .78;
+  box-shadow: inset 0 0 10px rgba(255,255,255,.05), 0 0 8px currentColor;
+}
+.stage-object.prop.entry::before { border-radius: 50% 50% 45% 45%; border-top-width: 4px; }
+.stage-object.prop.storage::before { border-radius: 4px; background: linear-gradient(90deg, transparent 42%, currentColor 43%, currentColor 50%, transparent 51%); }
+.stage-object.prop.watchpost::before { border-radius: 3px; transform: skew(-8deg); border-top-width: 5px; }
+.stage-object.prop.office::before { border-radius: 2px; background: linear-gradient(0deg, transparent 55%, currentColor 56%, currentColor 64%, transparent 65%); }
+.stage-object.prop.door::before { border-radius: 8px 8px 2px 2px; border-bottom-width: 4px; }
+.stage-object.prop.vent::before { border-radius: 3px; background: repeating-linear-gradient(90deg, transparent 0 3px, currentColor 4px 5px); }
+.stage-object.prop.crack::before,
+.stage-object.prop.hall::before { border-radius: 50% 4px 50% 4px; transform: rotate(35deg); }
+.stage.light-off .stage-objects { display: none; }

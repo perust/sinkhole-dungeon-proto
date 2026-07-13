@@ -108,6 +108,7 @@
 
       <div class="stage" id="stage">
         <svg id="mini-map" class="mini-map" viewBox="0 0 120 90" aria-hidden="true"></svg>
+        <button id="mini-mode" class="mini-mode" type="button" aria-label="미니맵 모드 바꾸기, 현재 회전 지도">현재: 회전 지도</button>
         <div class="fp-view" aria-hidden="true">
           <div class="fp-ceiling"></div>
           <div class="fp-floor"></div>
@@ -118,13 +119,14 @@
           <div class="fp-door fp-right"></div>
         </div>
         <div id="stage-situation" class="stage-situation" aria-live="polite">아래가 열린다.</div>
+        <div id="stage-objects" class="stage-objects" aria-hidden="true"></div>
         <div class="stage-floor"></div>
         <div id="recovery-point" class="recovery-point">
           <span class="rp-name">회수물</span>
         </div>
         <button id="btn-grab" class="btn stage-grab hidden">줍기</button>
         <div id="player" class="actor player actor-sprite" title="탐사자" aria-label="탐사자"></div>
-        <div id="chaser" class="actor chaser actor-sprite" title="어둠붙이" aria-label="어둠붙이"></div>
+        <div id="chaser" class="actor chaser actor-sprite" title="어두운 형체" aria-label="어두운 형체"></div>
         <div id="depth-rail" class="depth-rail" aria-hidden="true"></div>
         <div id="log" class="log">
           <div class="log-line">아래가 열린다.</div>
