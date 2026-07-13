@@ -120,6 +120,27 @@
     full: '더 넣을 곳이 없다. 돌아가서 짐을 정리하자.',
     blocked: '더 넣을 곳이 없다. 돌아가서 짐을 정리하자.',
   };
+  const NO_BAG_LEVEL = 0;
+  const BAG_PRODUCTS = [
+    { level: 0, name: '맨손', cap: 1, cost: 0 },
+    { level: 1, name: '작은 가방', cap: 3, cost: 8 },
+    { level: 2, name: '큰 가방', cap: 5, cost: 18 },
+    { level: 3, name: '대형 가방', cap: 7, cost: 34 },
+    { level: 4, name: '특대 가방', cap: 9, cost: 56 },
+  ];
+  const MAX_BAG_LEVEL = BAG_PRODUCTS[BAG_PRODUCTS.length - 1].level;
+  const NO_BAG_ALERTS = {
+    full: '손이 가득 찼다. 맨손이라 더는 못 든다.',
+    blocked: '맨손이라 더 쥘 자리가 없다. 손에 쥔 것만으로 벅차다.',
+  };
+  function bagProduct(level = meta.bagLevel) {
+    const safe = Math.max(NO_BAG_LEVEL, Math.min(MAX_BAG_LEVEL, Math.floor(Number(level)) || 0));
+    return BAG_PRODUCTS.find((bag) => bag.level === safe) || BAG_PRODUCTS[0];
+  }
+  function bagAlert(key) {
+    if (meta.bagLevel === NO_BAG_LEVEL && NO_BAG_ALERTS[key]) return NO_BAG_ALERTS[key];
+    return BAG_ALERTS[key];
+  }
 
   function itemIcon(index) {
     return `<span class="loot-icon" style="--icon-index:${index}" aria-hidden="true"></span>`;
@@ -354,7 +375,7 @@
 
   const meta = {
     rp: 0,
-    bagLevel: 1,
+    bagLevel: NO_BAG_LEVEL,
     lightLevel: 1,
     weaponLevel: 1,
     maxDepth: 1,
@@ -455,7 +476,7 @@
     // 버전 불일치(이전/미래 구조) → 마이그레이션 대신 안전하게 폐기.
     if (data.version !== SAVE_VERSION) { clearSave(); return; }
 
-    meta.bagLevel    = safeInt(data.bagLevel,    1, 1);
+    meta.bagLevel    = safeInt(data.bagLevel,    NO_BAG_LEVEL, NO_BAG_LEVEL, MAX_BAG_LEVEL);
     meta.lightLevel  = safeInt(data.lightLevel,  1, 1);
     meta.weaponLevel = safeInt(data.weaponLevel, 1, 1);
     meta.rp          = safeInt(data.rp,          0, 0);
@@ -487,7 +508,7 @@
     if (!window.confirm('모든 기록(RP·강화·깊이·의심도·진실 조각·생존자)을 지울까요?')) return;
     clearSave();
     Object.assign(meta, {
-      rp: 0, bagLevel: 1, lightLevel: 1, weaponLevel: 1,
+      rp: 0, bagLevel: NO_BAG_LEVEL, lightLevel: 1, weaponLevel: 1,
       maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0, extractionCueSeen: false,
       endingSeen: false, survivors: [], minimapMode: 'rotate',
     });
@@ -509,8 +530,9 @@
   let introLine = 0;
 
   // 파생값
+  let bagShopOpen = false;
   const maxLight   = () => 100 + (meta.lightLevel  - 1) * 35;
-  const bagCap     = () => 3   + (meta.bagLevel    - 1) * 2;
+  const bagCap     = () => bagProduct().cap;
   const weaponFactor = () => 1 + (meta.weaponLevel - 1) * 0.25; // 위험 상승 둔화
   const usedSlots  = () => run.bag.reduce((s, i) => s + i.slots, 0);
   const bagValue   = () => run.bag.reduce((s, i) => s + i.value, 0);
@@ -1228,7 +1250,7 @@
     'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
     'buy-committee', 'buy-black', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
     'start-survivors',
-    'up-bag', 'up-light', 'up-weapon', 'btn-again',
+    'up-bag', 'bag-shop', 'up-light', 'up-weapon', 'btn-again',
     'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
     'ending-truth-count', 'ending-continue', 'ending-reset',
   ];
@@ -1406,7 +1428,7 @@
     const cap = bagCap();
     if (slots >= cap && !run.seenBagAlerts.has('full')) {
       run.seenBagAlerts.add('full');
-      return queueSensoryAlert(BAG_ALERTS.full, 'hot');
+      return queueSensoryAlert(bagAlert('full'), 'hot');
     }
     if (slots >= Math.max(1, cap - 1) && !run.seenBagAlerts.has('heavy')) {
       run.seenBagAlerts.add('heavy');
@@ -1568,6 +1590,7 @@
   }
 
   function startNewRun() {
+    bagShopOpen = false;
     if (el['log']) el['log'].innerHTML = '<div class="log-line">아래가 열린다.</div>';
     run = newRun();
     bumpMaxDepth(run.floor);
@@ -2318,9 +2341,9 @@
           msg = '내려놓은 짐은 이미 어둠 속으로 사라졌다.';
         } else if (!roomFor(loot.item)) {
           run.seenBagAlerts.add('blocked');
-          run.lastAction = BAG_ALERTS.blocked;
-          log(BAG_ALERTS.blocked, 'hot');
-          showDialogue(BAG_ALERTS.blocked, 'hot');
+          run.lastAction = bagAlert('blocked');
+          log(bagAlert('blocked'), 'hot');
+          showDialogue(bagAlert('blocked'), 'hot');
           render();
           return;
         } else {
@@ -2348,9 +2371,9 @@
       } else if (!roomFor(item)) {
         // 가방이 가득 차 집을 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
         run.seenBagAlerts.add('blocked');
-        run.lastAction = BAG_ALERTS.blocked;
-        log(BAG_ALERTS.blocked, 'hot');
-        showDialogue(BAG_ALERTS.blocked, 'hot');
+        run.lastAction = bagAlert('blocked');
+        log(bagAlert('blocked'), 'hot');
+        showDialogue(bagAlert('blocked'), 'hot');
         render();
         return;
       } else {
@@ -2377,7 +2400,7 @@
         }
         if (usedSlots() >= bagCap() && !run.seenBagAlerts.has('full')) {
           run.seenBagAlerts.add('full');
-          msg += ` ${BAG_ALERTS.full}`;
+          msg += ` ${bagAlert('full')}`;
         }
         maybeQueueBagAlert();
         maybeQueueLightAlert();
@@ -2398,9 +2421,9 @@
       } else if (!roomFor(loot.item)) {
         // 가방이 가득 차 되챙길 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
         run.seenBagAlerts.add('blocked');
-        run.lastAction = BAG_ALERTS.blocked;
-        log(BAG_ALERTS.blocked, 'hot');
-        showDialogue(BAG_ALERTS.blocked, 'hot');
+        run.lastAction = bagAlert('blocked');
+        log(bagAlert('blocked'), 'hot');
+        showDialogue(bagAlert('blocked'), 'hot');
         render();
         return;
       } else {
@@ -2419,7 +2442,7 @@
         msg = `버리고 왔던 ${loot.item.name}${objectParticle(loot.item.name)} 다시 가방에 넣었다.${brokenTail}`;
         if (usedSlots() >= bagCap() && !run.seenBagAlerts.has('full')) {
           run.seenBagAlerts.add('full');
-          msg += ` ${BAG_ALERTS.full}`;
+          msg += ` ${bagAlert('full')}`;
         }
         maybeQueueBagAlert();
         maybeQueueLightAlert();
@@ -2787,9 +2810,9 @@
     if (!run || run.dialogue || run.pendingEvent || !run.currentItem) return;
     if (!roomFor(run.currentItem)) {
       run.seenBagAlerts.add('blocked');
-      run.lastAction = BAG_ALERTS.blocked;
-      log(BAG_ALERTS.blocked, 'hot');
-      showDialogue(BAG_ALERTS.blocked, 'hot');
+      run.lastAction = bagAlert('blocked');
+      log(bagAlert('blocked'), 'hot');
+      showDialogue(bagAlert('blocked'), 'hot');
       render();
       return;
     }
@@ -3279,6 +3302,9 @@
     meta.rp += consolation;
     meta.totalEarned += consolation;
     meta.suspicion = Math.max(0, Math.min(99, meta.suspicion + suspDelta));
+    const lostBag = bagProduct();
+    const hadBag = meta.bagLevel > NO_BAG_LEVEL;
+    meta.bagLevel = NO_BAG_LEVEL;
     saveMeta(); // 실패 보상 후 자동 저장
     el['fail-recovery'].innerHTML = `<b>${outcome.elapsed}</b><span>${outcome.title}</span><p>${outcome.body}</p>`;
     const suspChange = meta.suspicion - previousSuspicion;
@@ -3289,6 +3315,7 @@
         ? `잃은 짐 ${lost} RP · 남은 조각 +${consolation} RP`
         : '빈손이라 잃은 회수품은 없었다.',
       outcome.loss,
+      hadBag ? `${lostBag.name}${subjectParticle(lostBag.name)} 함께 사라졌다. 다음 조사는 맨손으로 시작한다.` : '가방은 없었다. 다음 조사도 맨손이다.',
       medic ? `의무병이 상처를 감싸고 뒤처리를 도왔다${medicBonus > 0 ? ` (+${medicBonus} RP)` : ''}.` : '',
       `의심도 ${suspText}`,
     ].filter(Boolean).map((line) => `<div>${line}</div>`).join('');
@@ -3301,6 +3328,7 @@
   /* ---------------- 강화 ---------------- */
 
   function buyUpgrade(type) {
+    if (type === 'bag') { toggleBagShop(); return; }
     if (run.bought) return;
     const lvKey = type + 'Level';
     const cost = upgradeCost(type); // 정비공 구출 시 장비 강화는 할인가로 계산된다
@@ -3308,9 +3336,30 @@
     meta.rp -= cost;
     meta[lvKey] += 1;
     run.bought = true;
+    bagShopOpen = false;
     saveMeta(); // 강화 구매 후 자동 저장
     log(`${UPGRADES[type].label}${objectParticle(UPGRADES[type].label)} 손봤다. 다음엔 더 버틴다.`, 'win');
     renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
+  }
+
+  function toggleBagShop() {
+    if (!run || run.bought) return;
+    bagShopOpen = !bagShopOpen;
+    renderUpgradeScreen(null);
+  }
+
+  function buyBag(level) {
+    if (!run || run.bought) return;
+    const product = BAG_PRODUCTS.find((bag) => bag.level === level);
+    if (!product || product.level <= NO_BAG_LEVEL || product.level <= meta.bagLevel) return;
+    if (meta.rp < product.cost) return;
+    meta.rp -= product.cost;
+    meta.bagLevel = product.level;
+    run.bought = true;
+    bagShopOpen = false;
+    saveMeta();
+    log(`${product.name}${objectParticle(product.name)} 샀다. 다음 조사는 ${product.cap}칸까지 멜 수 있다.`, 'win');
+    renderUpgradeScreen(null);
   }
 
   function riskState() {
@@ -3330,7 +3379,8 @@
     // HUD
     el['hud-rp'].textContent = meta.rp;
     el['hud-depth'].textContent = meta.maxDepth;
-    el['hud-bag'].textContent = `${usedSlots()}/${bagCap()}`;
+    const bagName = meta.bagLevel === NO_BAG_LEVEL ? '맨손' : `${usedSlots()}/${bagCap()}`;
+    el['hud-bag'].textContent = bagName;
     el['start-rp'].textContent = meta.rp;
     el['start-depth'].textContent = meta.maxDepth;
     el['start-susp'].textContent = meta.suspicion;
@@ -3632,7 +3682,10 @@
     }
 
     const seen = (id) => nodes[id] && nodes[id].entered;
-    const visibleNodes = nodes.filter((n) => seen(n.id) || n.id === run.currentNodeId);
+    const visibleIdSet = new Set(nodes.filter((n) => seen(n.id)).map((n) => n.id));
+    visibleIdSet.add(run.currentNodeId);
+    current.exits.forEach((id) => visibleIdSet.add(id));
+    const visibleNodes = nodes.filter((n) => visibleIdSet.has(n.id));
     const center = { x: 60, y: 45 };
     const pad = 14;
     const f = cardinalVector(run.facing || 'n');
@@ -3664,22 +3717,31 @@
     const frontId = relativeExit('front');
     if (frontId != null) {
       const p = coords[frontId];
-      html += `<line class="flashlight-cone" x1="${center.x}" y1="${center.y}" x2="${p.x}" y2="${p.y}"/>`;
+      const dx = p.x - center.x;
+      const dy = p.y - center.y;
+      const len = Math.max(1, Math.hypot(dx, dy));
+      const nx = dx / len;
+      const ny = dy / len;
+      const spread = Math.min(11, Math.max(5, len * 0.23));
+      const tip = { x: center.x + nx * len * 0.92, y: center.y + ny * len * 0.92 };
+      const left = { x: tip.x + (-ny) * spread, y: tip.y + nx * spread };
+      const rightP = { x: tip.x - (-ny) * spread, y: tip.y - nx * spread };
+      html += `<path class="flashlight-cone" d="M ${center.x} ${center.y} L ${left.x.toFixed(1)} ${left.y.toFixed(1)} Q ${tip.x.toFixed(1)} ${tip.y.toFixed(1)} ${rightP.x.toFixed(1)} ${rightP.y.toFixed(1)} Z"/>`;
     }
     current.exits.forEach((nid) => {
       const target = nodeById(nid);
       if (!target) return;
       const p = coords[nid];
       if (!seen(nid) && !travelled.has(edgeKey(current.id, nid))) {
-        html += `<line class="exit-hint" x1="${center.x}" y1="${center.y}" x2="${center.x + (p.x-center.x)*0.36}" y2="${center.y + (p.y-center.y)*0.36}"/>`;
+        html += `<line class="exit-hint" x1="${center.x}" y1="${center.y}" x2="${p.x}" y2="${p.y}"/>`;
       }
       if (target.kind === 'stairs') html += `<circle class="stair-dot" cx="${p.x}" cy="${p.y}" r="3.8"/>`;
     });
 
     visibleNodes.forEach((n) => {
       const p = coords[n.id];
-      const cls = n.id === run.currentNodeId ? 'current' : 'seen';
-      html += `<circle class="${cls}" cx="${p.x}" cy="${p.y}" r="${cls === 'current' ? 4.4 : 3}"/>`;
+      const cls = n.id === run.currentNodeId ? 'current' : (seen(n.id) ? 'seen' : 'ghost');
+      html += `<circle class="${cls}" cx="${p.x}" cy="${p.y}" r="${cls === 'current' ? 4.4 : cls === 'ghost' ? 2.4 : 3}"/>`;
     });
     const angle = meta.minimapMode === 'fixed'
       ? ({ n: -90, e: 0, s: 90, w: 180 }[run.facing || 'n'] || -90)
@@ -3819,6 +3881,27 @@
     }
   }
 
+  function renderBagShop() {
+    const shop = el['bag-shop'];
+    if (!shop) return;
+    const open = bagShopOpen && !run.bought;
+    shop.hidden = !open;
+    if (!open) { shop.innerHTML = ''; return; }
+    shop.innerHTML = BAG_PRODUCTS.filter((bag) => bag.level > NO_BAG_LEVEL).map((bag) => {
+      const owned = bag.level <= meta.bagLevel;
+      const affordable = meta.rp >= bag.cost;
+      const disabled = owned || !affordable || run.bought;
+      return `<button class="btn bag-choice ${owned ? 'owned' : ''}" data-bag-level="${bag.level}" ${disabled ? 'disabled' : ''}>` +
+        `<span class="bag-choice-name">${itemIcon(7)}${bag.name}</span>` +
+        `<span class="bag-choice-cap">${bag.cap}칸</span>` +
+        `<span class="bag-choice-cost">${owned ? '보유중' : bag.cost + ' RP'}</span>` +
+      `</button>`;
+    }).join('');
+    shop.querySelectorAll('[data-bag-level]').forEach((btn) => {
+      btn.addEventListener('click', () => buyBag(safeInt(btn.dataset.bagLevel, NO_BAG_LEVEL, NO_BAG_LEVEL, MAX_BAG_LEVEL)));
+    });
+  }
+
   function renderUpgradeScreen(gained) {
     // 판매 내역
     if (gained !== null) {
@@ -3851,13 +3934,27 @@
       el['truth-news'].textContent = '';
     }
 
-    // 강화 버튼 3종. 정비공을 구출했으면 장비 설명에 할인을 자연스럽게 덧붙인다.
+    // 강화 버튼 3종. 가방은 순차 강화가 아니라 크기별 구매 목록을 연다.
+    renderBagShop();
     const weaponSub = hasSurvivor('mechanic') ? `들키는 속도 -25% · 정비공 할인` : `들키는 속도 -25%`;
     const defs = [
-      ['up-bag',    'bag',    `가방 넓히기`,  `${bagCap()}칸 → ${bagCap() + 2}칸`],
       ['up-light',  'light',  `조명 손보기`,  `최대 조명 +35`],
       ['up-weapon', 'weapon', `장비 개조`,  weaponSub],
     ];
+    const currentBag = bagProduct();
+    const nextBag = BAG_PRODUCTS.find((bag) => bag.level > meta.bagLevel);
+    const bagBtn = el['up-bag'];
+    if (bagBtn) {
+      const canOpenBag = !!nextBag && !run.bought;
+      bagBtn.disabled = !canOpenBag;
+      bagBtn.classList.toggle('bought', run.bought);
+      bagBtn.classList.toggle('open', bagShopOpen && canOpenBag);
+      const currentText = currentBag.level === NO_BAG_LEVEL ? '현재: 맨손' : `현재: ${currentBag.name} · ${currentBag.cap}칸`;
+      bagBtn.innerHTML =
+        `<span class="up-title">${itemIcon(7)}가방 구매</span>` +
+        `<span class="up-sub">${currentText}${nextBag ? ` · 다음 ${nextBag.name}` : ' · 최대'}</span>` +
+        `<span class="up-cost">${run.bought ? '오늘은 여기까지' : nextBag ? '목록 보기' : '최대'}</span>`;
+    }
     defs.forEach(([id, type, title, sub]) => {
       const lvKey = type + 'Level';
       const cost = upgradeCost(type);
