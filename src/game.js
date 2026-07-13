@@ -3797,6 +3797,32 @@
     renderReturnScreen(); // 견적·의심도·출구 문구를 선택한 길에 맞춰 다시 그린다
   }
 
+  const FLOOR_THEME_CLASSES = ['floor-theme-ruins', 'floor-theme-lab', 'floor-theme-deep'];
+  function floorThemeClass(floor) {
+    if (floor >= 3) return 'floor-theme-deep';
+    if (floor === 2) return 'floor-theme-lab';
+    return 'floor-theme-ruins';
+  }
+
+  function presenceTier() {
+    if (!run || !run.floorMap) return 'none';
+    const encounterOpen = !!(run.pendingEvent && run.pendingEvent.type === 'monster-encounter');
+    const dist = stalkerDistance();
+    const danger = run.danger || 0;
+    if (encounterOpen || dist <= 0 || danger >= 82) return 'contact';
+    if ((stalkerAwake() && dist <= 2) || danger >= 55) return 'near';
+    if (run.chasing || danger >= 30) return 'far';
+    return 'none';
+  }
+
+  function renderPresenceFx() {
+    const stage = el['stage'];
+    if (!stage) return;
+    stage.classList.remove('presence-far', 'presence-near', 'presence-contact');
+    const tier = presenceTier();
+    if (tier !== 'none') stage.classList.add(`presence-${tier}`);
+  }
+
   function renderStageObjects(node, pct) {
     const box = el['stage-objects'];
     if (!box) return;
@@ -3821,6 +3847,8 @@
       el['stage'].classList.toggle('light-off', pct <= 0);
       el['stage'].classList.toggle('light-dim', pct > 0 && pct < 35);
       el['stage'].classList.toggle('light-flicker', pct > 0 && pct < 20);
+      el['stage'].classList.remove(...FLOOR_THEME_CLASSES);
+      el['stage'].classList.add(floorThemeClass(run.floor));
       el['stage'].dataset.facing = run.facing || 'n';
       el['stage'].dataset.roomKind = node ? node.kind : '';
       el['stage'].dataset.prop = pct > 0 ? roomPropLabel(node) : '';
@@ -3833,6 +3861,7 @@
         view.dataset.dropped = droppedLootCountHere(node) > 0 && pct > 0 ? `내려놓은 짐 ×${droppedLootCountHere(node)}` : '';
       }
       renderStageObjects(node, pct);
+      renderPresenceFx();
     }
     const setDoor = (sel, target, fallback) => {
       const d = document.querySelector(sel);

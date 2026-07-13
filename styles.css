@@ -1896,6 +1896,97 @@ html, body { touch-action: manipulation; }
 .stage.light-off::before { opacity: .05; }
 .stage.light-off .fp-view, .stage.light-off .recovery-point { filter: brightness(.18) saturate(.4); }
 @keyframes flashlightFlicker { 0%,100%{opacity:.34} 50%{opacity:.9} }
+
+/* 층별 배경 톤: 1층 도시 잔해, 2층 연구시설, 3층+ 심층을 stage 색으로 구분한다. */
+.stage.floor-theme-ruins .fp-view {
+  background:
+    radial-gradient(circle at 52% 28%, rgba(255,209,102,.10), transparent 42%),
+    linear-gradient(180deg, rgba(31,24,19,.48), rgba(5,7,12,.96));
+}
+.stage.floor-theme-lab .fp-view {
+  background:
+    radial-gradient(circle at 48% 26%, rgba(87,224,200,.13), transparent 44%),
+    linear-gradient(180deg, rgba(14,29,35,.58), rgba(5,7,12,.96));
+}
+.stage.floor-theme-deep .fp-view {
+  background:
+    radial-gradient(circle at 50% 26%, rgba(182,126,255,.14), transparent 45%),
+    linear-gradient(180deg, rgba(22,12,35,.62), rgba(5,7,12,.98));
+}
+
+/* 숨은 어두운 형체의 접근을 숫자/스프라이트 대신 압력·그림자로 전달한다. */
+.stage.presence-far .fp-view::before,
+.stage.presence-near .fp-view::before,
+.stage.presence-contact .fp-view::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.stage.presence-far .fp-view::before {
+  background: radial-gradient(ellipse at 50% 46%, transparent 54%, rgba(0,0,0,.50) 100%);
+  animation: presenceBreath 3.4s ease-in-out infinite;
+}
+.stage.presence-near .fp-view::before {
+  background:
+    radial-gradient(ellipse at 50% 46%, transparent 42%, rgba(0,0,0,.62) 100%),
+    radial-gradient(ellipse at 50% 92%, rgba(255,82,110,.10), transparent 55%);
+  animation: presenceFlicker 1.7s steps(1,end) infinite;
+}
+.stage.presence-contact .fp-view::before {
+  background:
+    radial-gradient(ellipse at 50% 46%, transparent 34%, rgba(0,0,0,.74) 100%),
+    radial-gradient(ellipse at 50% 60%, rgba(255,82,110,.16), transparent 60%);
+  animation: presencePulse .9s ease-out 1 both;
+}
+.stage.presence-near { animation: presenceShakeSoft 2.4s ease-in-out infinite; }
+.stage.presence-contact { animation: presenceShakeHard .5s ease-in-out 2 both; }
+.stage.moving.presence-near, .stage.moving.presence-contact,
+.stage.returning.presence-near, .stage.returning.presence-contact { animation: none; }
+.stage.monster-encounter.presence-contact .fp-view::before { display: none; }
+@keyframes presenceBreath { 0%,100%{ opacity:.5; } 50%{ opacity:.85; } }
+@keyframes presenceFlicker { 0%,100%{ opacity:.78; } 8%{ opacity:1; } 12%{ opacity:.6; } 48%{ opacity:.92; } 52%{ opacity:.7; } 70%{ opacity:1; } }
+@keyframes presencePulse { 0%{ opacity:0; } 22%{ opacity:1; } 100%{ opacity:.9; } }
+@keyframes presenceShakeSoft { 0%,100%{ transform:translate(0,0); } 25%{ transform:translate(-.6px,.4px); } 60%{ transform:translate(.5px,-.4px); } }
+@keyframes presenceShakeHard { 0%,100%{ transform:translate(0,0); } 20%{ transform:translate(-1.4px,.8px); } 50%{ transform:translate(1.6px,-.6px); } 80%{ transform:translate(-1px,.6px); } }
+
+.fp-figure {
+  position: absolute;
+  left: 50%;
+  bottom: 26%;
+  width: 22px;
+  height: 34px;
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  border-radius: 46% 46% 40% 40% / 60% 60% 40% 40%;
+  background:
+    radial-gradient(56% 42% at 50% 20%, rgba(3,4,7,.92), transparent 74%),
+    linear-gradient(180deg, rgba(3,4,7,.82) 6%, rgba(3,4,7,.58) 58%, transparent 100%);
+  filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .8s ease, transform .8s ease, width .8s ease, height .8s ease, bottom .8s ease, filter .8s ease;
+}
+.stage.presence-far .fp-view .fp-figure { opacity: .3; }
+.stage.presence-near .fp-view .fp-figure {
+  opacity: .6; bottom: 23%; width: 27px; height: 54px; filter: blur(2.3px);
+  transform: translateX(-50%) scaleY(1.1);
+  animation: presenceFigureSway 3.8s ease-in-out infinite;
+}
+.stage.presence-contact .fp-view .fp-figure {
+  opacity: .8; bottom: 11%; width: 48px; height: 82px; filter: blur(1.8px);
+  transform: translateX(-50%) scaleY(1.04);
+  animation: presenceFigureLoom 1s ease-out 1 both;
+}
+.stage.moving.presence-near .fp-view .fp-figure,
+.stage.moving.presence-contact .fp-view .fp-figure,
+.stage.returning.presence-near .fp-view .fp-figure,
+.stage.returning.presence-contact .fp-view .fp-figure { animation: none; }
+.stage.monster-encounter .fp-view .fp-figure { display: none; }
+@keyframes presenceFigureSway { 0%,100%{ transform:translateX(-50%) scaleY(1.1); } 50%{ transform:translateX(calc(-50% + 1.4px)) scaleY(1.13); } }
+@keyframes presenceFigureLoom { 0%{ opacity:0; transform:translateX(-50%) scaleY(1.22); } 55%{ opacity:.9; } 100%{ opacity:.8; transform:translateX(-50%) scaleY(1.04); } }
 .fp-door::after {
   content: attr(data-label);
   position: absolute;
