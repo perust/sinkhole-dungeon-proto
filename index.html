@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/pixel/player-delver.png" />
   <title>Unlit Halls</title>
-  <link rel="stylesheet" href="styles.css?v=36" />
+  <link rel="stylesheet" href="styles.css?v=22" />
 </head>
 <body>
   <div id="app" class="phone">
@@ -24,7 +24,7 @@
       </div>
 
       <h1 class="title">Unlit Halls</h1>
-      <p class="tagline">지하로 가라앉은 도시<br />잃어버린 물건들이 아래에 있다</p>
+      <p class="tagline">지하로 가라앉은 도시<br />무언가 사라지고 있다</p>
 
       <button id="intro-panel" class="intro-panel" type="button" hidden aria-live="polite" aria-label="탭해서 다음 이야기 보기">
         <span id="intro-line" class="intro-line"></span>
@@ -45,15 +45,11 @@
         누적 RP <b id="start-rp">0</b> · 최고 깊이 <b id="start-depth">1</b>층
         · 의심도 <b id="start-susp" class="susp-v">0</b>
       </div>
-      <div class="codex-line" id="start-codex"><span id="start-codex-tail">왜 이런 일이 나에게 일어난 거지…</span></div>
+      <div class="codex-line" id="start-codex">진실 조각 <b id="start-truth-count">0</b>/6 — <span id="start-codex-tail">아직 아무것도 모른다.</span></div>
       <div class="goal-hint" id="start-survivors" hidden></div>
-      <div class="goal-hint" id="start-mutations" hidden></div>
       <div class="contract-card" id="start-contract"></div>
       <div class="goal-hint">다음 목표 · <b id="start-goal">2층 도달</b></div>
-      <div class="start-footer">
-        <button id="btn-reset" class="btn-reset" type="button">기록 초기화</button>
-        <button id="btn-sound" class="btn-reset btn-sound" type="button" aria-pressed="false" aria-label="소리 켜짐, 눌러서 끄기">소리</button>
-      </div>
+      <button id="btn-reset" class="btn-reset" type="button">기록 초기화</button>
     </section>
 
     <!-- ===================== 던전 화면 ===================== -->
@@ -112,6 +108,7 @@
 
       <div class="stage" id="stage">
         <svg id="mini-map" class="mini-map" viewBox="0 0 120 90" aria-hidden="true"></svg>
+        <button id="mini-mode" class="mini-mode" type="button" aria-label="미니맵 모드 바꾸기, 현재 회전 지도">현재: 회전 지도</button>
         <div class="fp-view" aria-hidden="true">
           <div class="fp-ceiling"></div>
           <div class="fp-floor"></div>
@@ -120,16 +117,16 @@
           <div class="fp-door fp-left"></div>
           <div class="fp-door fp-center"></div>
           <div class="fp-door fp-right"></div>
-          <div class="fp-figure" aria-hidden="true"></div>
         </div>
         <div id="stage-situation" class="stage-situation" aria-live="polite">아래가 열린다.</div>
+        <div id="stage-objects" class="stage-objects" aria-hidden="true"></div>
         <div class="stage-floor"></div>
         <div id="recovery-point" class="recovery-point">
           <span class="rp-name">회수물</span>
         </div>
         <button id="btn-grab" class="btn stage-grab hidden">줍기</button>
         <div id="player" class="actor player actor-sprite" title="탐사자" aria-label="탐사자"></div>
-        <div id="chaser" class="actor chaser actor-sprite" title="어둠붙이" aria-label="어둠붙이"></div>
+        <div id="chaser" class="actor chaser actor-sprite" title="어두운 형체" aria-label="어두운 형체"></div>
         <div id="depth-rail" class="depth-rail" aria-hidden="true"></div>
         <div id="log" class="log">
           <div class="log-line">아래가 열린다.</div>
@@ -139,17 +136,23 @@
       <div id="dock" class="dock">
         <div id="room-choices" class="room-choices" aria-label="갈림길"></div>
         <div id="dock-actions" class="dock-actions">
-          <button id="btn-drop"   class="btn btn-act warn hidden-action">↙ 짐 버리고 튀기</button>
-          <button id="btn-return" class="btn btn-act good">↩ 발길 돌리기</button>
+          <button id="btn-drop"   class="btn btn-act warn hidden-action">버리고 도망</button>
+          <button id="btn-return" class="btn btn-act good">돌아가기</button>
         </div>
       </div>
     </section>
 
-    <!-- ===================== 출구/판매처 선택 화면 ===================== -->
+    <!-- ===================== 판매처 선택 화면 ===================== -->
     <section id="screen-return" class="screen">
-      <h2 class="result-title good-text">출구 앞에 섰다</h2>
-      <div class="route-choice" id="route-choice" aria-label="출구를 빠져나가는 길">
-        <p class="route-hint">어느 길로 빠져나갈까?</p>
+      <h2 class="result-title good-text">지상으로 나왔다</h2>
+      <div class="sale-card">
+        <p class="buyer-hint">이 짐, 누구에게 넘길까?</p>
+        <div class="sale-list" id="return-list"></div>
+        <div class="meta-clock">현재 의심도 <b id="return-susp" class="susp-v">0</b></div>
+      </div>
+
+      <div class="route-choice" id="route-choice" aria-label="지상으로 나가는 길">
+        <p class="route-hint">어떻게 지상으로 나갈까?</p>
         <div class="route-btns">
           <button id="route-official" class="btn route-btn selected" type="button">
             <span class="route-name">공식 출구</span>
@@ -167,37 +170,23 @@
         <div class="route-note" id="route-note">공식 출구 — 안전하지만 검문이 있다. 이번엔 무사히 통과했다.</div>
       </div>
 
-      <div class="sale-card">
-        <p class="buyer-hint">나가면 이 짐, 누구에게 넘길까?</p>
-        <div class="sale-list" id="return-list"></div>
-        <div class="meta-clock">현재 의심도 <b id="return-susp" class="susp-v">0</b></div>
-      </div>
-
       <div class="contract-card" id="return-contract"></div>
 
       <div class="buyers">
         <button id="buy-committee" class="btn buyer-btn committee">
-          <span class="buyer-name"><i class="faction-symbol committee" aria-hidden="true"></i>위원회 접수창</span>
-          <span class="buyer-sub">정식 반납 · 접수 기록이 찍히고 검문 설명이 생긴다</span>
-          <span class="buyer-line" id="committee-line"></span>
+          <span class="buyer-name">위원회</span>
+          <span class="buyer-sub">정식 반납 · 값은 낮아도 흔적이 지워진다</span>
           <span class="buyer-est"><b id="committee-rp">+0</b> RP · 의심도 <span id="committee-susp" class="susp-delta">0</span></span>
         </button>
         <button id="buy-black" class="btn buyer-btn black">
-          <span class="buyer-name"><i class="faction-symbol black" aria-hidden="true"></i>암시장 중개상</span>
-          <span class="buyer-sub">무기명 거래 · 값은 세지만 단속에 걸리면 최초 판매자를 찾는다</span>
-          <span class="buyer-line" id="black-line"></span>
+          <span class="buyer-name">암시장</span>
+          <span class="buyer-sub">값은 세지만, 뜨거운 물건일수록 꼬리가 남는다</span>
           <span class="buyer-est"><b id="black-rp">+0</b> RP · 의심도 <span id="black-susp" class="susp-delta">+0</span></span>
-        </button>
-        <button id="buy-family" class="btn buyer-btn family" hidden>
-          <span class="buyer-name"><i class="faction-symbol family" aria-hidden="true"></i>가족에게 돌려주기</span>
-          <span class="buyer-sub">유품은 가족에게, 나머지는 조용히 반납한다</span>
-          <span class="buyer-line" id="family-line"></span>
-          <span class="buyer-est"><b id="family-rp">+0</b> RP · 의심도 <span id="family-susp" class="susp-delta">0</span></span>
         </button>
       </div>
     </section>
 
-    <!-- ===================== 장비/구매(귀환) 화면 ===================== -->
+    <!-- ===================== 강화(귀환) 화면 ===================== -->
     <section id="screen-upgrade" class="screen">
       <h2 class="result-title good-text">살아 나왔다</h2>
       <div class="sale-card">
@@ -218,50 +207,41 @@
         <button id="up-light"  class="btn up-btn"></button>
         <button id="up-weapon" class="btn up-btn"></button>
       </div>
-      <!-- 가방 구매를 누르면 여기에 크기별 선택 버튼이 떠오른다(맨손 제외) -->
-      <div id="bag-shop" class="bag-shop" hidden></div>
 
-      <button id="btn-again" class="btn btn-primary">한 방 더</button>
+      <button id="btn-again" class="btn btn-primary">다시 내려가기</button>
     </section>
 
     <!-- ===================== 실패 화면 ===================== -->
     <section id="screen-fail" class="screen">
       <h2 class="result-title bad-text">기절했다.</h2>
       <div class="fail-card">
-        <p class="fail-line">정신이 끊겼다. 깨어났을 때 조사는 끝나 있었다.</p>
+        <p class="fail-line">정신이 끊겼다. 깨어났을 때 런은 끝나 있었다.</p>
         <div class="fail-recovery" id="fail-recovery"></div>
         <div class="fail-detail" id="fail-detail"></div>
         <div class="fail-meta">지상 의심도 <b id="fail-susp" class="susp-v">0</b></div>
-        <p class="fail-keep">장비와 보유 RP는 유지된다.</p>
+        <p class="fail-keep">강화와 남은 RP는 유지된다.</p>
       </div>
-      <div class="fail-cutin" aria-hidden="true">
-        <div class="fail-cutin-scene">
-          <div class="fail-fig"></div>
-          <div class="fail-strap"></div>
-          <div class="fail-bag"></div>
-        </div>
-      </div>
-      <button id="btn-retry" class="btn btn-primary">한 방 더</button>
+      <button id="btn-retry" class="btn btn-primary">다시 내려가기</button>
     </section>
 
-    <!-- ===================== 엔딩(단서를 다 모은 뒤) 화면 ===================== -->
+    <!-- ===================== 엔딩(진실 6/6) 화면 ===================== -->
     <section id="screen-ending" class="screen">
-      <h2 class="result-title good-text">아래의 비밀</h2>
+      <h2 class="result-title good-text">진실 조각 6/6</h2>
       <div class="sale-card">
-        <p class="buyer-hint"><i class="faction-symbol research" aria-hidden="true"></i>읽어 온 기록들이 하나로 이어진다.</p>
+        <p class="buyer-hint">여섯 조각이 맞물렸다. 이제 그림이 보인다.</p>
         <div class="truth-news">위원회는 싱크홀을 막던 게 아니었다. 아래에서 올라오는 물건을 회수해 다시 봉인해 왔다.</div>
         <div class="truth-news">봉인 유물의 직인은 지상 허가증의 직인과 같다. 이 구멍은 위에서 시작됐다.</div>
         <div class="truth-news">그리고 내가 들고 나온 물건 때문에, 아래가 한 층 더 열린다.</div>
-        <div class="codex-line complete">이제 단서가 다 모인 것 같다. 아래가 왜 열렸는지 알 것 같다.</div>
+        <div class="codex-line complete">진실 조각 <b id="ending-truth-count">6</b>/6 — 이제 안다.</div>
       </div>
       <div class="upgrades">
-        <button id="ending-continue" class="btn btn-primary">심층 조사 계속</button>
+        <button id="ending-continue" class="btn btn-primary">심층 루프 계속</button>
         <button id="ending-reset" class="btn" type="button">기록 초기화</button>
       </div>
     </section>
 
   </div>
 
-  <script src="src/game.js?v=62"></script>
+  <script src="src/game.js?v=34"></script>
 </body>
 </html>

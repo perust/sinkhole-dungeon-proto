@@ -2,11 +2,11 @@
    도심 싱크홀 — 회수 잠수 (플레이어블 프로토타입)
 
    핵심 훅: "던전이 내가 훔친 물건을 다시 가져가려 한다."
-   루프:    챙기고 → 도망치고 → 팔고 → 장비를 챙겨 → 더 깊이.
+   루프:    챙기고 → 도망치고 → 팔고 → 강화 → 더 깊이.
 
-   - 메타 상태(meta): 조사를 넘어 유지되는 영구 자산(RP, 장비 구매 상태, 최고 깊이).
-   - 조사 상태(run):  한 번의 조사 동안만 존재하는 상태(층, 조명, 가방, 위험, 작은 맵).
-   각 층은 5~7개 노드짜리 작은 맵으로 생성된다. 노드에는 출구(exits),
+   - 메타 상태(meta): 런을 넘어 유지되는 영구 자산(RP, 강화 레벨, 최고 깊이).
+   - 런 상태(run):    한 번의 잠수 동안만 존재하는 상태(층, 조명, 가방, 위험, 작은 맵).
+   각 층은 8~11개 노드짜리 맵으로 생성된다. 노드에는 출구(exits),
    방 유형(kind), 선택적 아이템(item), 선택적 몬스터 이벤트(monster)가 있다.
    모든 수치는 조정 가능한 초기값이다.
    ============================================================ */
@@ -24,36 +24,22 @@
   ];
 
   // 회수물 6종 — 층이 깊을수록 무겁고(칸) 비싸다(RP).
-  // 아이템 태그 v1 — 태그는 등급이 아니라 물건마다 붙는다.
-  // 같은 rare여도 데이터칩은 조용하고(low) 연구 노트는 소리가 난다(medium).
-  //   heat   — 암시장 판매 시 물건 하나가 더하는 의심도. MUTATION_TRIGGER_HEAT 이상이면
-  //            손에 남는 열기로 한 줄 흘린다(itemTraitHint) — 수치는 감춘다.
+  // 아이템 태그 v1:
+  //   heat   — 암시장 판매 시 물건 하나가 더하는 의심도(등급이 아니라 물건별로 다르다).
   //   noise  — 집는 순간의 소음 압박('low'|'medium'|'high'). 조심/재빨리와 함께 추격 압박을 정한다.
-  //   fragile— 깨지기 쉬운 물건(true). 버리고 도망친 뒤 되챙기면 깨진 채로 돌아와 값이 크게 떨어지고
-  //            (BROKEN_VALUE_RATE), 균열 출구에서는 성한 것만 긁힌다.
-  //   marked — 위원회가 추적 중인 회수물(true). 정식 반납이면 그 물건이 공개 수배·검문 목록에서 빠져
-  //            의심도가 조금 더 눅고, 암시장에 넘기면 표식된 물건이 뒷골목에 다시 떠올라 꼬리가 조금 더 잡힌다.
-  //   hints  — 태그를 물건마다 다른 감각 문구로 흘린다. 없으면 태그별 기본 문구를 쓴다.
+  //   fragile— 버리고 도망 시 깨져 값이 거의 남지 않는 물건(true).
   const ITEM_TABLE = {
     1: [
-      { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0, heat: 3,  noise: 'medium', fragile: false, truth: true, truthText: '배터리에는 위원회 마크가 지워진 흔적이 있다.' },
-      { name: '배관 부품',     slots: 1, value: 5,  tier: 'common', icon: 1, heat: 2,  noise: 'low',    fragile: false, truth: true, truthText: '도시 배관은 사고 전부터 아래로 이어져 있었다.' },
+      { name: '실험용 배터리', slots: 1, value: 6,  tier: 'common', icon: 0, heat: 3,  noise: 'medium', fragile: false, truth: '배터리에는 위원회 마크가 지워진 흔적이 있다.' },
+      { name: '배관 부품',     slots: 1, value: 5,  tier: 'common', icon: 1, heat: 2,  noise: 'low',    fragile: false, truth: '도시 배관은 사고 전부터 아래로 이어져 있었다.' },
     ],
     2: [
-      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, heat: 9,  noise: 'low',    fragile: true,  marked: true, truth: true,
-        hints: { fragile: '케이스에 실금이 가 있다' },
-        truthText: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
-      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, heat: 7,  noise: 'medium', fragile: true,  truth: true,
-        hints: { fragile: '종이가 눅어 손대면 바스러질 것 같다' },
-        truthText: '연구 노트에는 ‘어둠붙이’가 빛과 소리에 다르게 반응한다고 적혀 있다.' },
+      { name: '봉인 데이터칩', slots: 2, value: 10, tier: 'rare', icon: 2, heat: 9,  noise: 'low',    fragile: true,  truth: '데이터칩의 날짜는 싱크홀 발생 전날로 찍혀 있다.' },
+      { name: '연구 노트',     slots: 1, value: 7,  tier: 'rare', icon: 3, heat: 7,  noise: 'medium', fragile: true,  truth: '연구 노트에는 ‘어둠붙이’가 빛과 소리에 다르게 반응한다고 적혀 있다.' },
     ],
     3: [
-      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4, heat: 15, noise: 'high',   fragile: false, truth: true,
-        hints: { noise: '안에서 낮은 진동음이 새어 나온다', heat: '쥐고 있으면 손바닥이 미지근해진다' },
-        truthText: '코어는 싱크홀을 막는 장치가 아니라 더 깊게 여는 열쇠다.' },
-      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5, heat: 20, noise: 'high',   fragile: true,  marked: true, truth: true,
-        hints: { noise: '기울일 때마다 안쪽 벽을 구르며 부딪치는 소리가 난다', fragile: '문양을 따라 금이 번져 있다', heat: '표면이 체온보다 따뜻하다' },
-        truthText: '봉인 유물의 문양은 지상 허가증의 직인과 같다.' },
+      { name: '안정화 코어',   slots: 2, value: 18, tier: 'epic', icon: 4, heat: 15, noise: 'high',   fragile: false, truth: '코어는 싱크홀을 막는 장치가 아니라 더 깊게 여는 열쇠다.' },
+      { name: '봉인 유물',     slots: 3, value: 30, tier: 'epic', icon: 5, heat: 20, noise: 'high',   fragile: true,  truth: '봉인 유물의 문양은 지상 허가증의 직인과 같다.' },
     ],
   };
 
@@ -64,43 +50,7 @@
   function itemHeat(it)  { return it && Number.isFinite(it.heat) ? it.heat : (TIER_HEAT[it && it.tier] || 4); }
   function itemNoise(it) { return it && it.noise ? it.noise : (TIER_NOISE[it && it.tier] || 'medium'); }
   function itemFragile(it) { return !!(it && it.fragile); }
-  function itemFamily(it) { return !!(it && it.family); }
-  function itemMarked(it) { return !!(it && it.marked); }
-  // broken은 ITEM_TABLE에 없다 — 깨진 채 되챙긴 사본에만 붙는 실행 중 태그다(breakItem).
-  function itemBroken(it) { return !!(it && it.broken); }
-  // 원본을 건드리지 않고 깨진 사본을 만든다. name·truth·truthText가 그대로라 단서 해금은 유지된다.
-  function breakItem(it) {
-    return { ...it, value: Math.max(1, Math.round(it.value * BROKEN_VALUE_RATE)), broken: true };
-  }
-  // 단서 여부(태그)와 해금 문구(텍스트)를 분리한다. 구버전 물건은 truth가 문자열이었다 →
-  // itemTruth는 문자열도 참으로 보고, itemTruthText는 그 문자열을 그대로 문구로 돌려준다(하위호환).
-  function itemTruth(it) {
-    if (!it) return false;
-    if (it.truth === true) return true;
-    return typeof it.truth === 'string' && it.truth.length > 0;
-  }
-  function itemTruthText(it) {
-    if (!it) return '';
-    if (typeof it.truthText === 'string') return it.truthText;
-    if (typeof it.truth === 'string') return it.truth; // 구버전: truth가 문구를 담던 시절
-    return '';
-  }
-  // 단서 총량은 truth 태그가 붙은 물건만 센다(itemTruth). 앞으로 truth 없는 일반 회수물이 ITEM_TABLE에
-  // 들어와도 6/6 목표가 흔들리지 않는다.
-  const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().filter(itemTruth).length;
-
-  // 실종자 흔적방 유품 v1: 실종자 방에서만 나오는 가족 keepsake.
-  // ITEM_TABLE 밖에 두어 단서 총량(TRUTH_TOTAL=6)에 영향이 없다. truth 필드가 없어
-  // 암시장에 팔아도 비밀을 풀지 않는다(chooseBuyer는 truth 있는 물건만 단서로 센다).
-  // family:true 태그로 지상 귀환 시 '가족에게 돌려준다' 경로가 열린다. 값·heat는 낮다(개인 유품).
-  // 유품도 물건마다 태그가 다르다: 사진은 찢어지고(fragile), 목걸이는 쇠사슬이 잘그락거린다(noise).
-  // heat는 셋 다 1 — 개인 유품이라 암시장에서도 눈에 띄지 않는다.
-  const FAMILY_KEEPSAKES = [
-    { name: '가족 사진',     slots: 1, value: 4, tier: 'common', icon: 3, heat: 1, noise: 'low',    fragile: true,  family: true, hints: { fragile: '접힌 자리가 닳아 곧 찢어질 것 같다' }, familyNote: '사진 뒤에 “아빠 꼭 돌아와”라고 적혀 있다.' },
-    { name: '이름표 목걸이', slots: 1, value: 5, tier: 'common', icon: 0, heat: 1, noise: 'medium', fragile: false, family: true, familyNote: '목걸이에 아이 이름과 집 주소가 새겨져 있다.' },
-    { name: '아이 배낭',     slots: 1, value: 3, tier: 'common', icon: 1, heat: 1, noise: 'low',    fragile: false, family: true, familyNote: '배낭 안에 반쯤 쓴 색연필과 위원회 출입증이 들어 있다.' },
-  ];
-  function pickFamilyKeepsake() { return { ...FAMILY_KEEPSAKES[Math.floor(Math.random() * FAMILY_KEEPSAKES.length)] }; }
+  const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().length;
 
   // 짧은 의뢰는 "한 번 더 내려가기"의 명분과 판매처 선택의 압박을 만든다.
   const CONTRACTS = [
@@ -122,59 +72,27 @@
     { key: 'crack',    label: '오른쪽 균열', desc: '젖은 발자국',        style: 'danger', light: -8, danger: 9 },
     // 위원회 감시소: 드물게 등장(uncommon). 의심도가 높으면 단말/기록 조작이 위험해진다.
     { key: 'watchpost',label: '위원회 감시소', desc: '꺼진 감시등',        style: '',       light: -2, danger: 2, uncommon: true },
-    // 실종자 흔적방: 드물게 등장(uncommon). 벽에 붙은 사진/이름표/배낭 — 유품(family) 회수와 가족 반환 루트로 이어진다.
-    { key: 'missing-trace', label: '실종자 흔적', desc: '벽에 붙은 사진',  style: '',       light: -1, danger: 1, uncommon: true },
   ];
   const ENTRY_KIND  = { key: 'entry',  label: '입구',       desc: '',            style: '', light: 0, danger: 0 };
   const STAIRS_KIND = { key: 'stairs', label: '계단 아래로', desc: '더 깊은 냉기', style: '', light: 0, danger: 0 };
 
-  // 위원회 감시소 튜닝값과 단말 로그. 로그는 비밀을 공짜로 풀지 않고 단서 한 줄만 흘린다.
+  // 위원회 감시소 튜닝값과 단말 로그. 로그는 진실 조각을 공짜로 풀지 않고 단서 한 줄만 흘린다.
   const WATCHPOST_SPAWN_CHANCE = 0.28;     // 층마다 감시소가 나타날 확률(드물게)
   const WATCHPOST_TENSE_SUSPICION = 40;    // 이 이상이면 단말을 뒤지는 게 위험해진다
   const WATCHPOST_LOGS = [
     '단말 로그: “회수물은 폐기가 아니라 재봉인 창고로 이송.” 날짜 칸은 지워져 있다.',
-    '깨진 화면에 한 줄이 떠 있다 — “감시등 소등은 상부 지시.” 서명란은 비어 있다.',
-    '명단이 스친다. 현장 인력 몇 사람 이름 옆에 붉은 표시가 찍혀 있다.',
+    '깨진 화면에 한 줄이 남아 있다 — “감시등 소등은 상부 지시.” 서명란은 비어 있다.',
+    '명단이 스친다. 회수자 몇 사람 이름 옆에 붉은 표시가 찍혀 있다.',
   ];
 
-  // 실종자 흔적방 튜닝값과 단서 로그. '사진만 확인'하면 단서 한 줄만 흘린다 — 비밀은 주지 않는다.
-  const MISSING_TRACE_SPAWN_CHANCE = 0.24;  // 층마다 실종자 흔적방이 나타날 확률(드물게)
-  const MISSING_TRACE_LOGS = [
-    '사진 뒤에 날짜가 적혀 있다 — 싱크홀이 열리기 사흘 전. 이 사람은 그날 이후로 올라오지 않았다.',
-    '이름표에 “3구역 회수반”이 찍혀 있다. 위원회 실종 명단에서 지워진 번호다.',
-    '편지 한 줄만 읽힌다 — “여보, 이번이 마지막이야.” 다음 줄은 물에 번져 지워졌다.',
-  ];
-
-  // 출구 선택 v1: 출구를 빠져나가는 세 갈래 길. 보정값은 결정적(무작위 없음)이라 판매 견적에 그대로 반영된다.
+  // 출구 선택 v1: 지상으로 나가는 세 갈래 길. 보정값은 결정적(무작위 없음)이라 판매 견적에 그대로 반영된다.
   const EXIT_CHECKPOINT_HEAT = 12;      // 이 이상 뜨거운 짐이면 공식 출구 검문대가 걸고 넘어진다
   const EXIT_CHECKPOINT_SUSP = 45;      // 지상 의심도가 이 이상이어도 검문이 깐깐해진다
   const EXIT_CHECKPOINT_SUSP_ADD = 3;   // 공식 출구 검문에 걸렸을 때 오르는 의심도
   const EXIT_CRACK_SUSP_RELIEF = 2;     // 균열 출구로 검문을 피해 덜어내는 의심도
   const EXIT_SCRATCH_RATE = 0.15;       // 균열 출구에서 파손되기 쉬운 물건이 긁혀 깎이는 값 비율
-  const BROKEN_VALUE_RATE = 0.5;        // 깨진 채 되챙긴 물건이 지키는 값 비율(물건당 한 번만 적용)
   const EXIT_PASSAGE_FEE = 8;           // 암시장 통로 통행료(RP)
   const EXIT_PASSAGE_BLACK_RELIEF = 4;  // 암시장 통로로 뒷골목에 바로 붙어 줄어드는 암시장 의심도
-
-  // 가족 반환 v1: 유품(family 태그)을 가족에게 돌려주는 판매 경로. 암시장/위원회보다 값은 낮지만 의심도가 눅는다.
-  const FAMILY_RETURN_RATE = 0.4;        // 유품 값 중 가족이 사례로 돌려주는 비율(암시장 1.35·위원회 0.72보다 낮다)
-  const FAMILY_RETURN_SUSP_RELIEF = 2;   // 유품 하나를 가족에게 돌려줄 때마다 줄어드는 의심도
-
-  // 회수물 태그 marked v1: 위원회 추적 명단에 오른 회수물. 판매 선택을 안전 제출 쪽으로 살짝 기울인다.
-  // 보정은 결정적이며 판당 상한(MARKED_SUSPICION_CAP)으로 묶어 한쪽 경로가 항상 최선이 되지 않게 한다.
-  const MARKED_COMMITTEE_RELIEF = 2;   // 표식 물건 하나를 위원회에 정식 반납할 때마다 추가로 덜어내는 의심도
-  const MARKED_BLACK_SUSPICION = 3;    // 표식 물건 하나를 암시장에 넘길 때마다 추가로 오르는 의심도
-  const MARKED_SUSPICION_CAP = 6;      // 표식 보정(양방향)이 한 판매에서 넘지 못하는 상한(유계)
-
-  // 의심도 대가 v1: 의심도가 실제로 아프도록 두 문턱을 둔다. 값이 낮을 땐 아무 대가도 없고(비징벌),
-  // 문턱을 넘을수록 위원회 감시가 지상까지 따라붙어 조사 시작과 뒷거래가 불리해진다. 보정은 전부 결정적·유계.
-  const SUSPICION_TENSE = 35;          // 긴장선: 입구에 위원회 밴이 붙기 시작한다(가벼운 시작 압박)
-  const SUSPICION_HOT   = 60;          // 과열선: 짐·차량이 검문 명단 위쪽에 오른다(무거운 시작 압박 + 뒷거래 불이익)
-  const SUSPICION_TENSE_MENTAL = 8;    // 긴장선에서 검문을 피해 내려오느라 깎이는 시작 멘탈
-  const SUSPICION_HOT_MENTAL   = 16;   // 과열선에서 더 크게 깎이는 시작 멘탈
-  const SUSPICION_HOT_LIGHT    = 20;   // 과열선에서 감시등을 피하느라 미리 닳는 시작 조명
-  const BLACK_RATE      = 1.35;        // 암시장 기본 매입 배율(위험 프리미엄)
-  const BLACK_RATE_HOT  = 1.15;        // 과열 상태면 물건 출처가 의심스러워져 중개상이 위험 프리미엄을 깎는다(자기도 부담이라)
-  const BROKER_HOT_SUSP = 2;           // 과열 상태에서 뒷거래로 더 붙는 의심도(유계)
 
   const FLOOR_OPEN_CUE = [
     '아래에서 찬바람이 올라온다.',
@@ -199,34 +117,12 @@
 
   const BAG_ALERTS = {
     heavy: '가방 끈이 어깨를 세게 누른다. 뛰면 금방 균형을 잃을 것 같다.',
-    full: '가방이 꽉 찼다. 천이 팽팽하게 당겨져 있다.',
-    blocked: '가방 입구가 벌어져 있다. 더 넣으면 찢어질 것 같다.',
+    full: '더 넣을 곳이 없다. 돌아가서 짐을 정리하자.',
+    blocked: '더 넣을 곳이 없다. 돌아가서 짐을 정리하자.',
   };
-  // 맨손(가방 없음)일 때는 '가방' 대신 맨손 상태에 맞는 문구를 쓴다 — 없는 가방을 두고 꽉 찼다고 하지 않게.
-  const NO_BAG_ALERTS = {
-    full: '손이 가득 찼다. 맨손이라 더는 못 든다.',
-    blocked: '맨손이라 더 쥘 자리가 없다. 손에 쥔 것만으로 벅차다.',
-  };
-  // 가방 용량 경고 문구를 고른다: 맨손이면 맨손용 문구, 가방을 멨으면 기존 문구.
-  function bagAlert(key) {
-    if (meta.bagLevel === NO_BAG_LEVEL && NO_BAG_ALERTS[key]) return NO_BAG_ALERTS[key];
-    return BAG_ALERTS[key];
-  }
-  function noBag() { return meta.bagLevel === NO_BAG_LEVEL; }
-  function packItemLine(item, mode = 'cautious') {
-    const obj = objectParticle(item.name);
-    if (mode === 'recovered') return noBag() ? `버리고 왔던 ${item.name}${obj} 다시 손에 쥐었다.` : `버리고 왔던 ${item.name}${obj} 다시 가방에 넣었다.`;
-    if (mode === 'direct') return noBag() ? `${item.name}까지 손에 쥐었다.` : `${item.name}까지 챙겼다.`;
-    return noBag() ? `숨을 죽이고 ${item.name}${obj} 두 손으로 단단히 쥐었다.` : `숨을 죽이고 ${item.name}${obj} 천천히 가방에 넣었다.`;
-  }
 
-  // 회수물 스트립(loot-icons-strip.png)에서 물건별 아이콘 한 칸을 잘라 보여준다.
-  // name을 넘기면 좁은 슬롯에서 이름이 잘려도 hover로 확인할 수 있게 title을 달되,
-  // 곁에 보이는 텍스트가 접근성 라벨을 이미 담당하므로 아이콘은 aria-hidden으로 둬
-  // 스크린 리더가 이름을 두 번 읽지 않게 한다.
-  function itemIcon(index, name) {
-    const title = name ? ` title="${name}"` : '';
-    return `<span class="loot-icon" style="--icon-index:${index}"${title} aria-hidden="true"></span>`;
+  function itemIcon(index) {
+    return `<span class="loot-icon" style="--icon-index:${index}" aria-hidden="true"></span>`;
   }
 
   function hasFinalConsonant(text) {
@@ -245,7 +141,7 @@
   const DESCEND_DANGER_BUMP= 8;   // 추격 중 강하 시 위험 점프
   const DROP_DANGER_FACTOR = 0.45;// 버리고 도망: 위험 ×0.45
   const DROP_DANGER_MINUS  = 6;
-  const LOOT_RETRIEVE_TICKS = 6;  // 끌개: 버린 물건을 어두운 형체가 거둬 가기까지의 유예(틱). 이후 가까우면 사라진다.
+  const LOOT_RETRIEVE_TICKS = 6;  // 끌개: 버린 물건을 놈이 거둬 가기까지의 유예(틱). 이후 가까우면 사라진다.
   const WAIT_LIGHT_COST     = 4;  // 기다리기: 시간이 흘러 조명 소모
   const START_MENTAL        = 80; // 침착함/판단력. 조명 상태에 따라 서서히 변한다.
   const MENTAL_BREAK_RECOVERY = 28; // 붕괴 후 간신히 다시 움직일 수 있는 기준선
@@ -285,7 +181,7 @@
         },
         cross: '갈림길을 지나던 검은 윤곽이 허리를 숙인다. 고개가 이쪽으로 천천히 돌아온다.',
         ambush: '문 옆 빈틈에서 구부러진 몸이 펴진다. 손끝이 조명 가장자리를 더듬는다.',
-        critical: '젖은 쇳소리가 등 뒤에서 끊긴다. 빛이 닿지 않는 곳에서 어두운 형체가 몸을 숙인다.',
+        critical: '젖은 쇳소리가 등 뒤에서 끊긴다. 빛이 닿지 않는 곳에서 놈이 몸을 숙인다.',
       },
       choices: (ctx) => [
         ctx.canLight && eventChoice('shine', '조명을 정면으로 비추며 물러난다', '', ctx.lightStrong ? 'good' : 'danger'),
@@ -303,7 +199,7 @@
           unknown: '바닥에 젖은 발자국이 따라 찍힌다. 내 발소리보다 반 박자 늦게 들린다.',
         },
         cross: '갈림길 바닥에 젖은 자국이 번진다. 보이지 않는 발소리가 이쪽으로 방향을 튼다.',
-        ambush: '바로 옆 물웅덩이에 새 발자국이 찍힌다. 어두운 형체는 숨소리보다 발소리에 먼저 반응한다.',
+        ambush: '바로 옆 물웅덩이에 새 발자국이 찍힌다. 놈은 숨소리보다 발소리에 먼저 반응한다.',
         critical: '등 뒤에서 물 밟는 소리가 들린다. 내 걸음에 맞춰 따라온다.',
       },
       choices: (ctx) => [
@@ -347,7 +243,7 @@
     {
       elapsed: '3시간 후',
       title: '위원회 드론에 발견되어 구조됐다.',
-      body: '구조 기록에 이름이 찍혔다. 대신 현장 물품은 대부분 압수됐다.',
+      body: '구조 기록이 남았다. 대신 현장 물품은 대부분 압수됐다.',
       rpRate: 0.15,
       suspDelta: -6,
       loss: '위원회가 회수품을 압수하고 구조비 명목으로 정리했다.',
@@ -392,7 +288,7 @@
       apply() {
         run.danger = clamp(run.danger + 10, 0, 100);
       },
-      after: '돌아보면 아무도 없다. 손바닥에 벽의 물기만 축축하게 묻는다.',
+      after: '돌아보면 아무도 없다. 젖은 벽만 손바닥에 남는다.',
     },
     {
       key: 'tremor',
@@ -413,51 +309,16 @@
     },
   ];
 
-  // 조명/장비는 단계가 오를수록 비싸진다. 가방은 정해진 크기 제품 중 하나를 고른다.
+  // 강화: 레벨에 비례해 비용 상승
   const UPGRADES = {
+    bag:    { label: '가방',  cost: lv => 8  * lv },
     light:  { label: '조명',  cost: lv => 5  * lv },
     weapon: { label: '장비',  cost: lv => 10 * lv },
   };
 
-  // 가방은 크기별 제품이다. level 0은 시작·상실 시의 맨손 상태다.
-  // level 1~4는 구매·발견 가능한 실제 가방으로, 값이 제품마다 고정이라 큰 가방을 곧장 사면 그만큼 더 든다.
-  const BAG_PRODUCTS = [
-    { level: 0, name: '맨손',     cap: 1 },
-    { level: 1, name: '작은 가방', cap: 3, cost: 8 },
-    { level: 2, name: '큰 가방',   cap: 5, cost: 20 },
-    { level: 3, name: '대형 가방', cap: 7, cost: 40 },
-    { level: 4, name: '특대 가방', cap: 9, cost: 64 },
-  ];
-  const MAX_BAG_LEVEL = BAG_PRODUCTS[BAG_PRODUCTS.length - 1].level;
-  const NO_BAG_LEVEL = 0; // 맨손 — 가방을 아직 안 샀거나 어두운 형체에게 빼앗긴 상태
-  const CABINET_BAG_FIND_RATES = { 1: 0.20, 2: 0.08, 3: 0.035, 4: 0.015 }; // 큰 가방일수록 발견 확률이 낮다.
-  function bagProduct(level = meta.bagLevel) {
-    const safe = Math.max(NO_BAG_LEVEL, Math.min(MAX_BAG_LEVEL, Math.floor(Number(level)) || 0));
-    return BAG_PRODUCTS.find((bag) => bag.level === safe) || BAG_PRODUCTS[0];
-  }
-  // 구매 가능한 가방(맨손 제외).
-  const purchasableBags = () => BAG_PRODUCTS.filter((bag) => bag.level > NO_BAG_LEVEL);
-  function bagCost(level) {
-    const product = BAG_PRODUCTS.find((bag) => bag.level === level);
-    return product && product.cost != null ? product.cost : Infinity;
-  }
-  // 캐비닛에서 나오는 가방: 지금 것보다 큰 제품만 후보가 되며, 큰 가방일수록 낮은 확률로 발견된다.
-  function bagFindCandidate() {
-    const candidates = purchasableBags().filter((bag) => bag.level > meta.bagLevel);
-    if (!candidates.length) return null;
-    const roll = Math.random();
-    let acc = 0;
-    for (const bag of candidates) {
-      acc += CABINET_BAG_FIND_RATES[bag.level] || 0;
-      if (roll < acc) return bag;
-    }
-    return null;
-  }
-
   /* ---------------- 생존자 v1 ---------------- */
-  // 던전에서 구출해 지상으로 데려온 사람들. 조사를 넘어 유지되며(meta.survivors),
-  // 각자 하나의 영구 효과를 준다. 정비공(장비 강화 할인)·의무병(기절 후유증 완화)·
-  // 지도공(갈림길에서 앞쪽 방 미리보기)·전 위원회 직원(감시소 봉쇄 코드·공식 출구 통행 완화) 넷.
+  // 던전에서 구출해 지상으로 데려온 사람들. 런을 넘어 유지되며(meta.survivors),
+  // 각자 하나의 영구 효과를 준다. v1은 정비공(장비 강화 할인)·의무병(기절 후유증 완화) 둘.
   const SURVIVORS = {
     mechanic: {
       id: 'mechanic',
@@ -476,106 +337,24 @@
       rescueSub: '선반을 들어 다리를 뺀다',
       rescueLog: '선반을 들어 올려 다리를 빼냈다. 의무병이라던 사람이 절뚝이며 따라붙는다. 다음에 쓰러져도 뒤처리를 도와줄 것이다.',
     },
-    mapper: {
-      id: 'mapper',
-      name: '지도공',
-      eventTitle: '벽 뒤의 사람',
-      eventCue: '휘어진 벽판 뒤에서 접힌 지도를 쥔 손이 흔들린다. 젖은 종이에는 아래층 통로가 손으로 그려져 있고, 낮은 목소리가 판을 두드리며 꺼내 달라고 한다.',
-      rescueSub: '벽판을 뜯어 끌어낸다',
-      rescueLog: '휘어진 벽판을 뜯어 그 사람을 끌어냈다. 지도공이라던 이가 젖은 지도를 접어 넣으며 따라붙는다. 이제부터 갈림길마다 앞쪽 방이 뭔지 짚어 준다.',
-    },
-    insider: {
-      id: 'insider',
-      name: '전 위원회 직원',
-      eventTitle: '게이트에 낀 사람',
-      eventCue: '부서진 ID 게이트 사이에 팔이 낀 사람이 몸을 비튼다. 찢어진 끈에 위원회 출입증이 매달려 흔들리고, 갈라진 목소리가 봉쇄 코드를 안다며 꺼내 달라고 한다.',
-      rescueSub: '게이트 틈을 벌려 빼낸다',
-      rescueLog: '뒤틀린 ID 게이트를 벌려 그 사람을 빼냈다. 전 위원회 직원이라던 이가 출입증을 움켜쥔 채 따라붙는다. 이제부터 감시소 단말과 지상 검문에서 낡은 직원 코드가 쓸모가 있다.',
-    },
   };
   const SURVIVOR_IDS = Object.keys(SURVIVORS);
   const KNOWN_SURVIVORS = new Set(SURVIVOR_IDS);
-  // 구출하지 않고 표시해 둔 생존자의 뒤처리 상태. 'marked'=위치만 표시, 'abandoned'=그냥 지나감.
-  const SURVIVOR_OUTCOMES = new Set(['marked', 'abandoned']);
 
   const MECHANIC_DISCOUNT = 0.25;        // 정비공: 장비(weapon) 강화 비용을 이 비율만큼 깎는다
   const MEDIC_SUSPICION_RELIEF = 2;      // 의무병: 기절 시 오르는 의심도를 이만큼 덜어낸다(양수 델타에만)
   const MEDIC_CONSOLATION_RATE = 0.15;   // 의무병: 잃은 짐 값의 이 비율만큼 위로 보상을 더 챙겨준다
-  const INSIDER_WATCHPOST_RELIEF = 4;    // 전 직원: 감시소에서 낡은 직원 코드로 덜어내는 의심도(결정적)
-  const INSIDER_WATCHPOST_LIGHT = 3;     // 전 직원: 봉쇄 코드를 넣느라 드는 조명(소음·위험은 없음)
-  const INSIDER_CHECKPOINT_RELIEF = 2;   // 전 직원: 공식 출구 검문에서 통행 암구호로 덜어내는 의심도
-
-  // 전 위원회 직원: 감시소 봉쇄 코드로 열면 흘러나오는 봉쇄문/재봉인 단서. 비밀은 공짜로 풀지 않는다.
-  const INSIDER_SEAL_LOG = '낡은 직원 코드가 먹혔다. 단말이 순순히 열리고 한 줄이 떠오른다 — “봉쇄문 재봉인은 3단계, 마지막 인증은 현장 직원 코드.” 코드 주인이 옆에서 조용히 고개를 끄덕인다.';
-
-  // 지도공: 갈림길에서 앞쪽 방 목적지의 특징을 낮은 정밀도로 미리 보여준다(kind → 짧은 특징어).
-  // 계단·물건 유무는 mapperHint에서 따로 처리한다. 좌표·정확한 전리품·추격자 위치는 드러내지 않는다.
-  const MAPPER_FEATURE = {
-    corridor: '곧은 복도',
-    door: '문',
-    storage: '창고',
-    office: '관리실',
-    vent: '좁은 통로',
-    hall: '잔해',
-    crack: '균열',
-    watchpost: '꺼진 감시등',
-    'missing-trace': '벽에 붙은 사진',
-  };
 
   const SURVIVOR_EVENT_CHANCE = 0.16;    // 방 도착 시 생존자 조우가 열릴 확률(드물게)
   const SURVIVOR_RESCUE_LIGHT = 8;       // 구출: 끌어내느라 드는 조명
   const SURVIVOR_RESCUE_MENTAL = 5;      // 구출: 끌어내느라 드는 멘탈
   const SURVIVOR_RESCUE_DANGER = 6;      // 구출: 소음으로 오르는 위험
-  // 미구출 후속 v1: 등진(abandoned) 생존자 기록당 딱 한 번, 다음 조사에서 뒤늦게 돌아오는 대가.
-  const SURVIVOR_ABANDON_SUSPICION = 1;  // 등진 기록 하나당 다음 조사에서 오르는 의심도(한 번만)
-  const SURVIVOR_STREET_RUMOR = '거리 소문: 어젯밤 누군가 두드리는 소리가 멈췄다.';
-
-  /* ---------------- 왜곡 변이 v2-lite ---------------- */
-  // 아주 뜨거운 유물을 들고 지상으로 나오면 몸에 번지는 영구 흔적. 조사를 넘어 유지되며(meta.mutations),
-  // 하나가 이득과 대가를 함께 준다. v2-lite는 셋(트리 분기 없이 순서대로 지급), 더 큰 변이 트리는 후속으로 미룬다.
-  //  - fissure-sight(균열 시야): 앞쪽 틈/계단/물건 방향을 낮은 정밀도로 짚어 주지만,
-  //    균열 출구에서 길을 더 잘못 짚어 파손되기 쉬운 짐이 조금 더 긁힌다.
-  //  - black-hand(검은 손): 캐비닛을 더 쉽게 열지만, 공식 출구 검문에서 손이 눈에 띄어 의심도가 조금 더 오른다.
-  //  - muffled-skin(젖은 살갗): 물건을 집는 소음이 한 단계 죽어 들지만, 위원회에 정식 반납할 때
-  //    접수관 눈에 띄어 안전 제출로 눅는 의심도가 조금 덜 줄어든다.
-  const MUTATIONS = {
-    'fissure-sight': {
-      id: 'fissure-sight',
-      name: '균열 시야',
-      gainLog: '벽 틈이 더 선명하게 보인다. 물건과 계단이 있는 쪽이 어렴풋이 짚인다.',
-    },
-    'black-hand': {
-      id: 'black-hand',
-      name: '검은 손',
-      gainLog: '손등에 검은 얼룩이 번졌다. 손가락이 전보다 쉽게 틈을 비집는다.',
-    },
-    'muffled-skin': {
-      id: 'muffled-skin',
-      name: '젖은 살갗',
-      gainLog: '살갗이 짙은 물기에 덮였다. 손끝에 닿는 것들이 소리를 덜 낸다.',
-    },
-  };
-  // 지급은 이 순서대로 첫 번째 미보유 변이를 준다(무작위 없음 — 테스트 결정성).
-  const MUTATION_ORDER = ['fissure-sight', 'black-hand', 'muffled-skin'];
-  const KNOWN_MUTATIONS = new Set(MUTATION_ORDER);
-
-  const MUTATION_TRIGGER_HEAT = 15;    // 이 이상 뜨거운 유물을 하나라도 들고 나오면 변이 후보(안정화 코어·봉인 유물)
-  const MUTATION_TRIGGER_ROOMS = 3;    // 이번 조사에서 이만큼 방을 밟았거나
-  const MUTATION_TRIGGER_FLOOR = 2;    // 이 층 이상 내려갔으면 트리거 조건 충족(둘 중 하나)
-  const FISSURE_SCRATCH_RATE = 0.20;   // 균열 시야가 있으면 균열 출구 긁힘 비율이 조금 커진다(기본 0.15 → 0.20)
-  const FISSURE_EXIT_NOTE = '벽 틈이 너무 많이 보여 빠져나오는 길을 한번 잘못 짚었다.';
-  const BLACKHAND_CHECKPOINT_SUSP = 1; // 검은 손이 있으면 공식 출구 검문에서 의심도가 1 더 오른다(과하지 않게)
-  const BLACKHAND_CHECKPOINT_NOTE = '검은 손이 드러나 검문관이 손등을 한 번 더 훑어봤다.';
-  const BLACKHAND_CABINET_NOTE = '휘어진 손잡이가 검은 손에 너무 쉽게 딸려 온다.';
-  const MUFFLED_PICKUP_NOTE = '부딪치는 소리가 살갗에 스며 낮게 가라앉았다.'; // 젖은 살갗 완화가 실제로 소음 압박을 낮췄을 때만 붙는 한 줄
-  const MUFFLED_COMMITTEE_SUSP = 1; // 젖은 살갗이 있으면 위원회 정식 반납의 안전 완화가 1 줄어든다(과하지 않게, 제출 자체가 의심도를 올리진 않는다)
-  const MUFFLED_COMMITTEE_NOTE = '접수창 불빛에 살갗이 번들거려 접수관이 한 번 더 쳐다봤다.';
 
   /* ---------------- 상태 ---------------- */
 
   const meta = {
     rp: 0,
-    bagLevel: 0, // 처음엔 가방이 없다 — 맨손(NO_BAG_LEVEL)
+    bagLevel: 1,
     lightLevel: 1,
     weaponLevel: 1,
     maxDepth: 1,
@@ -585,33 +364,18 @@
     contractIndex: 0,
     extractionCueSeen: false,
     endingSeen: false,
-    survivors: [],   // 구출해 지상으로 데려온 생존자 id 목록(조사를 넘어 유지)
-    // 구출하지 않고 표시해 둔 생존자 기록(조사를 넘어 유지). id → { outcome, reported }.
-    // outcome: 'marked'|'abandoned'. reported: abandoned의 뒤늦은 대가를 이미 치렀는지.
-    // 여기에 있어도 meta.survivors에는 없으므로, 후속 조사에서 다시 나타나 구출할 수 있다.
-    survivorNotes: {},
-    mutations: [],   // 몸에 번진 왜곡 변이 id 목록(조사를 넘어 유지). 알려진 id만, MUTATION_ORDER 순.
+    survivors: [],   // 구출해 지상으로 데려온 생존자 id 목록(런을 넘어 유지)
+    minimapMode: 'rotate', // rotate: 바라보는 방향 12시 / fixed: 지도 고정
   };
 
   const hasSurvivor = (id) => meta.survivors.includes(id);
-  const hasMutation = (id) => meta.mutations.includes(id);
-  // 구출하지 않고 표시해 둔 생존자를 기록한다. 같은 사람은 마지막 선택으로 덮어쓴다.
-  function noteSurvivor(id, outcome) {
-    if (!KNOWN_SURVIVORS.has(id) || !SURVIVOR_OUTCOMES.has(outcome)) return;
-    meta.survivorNotes[id] = { outcome, reported: false };
-    saveMeta(); // 선택 즉시 저장 — 이번 조사가 실패로 끝나도 기록은 유지된다
-  }
-  // 나중에 구출했으면 표시해 둔 기록을 지운다(같은 사람이 다시 나타나 구출된 경우).
-  function clearSurvivorNote(id) {
-    if (meta.survivorNotes[id]) delete meta.survivorNotes[id];
-  }
   // 아직 구출하지 않은 생존자 중 하나를 고른다(중복 방지). 없으면 null.
   function nextUnrescuedSurvivor() {
     const pool = SURVIVOR_IDS.filter((id) => !hasSurvivor(id));
     if (!pool.length) return null;
     return pool[Math.floor(Math.random() * pool.length)];
   }
-  // 강화 비용: 정비공을 구출했으면 장비(weapon) 강화가 싸진다(결정적). 가방 값은 bagCost로 따로 매긴다.
+  // 강화 비용: 정비공을 구출했으면 장비(weapon) 강화가 싸진다(결정적).
   function upgradeCost(type) {
     const base = UPGRADES[type].cost(meta[type + 'Level']);
     if (type === 'weapon' && hasSurvivor('mechanic')) {
@@ -620,36 +384,16 @@
     return base;
   }
 
-  // 지상 귀환 시 왜곡 변이 지급(조사당 한 번). 조건이 맞으면 미보유 변이 중 MUTATION_ORDER 순으로
-  // 첫 번째를 준다. 무작위 없음(테스트 결정성). 빈 가방이거나 조건 미달이면 아무것도 주지 않는다.
-  function grantMutationOnReturn() {
-    if (!run || run.mutationChecked) return null;
-    run.mutationChecked = true; // 이 조사에서는 다시 판정하지 않는다
-    if (!run.bag.length) return null; // 빈손 귀환에서는 발동하지 않는다
-    // 아주 뜨거운 유물(heat>=15)을 하나라도 들고 나와야 한다.
-    if (!run.bag.some((it) => itemHeat(it) >= MUTATION_TRIGGER_HEAT)) return null;
-    // 충분히 깊이 내려갔거나 방을 여럿 밟았어야 한다.
-    const deepEnough = run.maxFloor >= MUTATION_TRIGGER_FLOOR || run.roomsEntered >= MUTATION_TRIGGER_ROOMS;
-    if (!deepEnough) return null;
-    const nextId = MUTATION_ORDER.find((id) => !hasMutation(id));
-    if (!nextId) return null; // 이미 v1 변이를 모두 가짐
-    meta.mutations.push(nextId);
-    saveMeta(); // 지급 즉시 저장 — 이번 조사 결과와 무관하게 몸에 새겨진다
-    return MUTATIONS[nextId];
-  }
-
   /* ---------------- 저장 / 이어하기 ---------------- */
-  // localStorage에 메타(조사를 넘는 영구 자산)만 저장한다. 조사 상태는 저장하지 않는다.
+  // localStorage에 메타(런을 넘는 영구 자산)만 저장한다. 런 상태는 저장하지 않는다.
   // SAVE_VERSION을 올리면 이전 구조의 저장값은 무시되고 기본값으로 새로 시작한다.
 
   const SAVE_KEY = 'sinkhole-dungeon-save';
   const INTRO_KEY = 'unlit-halls-intro-seen';
-  const SOUND_KEY = 'unlit-halls-sound-off'; // '1'이면 소리를 재생하지 않는다(사용자 무음 선택)
   const SAVE_VERSION = 1;
 
-  // 알려진 단서 이름 집합 — 깨진/오래된 truths 값을 거를 때 쓴다.
-  // truth 태그가 있는 물건 이름만 담는다(앞으로 truth 없는 일반 회수물이 섞여도 저장값이 오염되지 않게).
-  const KNOWN_TRUTHS = new Set(Object.values(ITEM_TABLE).flat().filter(itemTruth).map((it) => it.name));
+  // 알려진 진실 조각 이름 집합 — 깨진/오래된 truths 값을 거를 때 쓴다.
+  const KNOWN_TRUTHS = new Set(Object.values(ITEM_TABLE).flat().map((it) => it.name));
 
   function hasStorage() {
     try {
@@ -688,8 +432,7 @@
         extractionCueSeen: !!meta.extractionCueSeen,
         endingSeen: !!meta.endingSeen,
         survivors: meta.survivors,
-        survivorNotes: meta.survivorNotes,
-        mutations: meta.mutations,
+        minimapMode: meta.minimapMode === 'fixed' ? 'fixed' : 'rotate',
       };
       window.localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -712,8 +455,7 @@
     // 버전 불일치(이전/미래 구조) → 마이그레이션 대신 안전하게 폐기.
     if (data.version !== SAVE_VERSION) { clearSave(); return; }
 
-    // 맨손(0)부터 특대(4)까지. 구버전 저장값(1~4)도 그대로 실린다.
-    meta.bagLevel    = safeInt(data.bagLevel,    NO_BAG_LEVEL, NO_BAG_LEVEL, MAX_BAG_LEVEL);
+    meta.bagLevel    = safeInt(data.bagLevel,    1, 1);
     meta.lightLevel  = safeInt(data.lightLevel,  1, 1);
     meta.weaponLevel = safeInt(data.weaponLevel, 1, 1);
     meta.rp          = safeInt(data.rp,          0, 0);
@@ -724,33 +466,15 @@
     meta.extractionCueSeen = !!data.extractionCueSeen;
     // endingSeen: 구버전 저장값에는 없다 → 기본 false. 하위호환이라 SAVE_VERSION은 올리지 않는다.
     meta.endingSeen = !!data.endingSeen;
-    // truths: 배열이면서 현재 회수물에 실제로 존재하는 이름만 두고 중복 제거.
+    // truths: 배열이면서 현재 회수물에 실제로 존재하는 이름만 남기고 중복 제거.
     if (Array.isArray(data.truths)) {
       meta.truths = [...new Set(data.truths.filter((t) => KNOWN_TRUTHS.has(t)))];
     }
-    // survivors: 구버전 저장값에는 없다 → 기본 []. 알려진 id만 두고 중복 제거(하위호환).
+    // survivors: 구버전 저장값에는 없다 → 기본 []. 알려진 id만 남기고 중복 제거(하위호환).
     if (Array.isArray(data.survivors)) {
       meta.survivors = [...new Set(data.survivors.filter((id) => KNOWN_SURVIVORS.has(id)))];
     }
-    // survivorNotes: 구버전 저장값에는 없다 → 기본 {}. 알려진 id·유효 outcome만 두고,
-    // 이미 구출한 사람은 기록에서 제외한다(하위호환·깨진 값 정리). SAVE_VERSION은 올리지 않는다.
-    meta.survivorNotes = {};
-    const rawNotes = data.survivorNotes;
-    if (rawNotes && typeof rawNotes === 'object') {
-      for (const id of Object.keys(rawNotes)) {
-        if (!KNOWN_SURVIVORS.has(id) || meta.survivors.includes(id)) continue;
-        const note = rawNotes[id];
-        if (note && typeof note === 'object' && SURVIVOR_OUTCOMES.has(note.outcome)) {
-          meta.survivorNotes[id] = { outcome: note.outcome, reported: !!note.reported };
-        }
-      }
-    }
-    // mutations: 구버전 저장값에는 없다 → 기본 []. 알려진 id만 두고 중복 제거,
-    // 표시·지급 순서가 흔들리지 않게 MUTATION_ORDER 순으로 정렬한다. SAVE_VERSION은 올리지 않는다.
-    if (Array.isArray(data.mutations)) {
-      const known = new Set(data.mutations.filter((id) => KNOWN_MUTATIONS.has(id)));
-      meta.mutations = MUTATION_ORDER.filter((id) => known.has(id));
-    }
+    meta.minimapMode = data.minimapMode === 'fixed' ? 'fixed' : 'rotate';
   }
 
   function clearSave() {
@@ -760,12 +484,12 @@
 
   // '기록 초기화' — 저장값을 지우고 meta를 출고 상태로 되돌린다.
   function resetProgress() {
-    if (!window.confirm('모든 기록(RP·장비·깊이·의심도·단서·생존자·변이)을 지울까요?')) return;
+    if (!window.confirm('모든 기록(RP·강화·깊이·의심도·진실 조각·생존자)을 지울까요?')) return;
     clearSave();
     Object.assign(meta, {
-      rp: 0, bagLevel: NO_BAG_LEVEL, lightLevel: 1, weaponLevel: 1,
+      rp: 0, bagLevel: 1, lightLevel: 1, weaponLevel: 1,
       maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0, extractionCueSeen: false,
-      endingSeen: false, survivors: [], survivorNotes: {}, mutations: [],
+      endingSeen: false, survivors: [], minimapMode: 'rotate',
     });
     renderStartScreen();
   }
@@ -774,8 +498,8 @@
 
   function nextGoal() {
     if (meta.maxDepth < FLOORS.length) return `${meta.maxDepth + 1}층 도달`;
-    if (meta.truths.length < TRUTH_TOTAL) return '단서 더 찾기';
-    if (!meta.endingSeen) return '비밀 확인하기';
+    if (meta.truths.length < TRUTH_TOTAL) return '진실 조각 더 찾기';
+    if (!meta.endingSeen) return '진실 확인하기';
     return '심층 루프 계속';
   }
 
@@ -783,11 +507,10 @@
   let timer = null;
   let introMode = 'normal';
   let introLine = 0;
-  let bagShopOpen = false; // 강화 화면에서 가방 선택 목록이 열려 있는가
 
   // 파생값
   const maxLight   = () => 100 + (meta.lightLevel  - 1) * 35;
-  const bagCap     = () => bagProduct().cap;
+  const bagCap     = () => 3   + (meta.bagLevel    - 1) * 2;
   const weaponFactor = () => 1 + (meta.weaponLevel - 1) * 0.25; // 위험 상승 둔화
   const usedSlots  = () => run.bag.reduce((s, i) => s + i.slots, 0);
   const bagValue   = () => run.bag.reduce((s, i) => s + i.value, 0);
@@ -799,8 +522,14 @@
     return run ? Math.round((run.light / maxLight()) * 100) : 0;
   }
 
+  function effectiveLightPercent() {
+    if (!run || run.lightOn === false) return 0;
+    return lightPercent();
+  }
+
   function lightState() {
     const pct = lightPercent();
+    if (run && run.lightOn === false && pct > 0) return { key: 'off', label: '꺼둠' };
     if (pct <= 0) return { key: 'blackout', label: '암전' };
     if (pct < 20) return { key: 'dying', label: '꺼져감' };
     if (pct < 45) return { key: 'flicker', label: '깜빡임' };
@@ -812,6 +541,7 @@
     return {
       floor: 1,
       light: maxLight(),
+      lightOn: true,
       mental: START_MENTAL,
       bag: [],
       danger: 0,
@@ -819,11 +549,13 @@
       currentItem: null,   // 현재 노드에 놓인, 아직 안 집은 물건
       floorMap: null,      // 이번 층의 작은 맵
       currentNodeId: 0,    // 현재 위치한 노드 id
+      facing: 'n',          // 손전등/시선 방향. 좌우 버튼은 이동이 아니라 이 값을 돌린다.
       holdEvent: null,     // 활성 몬스터 대기 이벤트({type:'cross'|'ambush', node})
       pendingEvent: null,  // 방 도착 후 플레이어가 고르는 짧은 환경 이벤트
-      returnWalk: false,   // 귀환 걷기 연출 진행 중(마지막 탭에서 출구 앞에 선다)
-      exitRoute: 'official', // 출구를 빠져나가는 길: official|crack|blackpass (판매처 선택 전에 고른다)
-      exitNote: '',        // 선택한 출구의 결과 문구(장비 화면 요약에 노출)
+      encounterTime: 0,     // 어두운 형체 조우 중 남은 초. 선택지 표시 중에도 줄어든다.
+      returnWalk: false,   // 귀환 걷기 연출 진행 중(마지막 탭에서 지상으로 나간다)
+      exitRoute: 'official', // 지상으로 나가는 길: official|crack|blackpass (판매처 선택 전에 고른다)
+      exitNote: '',        // 선택한 출구의 결과 문구(강화 화면 요약에 노출)
       monsterCrisisCount: 0,
       previousNodeId: null,
       failContext: '',
@@ -838,11 +570,6 @@
       seenMentalAlerts: new Set(),
       seenBagAlerts: new Set(),
       maxFloor: 1,
-      roomsEntered: 0,   // 이번 조사에서 처음 밟은 방 수(왜곡 변이 트리거 판정용)
-      mutationChecked: false, // 이번 귀환에서 변이 지급을 이미 판정했는가(조사당 한 번)
-      mutationNote: '',  // 이번 조사에서 새로 얻은 변이 안내 문구(장비 화면 요약에 노출)
-      markedNote: '',    // 이번 판매에서 표식(marked) 회수물 처리 결과 한 줄(장비 화면 요약에 노출)
-      muffledNote: '',   // 젖은 살갗 대가가 이번 판매에 적용됐을 때 한 줄(장비 화면 요약에 노출)
       grabbedCount: 0,
       droppedCount: 0,
       bought: false,     // 이번 귀환에서 강화를 샀는가
@@ -851,7 +578,6 @@
       lastTruth: null,
       contractResult: null,
       streetNews: '허가소 앞 전광판이 조용하다.',
-      lastPresenceSfx: 'none', // 마지막으로 소리 낸 기척 단계(엣지 트리거로 반복 방지)
     };
   }
 
@@ -886,6 +612,9 @@
   ];
   const MAP_DIRECTION_BY_KEY = Object.fromEntries(MAP_DIRECTIONS.map((d) => [d.key, d]));
   const MAP_DIRECTION_ORDER = ['n', 'ne', 'nw', 'e', 'w', 'se', 'sw', 's'];
+  const CARDINAL_DIRECTIONS = ['n', 'e', 's', 'w'];
+  const FACING_LABELS = { n: '북쪽', e: '동쪽', s: '남쪽', w: '서쪽' };
+  const ENCOUNTER_SECONDS = 6.0;
 
   const posKey = (pos) => `${pos.x},${pos.y}`;
   const sign = (n) => (n > 0 ? 1 : n < 0 ? -1 : 0);
@@ -915,6 +644,93 @@
     const dy = sign(to.pos.y - from.pos.y);
     const dir = MAP_DIRECTIONS.find((d) => d.dx === dx && d.dy === dy);
     return dir ? dir.key : null;
+  }
+
+  function cardinalVector(key) {
+    return MAP_DIRECTION_BY_KEY[key] || MAP_DIRECTION_BY_KEY.n;
+  }
+
+  function turnFacing(delta) {
+    if (!run || run.moving || run.dialogue || run.returnWalk || run.pendingEvent) return;
+    const i = CARDINAL_DIRECTIONS.indexOf(run.facing || 'n');
+    run.facing = CARDINAL_DIRECTIONS[(i + delta + CARDINAL_DIRECTIONS.length) % CARDINAL_DIRECTIONS.length];
+    run.lastAction = `${FACING_LABELS[run.facing]}으로 조명을 돌렸다.`;
+    log(run.lastAction);
+    render();
+  }
+
+  function directionScore(from, to, facingKey) {
+    if (!from || !to || !from.pos || !to.pos) return -Infinity;
+    const f = cardinalVector(facingKey || (run && run.facing) || 'n');
+    const dx = sign(to.pos.x - from.pos.x);
+    const dy = sign(to.pos.y - from.pos.y);
+    return dx * f.dx + dy * f.dy;
+  }
+
+  function relativeExit(rel) {
+    if (!run || !run.floorMap) return null;
+    const node = currentNode();
+    if (!node) return null;
+    const f = cardinalVector(run.facing || 'n');
+    let best = null;
+    let bestScore = -Infinity;
+    node.exits.forEach((id) => {
+      const to = nodeById(id);
+      if (!to || !to.pos || !node.pos) return;
+      const dx = sign(to.pos.x - node.pos.x);
+      const dy = sign(to.pos.y - node.pos.y);
+      const front = dx * f.dx + dy * f.dy;
+      const side = dx * (-f.dy) + dy * f.dx;
+      let score = -Infinity;
+      if (rel === 'front') score = front * 3 - Math.abs(side);
+      if (rel === 'back') score = -front * 3 - Math.abs(side);
+      if (rel === 'left') score = -side * 3 + Math.max(0, front);
+      if (rel === 'right') score = side * 3 + Math.max(0, front);
+      if (score > bestScore) { bestScore = score; best = id; }
+    });
+    if (best == null) return null;
+    if ((rel === 'front' || rel === 'back') && bestScore < 1.5) return null;
+    if ((rel === 'left' || rel === 'right') && bestScore < 1.2) return null;
+    return best;
+  }
+
+  function visibleStalkerInLight() {
+    if (!run || !run.floorMap || effectiveLightPercent() <= 0) return false;
+    const s = stalker();
+    if (!s || !stalkerAwake()) return false;
+    const node = currentNode();
+    const target = nodeById(s.nodeId);
+    if (!node || !target || !node.pos || !target.pos) return false;
+    const dist = bfs(run.floorMap.nodes, run.currentNodeId)[s.nodeId];
+    if (!Number.isFinite(dist) || dist > 3) return false;
+    return directionScore(node, target, run.facing) > 0.35;
+  }
+
+  function currentRoomHasCover() {
+    const node = currentNode();
+    return !!node && ['storage', 'office', 'watchpost', 'door'].includes(node.kind);
+  }
+
+  function roomPropLabel(node) {
+    if (!node) return '';
+    return {
+      office: '찌그러진 캐비닛',
+      watchpost: '꺼진 감시 단말',
+      storage: '낮은 사물함',
+      door: '비상등 문틀',
+      hall: '무너진 잔해',
+      vent: '낮은 환풍구',
+      crack: '젖은 균열',
+      corridor: '긴 복도',
+      stairs: '아래 계단',
+      entry: '입구 표식',
+    }[node.kind] || '';
+  }
+
+  function toggleMinimapMode() {
+    meta.minimapMode = meta.minimapMode === 'fixed' ? 'rotate' : 'fixed';
+    saveMeta();
+    render();
   }
 
   function placeNeighbor(nodes, fromId, toId, preferred = []) {
@@ -1043,7 +859,7 @@
   }
 
   // 추격자를 한 칸 이동시킨다. 깨어 있으면 마지막으로 들린 소음(없으면 플레이어) 쪽으로,
-  // 잠들어 있으면 아주 가끔 인접 칸으로 배회한다. silent면 접근 큐를 두지 않는다.
+  // 잠들어 있으면 아주 가끔 인접 칸으로 배회한다. silent면 접근 큐를 남기지 않는다.
   function moveStalkerOneStep(opts) {
     const s = stalker();
     if (!s || !run || !run.floorMap) return;
@@ -1062,7 +878,7 @@
     }
     if (next == null) return;
     s.nodeId = next;
-    // 바로 옆까지 붙으면 짧은 큐를 한 번만 띄운다(소리 없는 이동은 제외).
+    // 바로 옆까지 붙으면 한 번만 짧은 큐를 남긴다(소리 없는 이동은 제외).
     const silent = !!(opts && opts.silent);
     if (!silent && awake) {
       const d = stalkerDistance();
@@ -1090,27 +906,16 @@
     s.stepCounter = 0;
   }
 
-  // 젖은 살갗 변이: 줍기 압박 계산에서만 소음을 한 단계 낮게 취급한다(high→medium, medium→low, low는 그대로).
-  // 던전 힌트 문구·줍기 버튼 부제는 물건 자체의 성질이라 이 헬퍼를 쓰지 않고 itemNoise를 그대로 쓴다.
-  function effectivePickupNoise(item) {
-    const noise = itemNoise(item);
-    if (!hasMutation('muffled-skin')) return noise;
-    if (noise === 'high') return 'medium';
-    if (noise === 'medium') return 'low';
-    return noise;
-  }
-
   // 집기 소음 처리: 아이템 noise와 조심/재빨리에 따라 추격 압박을 다르게 준다.
   // - careful: 어느 noise든 즉시 한 칸 끌어당기지 않는다(loud=false).
   //     · low/medium: 깨우고 이 칸을 기억시키는 정도.
   //     · high: 조용히 다뤄도 티가 난다 — 이미 두 칸 이상 떨어져 있으면 소리 없이 한 칸 좁혀오고
-  //       경고 한 줄을 띄운다. 붙어 있을 때(dist<=1)는 좁히지 않아 부당한 즉살은 없다.
+  //       경고 한 줄을 남긴다. 붙어 있을 때(dist<=1)는 좁히지 않아 부당한 즉살은 없다.
   // - quick: medium/high는 큰 소리라 즉시 한 칸 끌어당긴다(loud=true).
   //     low는 재빨라도 즉시 한 칸까지는 아니다(loud=false) — 대신 호출부에서 위험만 더 오른다.
   // 반환: 상황 문구에 덧붙일 경고(없으면 '').
   function applyPickupNoise(nodeId, item, cautious) {
-    const rawNoise = itemNoise(item);
-    const noise = effectivePickupNoise(item); // 젖은 살갗이 있으면 여기서만 한 단계 낮아진다
+    const noise = itemNoise(item);
     const loud = !cautious && noise !== 'low';
     emitNoise(nodeId, { loud });
     if (cautious && noise === 'high') {
@@ -1120,10 +925,7 @@
       if (stalkerDistance() > 1) moveStalkerOneStep({ silent: true });
       return '금속이 부딪치는 둔탁한 소리가 어둠에 퍼졌다.';
     }
-    // 완화가 실제로 행동을 바꿨을 때만(조심+high가 medium으로 내려가 접근을 피했거나,
-    // 재빨리+medium이 low로 내려가 즉시 끌어당김이 풀렸을 때) 한 줄을 덧붙인다.
-    const muffled = noise !== rawNoise && ((cautious && rawNoise === 'high') || (!cautious && rawNoise === 'medium'));
-    return muffled ? MUFFLED_PICKUP_NOTE : '';
+    return '';
   }
 
   // 위기 탈출 성공 뒤: 추격자를 플레이어에게서 minDist 엣지 이상 떨어뜨린다.
@@ -1179,56 +981,6 @@
     return currentNode().exits.includes(step) ? step : null;
   }
 
-  // 숨은 어두운 형체의 '기척'을 4단계로 거칠게 요약한다. 정확한 거리·위험 수치는 절대 노출하지 않고,
-  // 화면 연출(가장자리 어둠·미세 깜빡임·짧은 진동)의 강도만 고르기 위한 값이다.
-  //   none    안전 — 연출 없음
-  //   far     추격이 붙었거나 위험이 어느 정도 — 아주 옅은 가장자리 어둠
-  //   near    깨어 바로 옆(≤2)이거나 위험이 높음 — 어둠 강화 + 미세 깜빡임/약한 진동
-  //   contact 조우 위기창이 열렸거나 같은 칸이거나 위험이 극에 달함 — 짧게 조이는 강한 가장자리
-  function presenceTier() {
-    if (!run || !run.floorMap) return 'none';
-    const encounterOpen = !!(run.pendingEvent && run.pendingEvent.type === 'monster-encounter');
-    const dist = stalkerDistance();
-    const danger = run.danger || 0;
-    if (encounterOpen || dist <= 0 || danger >= 82) return 'contact';
-    if ((stalkerAwake() && dist <= 2) || danger >= 55) return 'near';
-    if (run.chasing || danger >= 30) return 'far';
-    return 'none';
-  }
-
-  // 기척 단계를 무대 CSS 클래스로만 반영한다. 매 렌더마다 이전 단계 클래스를 지우고
-  // 현재 단계 하나만 붙인다 — 텍스트·숫자·스프라이트는 전혀 노출하지 않는다.
-  function renderPresenceFx() {
-    const stage = el['stage'];
-    if (!stage) return;
-    stage.classList.remove('presence-far', 'presence-near', 'presence-contact');
-    const tier = presenceTier();
-    if (tier !== 'none') stage.classList.add('presence-' + tier);
-    maybePlayPresenceSfx(tier);
-  }
-
-  // 기척 사운드는 단계가 올라갈 때만, near/contact에서만 짧은 맥동 하나로 낸다.
-  // renderPresenceFx는 매 렌더 호출되므로 run.lastPresenceSfx로 엣지 트리거만 잡는다(반복 방지).
-  const PRESENCE_RANK = { none: 0, far: 1, near: 2, contact: 3 };
-  function maybePlayPresenceSfx(tier) {
-    if (!run) return;
-    const rank = PRESENCE_RANK[tier] || 0;
-    const prevRank = PRESENCE_RANK[run.lastPresenceSfx || 'none'] || 0;
-    if (rank > prevRank && rank >= PRESENCE_RANK.near) {
-      playSfx(tier === 'contact' ? 'presence-contact' : 'presence-near');
-    }
-    run.lastPresenceSfx = tier;
-  }
-
-  // 층별 배경 테마 v1: 1층 도시 잔해(따뜻한 잔해 톤) · 2층 연구시설(차가운 톤) · 3층+ 시공간 심층(뒤틀린 심층 톤).
-  // 무대 배경/시야에 옅은 색조만 얹는 CSS 클래스 하나만 붙인다 — DOM·연출은 그대로, 층에 맞춰 CSS 변수만 바뀐다.
-  const FLOOR_THEME_CLASSES = ['floor-theme-ruins', 'floor-theme-lab', 'floor-theme-deep'];
-  function floorThemeClass(floor) {
-    if (floor >= 3) return 'floor-theme-deep';
-    if (floor === 2) return 'floor-theme-lab';
-    return 'floor-theme-ruins';
-  }
-
   // 미끼/버린 물건을 둘 인접 칸 하나를 고른다: 추격자 쪽이 아닌 출구를 우선하고,
   // 계단은 피한다(그쪽에 두면 되찾으러 갈 수 없다). 출구가 없으면 현재 칸.
   function baitAdjacentNodeId() {
@@ -1253,13 +1005,38 @@
     s.nearCued = false;
   }
 
-  // 끌개 v1: 버린 물건을 바닥 자국으로 두고, 추격자가 그것을 되찾으러 오게 한다.
-  // 한 층에 활성 자국은 하나뿐(새로 버리면 이전 자국은 덮인다). 인접 칸(추격자 반대쪽) 우선.
+  function droppedLoots() {
+    if (!run || !run.floorMap) return [];
+    if (!Array.isArray(run.floorMap.droppedLoot)) {
+      run.floorMap.droppedLoot = run.floorMap.droppedLoot ? [run.floorMap.droppedLoot] : [];
+    }
+    return run.floorMap.droppedLoot;
+  }
+
+  function addDroppedLoot(item, nodeId, options = {}) {
+    if (!run || !run.floorMap || !item || nodeId == null) return null;
+    const loot = {
+      id: `loot-${Date.now().toString(36)}-${Math.floor(Math.random() * 100000).toString(36)}`,
+      nodeId,
+      item,
+      ticks: 0,
+      broken: itemFragile(item) || !!options.broken,
+      source: options.source || 'drop',
+    };
+    droppedLoots().push(loot);
+    return loot;
+  }
+
+  function removeDroppedLoot(loot) {
+    if (!run || !run.floorMap || !loot) return;
+    run.floorMap.droppedLoot = droppedLoots().filter((entry) => entry !== loot && entry.id !== loot.id);
+  }
+
+  // 끌개 v2: 버린 물건 여러 개를 각 칸 바닥 자국으로 둔다. 추격자는 가까운 물건도 되찾으러 간다.
   function dropLootTrace(item) {
     if (!run || !run.floorMap || !item) return null;
     const nodeId = baitAdjacentNodeId();
-    run.floorMap.droppedLoot = { nodeId, item, ticks: 0, broken: itemFragile(item) };
-    // 추격자를 물건 쪽으로 돌린다 — 플레이어가 아니라 훔친 물건을 좇게 한다.
+    const loot = addDroppedLoot(item, nodeId, { source: 'bait' });
     const s = stalker();
     if (s) {
       s.lastHeardId = nodeId;
@@ -1267,42 +1044,56 @@
       s.stepCounter = 0;  // 새 목표이므로 이동 주기를 처음부터
       s.nearCued = false;
     }
-    return run.floorMap.droppedLoot;
+    return loot;
+  }
+
+  // 가방에서 직접 꺼내 놓은 물건은 현재 칸 바닥에 둔다. 물건을 바꿔 담기 위한 정리 동작이다.
+  function dropLootHere(item) {
+    if (!run || !run.floorMap || !item) return null;
+    const nodeId = run.currentNodeId;
+    const loot = addDroppedLoot(item, nodeId, { source: 'manual' });
+    const s = stalker();
+    if (s && stalkerAwake()) {
+      s.lastHeardId = nodeId;
+      s.nearCued = false;
+    }
+    return loot;
   }
 
   // 끌개 회수 판정(틱마다): 추격자가 버린 물건 칸에 닿거나, 깨어 가까이서 유예가 다하면 거둬 간다.
   function maybeRetrieveDroppedLoot() {
-    const loot = run && run.floorMap ? run.floorMap.droppedLoot : null;
-    if (!loot) return;
-    loot.ticks += 1;
+    const loots = droppedLoots();
+    if (!loots.length) return;
     const s = stalker();
     if (!s) return;
-    const reached = s.nodeId === loot.nodeId;
-    let grace = false;
-    if (!reached && loot.ticks >= LOOT_RETRIEVE_TICKS && stalkerAwake()) {
-      const d = bfs(run.floorMap.nodes, loot.nodeId)[s.nodeId];
-      grace = d != null && d <= 1; // 어두운 형체가 바로 옆까지 왔을 때만 — 멀리서 사라지지 않게
+    for (const loot of [...loots]) {
+      loot.ticks += 1;
+      const reached = s.nodeId === loot.nodeId;
+      let grace = false;
+      if (!reached && loot.ticks >= LOOT_RETRIEVE_TICKS && stalkerAwake()) {
+        const d = bfs(run.floorMap.nodes, loot.nodeId)[s.nodeId];
+        grace = d != null && d <= 1;
+      }
+      if (!reached && !grace) continue;
+      removeDroppedLoot(loot);
+      const item = loot.item;
+      const obj = `${item.name}${objectParticle(item.name)}`;
+      const line = loot.broken
+        ? `깨진 채 버린 ${obj}, 어둠이 조각째 훑어 가는 소리가 났다.`
+        : `버리고 온 ${obj}, 어둠 저편에서 다시 끌어가는 소리가 났다.`;
+      const nearDist = bfs(run.floorMap.nodes, run.currentNodeId)[loot.nodeId];
+      const near = nearDist != null && nearDist <= 1;
+      log(line, near ? 'hot' : undefined);
+      if (near) run.lastAction = line;
     }
-    if (!reached && !grace) return;
-    run.floorMap.droppedLoot = null;
-    const item = loot.item;
-    const obj = `${item.name}${objectParticle(item.name)}`;
-    const line = loot.broken
-      ? `깨진 채 버린 ${obj}, 어둠이 조각째 훑어 가는 소리가 났다.`
-      : `버리고 온 ${obj}, 어둠 저편으로 바닥을 긁으며 끌려가는 소리가 났다.`;
-    // 플레이어가 같은/인접 칸일 때만 상황판에도 띄운다(멀면 로그만 — 대사로 도배하지 않는다).
-    const nearDist = bfs(run.floorMap.nodes, run.currentNodeId)[loot.nodeId];
-    const near = nearDist != null && nearDist <= 1;
-    log(line, near ? 'hot' : undefined);
-    if (near) run.lastAction = line;
   }
 
-  // 각 층 진입 시 5~7개 노드짜리 작은 맵을 만든다.
+  // 각 층 진입 시 8~11개 노드짜리 조금 큰 맵을 만든다.
   // - 0번은 입구. 가장 깊은 잎 노드는 계단(다음 층 입구)으로 둔다(마지막 층 제외).
   // - 계단은 항상 차수 1(잎)이라, 계단 직전 노드를 반드시 지나가야 한다.
   function generateFloorMap(floor) {
     const isLast = floor >= FLOORS.length;
-    const count = 5 + Math.floor(Math.random() * 3); // 5..7
+    const count = 8 + Math.floor(Math.random() * 4); // 8..11
     const nodes = [];
     for (let i = 0; i < count; i++) {
       nodes.push({
@@ -1364,19 +1155,8 @@
       applyKind(nodes[watchpostId], watchpostKind);
     }
 
-    // 실종자 흔적방도 드물게 등장한다: 감시소가 아닌 비입구/비계단 노드 하나를 흔적방으로 바꾼다(층당 최대 하나).
-    let traceId = -1;
-    const traceKind = NODE_KINDS.find((k) => k.key === 'missing-trace');
-    if (traceKind && Math.random() < MISSING_TRACE_SPAWN_CHANCE) {
-      const traceCandidates = others.filter((id) => id !== watchpostId);
-      if (traceCandidates.length) {
-        traceId = traceCandidates[Math.floor(Math.random() * traceCandidates.length)];
-        applyKind(nodes[traceId], traceKind);
-      }
-    }
-
-    // 7) 아이템 배치: 입구/계단/감시소/흔적방을 제외한 노드 중 2~3개(방 이벤트가 물건에 가려지지 않게).
-    const itemSlots = shuffle(others.filter((id) => id !== watchpostId && id !== traceId));
+    // 7) 아이템 배치: 입구/계단/감시소를 제외한 노드 중 2~3개(감시소 이벤트가 물건에 가려지지 않게).
+    const itemSlots = shuffle(others.filter((id) => id !== watchpostId));
     const itemCount = Math.min(itemSlots.length, 2 + (Math.random() < 0.5 ? 1 : 0));
     for (let i = 0; i < itemCount; i++) nodes[itemSlots[i]].item = pickFloorItem(floor, nodes[itemSlots[i]]);
 
@@ -1386,7 +1166,7 @@
     // 9) 숨은 이동 추격자 하나를 배치한다.
     const stalker = seedStalker(nodes, 0, stairsId, floor);
 
-    return { nodes, entryId: 0, stairsId, count, travelledEdges: new Set(), stalker, droppedLoot: null };
+    return { nodes, entryId: 0, stairsId, count, travelledEdges: new Set(), stalker, droppedLoot: [] };
   }
 
   function monsterKindForEvent(type, floor, node) {
@@ -1437,20 +1217,20 @@
   const el = {};
   const IDS = [
     'screen-start', 'screen-dungeon', 'screen-return', 'screen-upgrade', 'screen-fail', 'screen-ending',
-    'btn-enter', 'btn-reset', 'btn-sound', 'start-art', 'intro-panel', 'intro-line', 'intro-hint', 'enter-fade', 'start-rp', 'start-depth', 'start-susp', 'start-codex', 'start-codex-tail', 'start-contract', 'start-goal',
+    'btn-enter', 'btn-reset', 'start-art', 'intro-panel', 'intro-line', 'intro-hint', 'enter-fade', 'start-rp', 'start-depth', 'start-susp', 'start-truth-count', 'start-codex', 'start-codex-tail', 'start-contract', 'start-goal',
     'btn-meta', 'meta-panel', 'hud-rp', 'hud-depth', 'hud-bag',
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
     'room-choices', 'dock', 'dock-actions',
-    'bag-slots', 'choice-cue', 'mini-map', 'recovery-point', 'chaser', 'stage', 'stage-situation', 'dialogue-card', 'dialogue-copy', 'depth-rail', 'log',
+    'bag-slots', 'choice-cue', 'mini-map', 'mini-mode', 'recovery-point', 'stage-objects', 'chaser', 'stage', 'stage-situation', 'dialogue-card', 'dialogue-copy', 'depth-rail', 'log',
     'btn-grab', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
-    'buy-committee', 'buy-black', 'buy-family', 'family-rp', 'family-susp', 'committee-line', 'black-line', 'family-line', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
-    'start-survivors', 'start-mutations',
-    'up-bag', 'bag-shop', 'up-light', 'up-weapon', 'btn-again',
+    'buy-committee', 'buy-black', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
+    'start-survivors',
+    'up-bag', 'up-light', 'up-weapon', 'btn-again',
     'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
-    'ending-continue', 'ending-reset',
+    'ending-truth-count', 'ending-continue', 'ending-reset',
   ];
   function cacheDom() { IDS.forEach((id) => { el[id] = document.getElementById(id); }); }
 
@@ -1490,10 +1270,9 @@
   }
 
   function makeStreetNews(buyer, quote) {
-    if (buyer === 'family') return '거리 소문: 가족에게 돌아간 유품 때문에, 지상 소문이 조금 누그러졌다.';
     const hot = quote.suspDelta > 10 || meta.suspicion >= 55;
     if (buyer === 'black' && hot) return '뉴스: “싱크홀 밀반출 급증”… 검문 드론이 한 블록 가까워졌다.';
-    if (buyer === 'black') return '소문: 암시장 매입가가 올랐다. 대신 검문소가 물건 출처를 캐기 시작했다.';
+    if (buyer === 'black') return '소문: 암시장 매입가가 올랐다. 대신 허가소가 이름을 묻기 시작했다.';
     if (meta.suspicion <= 15) return '공보: 위원회가 “성실 반납자” 명단을 정리 중이다. 아직 조용하다.';
     return '뉴스: 위원회가 일부 반납품을 은폐했다는 제보가 돈다.';
   }
@@ -1520,7 +1299,6 @@
 
   // 줍기 후 연출: 회수물이 플레이어 쪽으로 빨려 들어가는 짧은 애니메이션.
   function playGrabFx() {
-    playSfx('grab'); // 챙기기/되챙기기 공용 훅 — 짧은 천/금속 틱
     if (!el['stage']) return;
     el['stage'].classList.remove('grabbing');
     void el['stage'].offsetWidth;
@@ -1531,294 +1309,6 @@
   function show(screenId) {
     document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
     el[screenId].classList.add('active');
-    syncAmbience(); // 화면이 바뀌면 배경 앰비언스도 맞춘다(던전 화면 밖이면 멈춘다)
-  }
-
-  /* ---------------- 사운드 (WebAudio · 코드 생성 · 파일 없음) ----------------
-     모든 소리는 첫 사용자 제스처 이후에만 시작한다(자동재생 금지). AudioContext가
-     없거나 브라우저가 막으면 조용히 무시하고 절대 throw하지 않는다. 파일/네트워크
-     없이 짧은 톤·노이즈로만 생성한다. localStorage 무음 플래그로 끌 수 있다. */
-
-  let audioCtx = null;
-  let masterGain = null;
-  let soundOff = false;
-
-  // 층별 배경 앰비언스 루프 상태 — run.lastPresenceSfx와 같은 엣지 트리거 패턴으로
-  // 현재 재생 중인 테마('ruins'/'lab'/'deep') 또는 'off'만 추적해 바뀔 때만 전환한다.
-  let ambienceTheme = 'off';
-  let ambienceGain = null;     // 테마 그래프 전체를 문(게이트)하는 게인 — 전환/정지는 이 하나만 램프한다
-  let ambienceSources = null;  // 정지 시 stop()을 걸어야 하는 소스 노드(오실레이터/버퍼) 목록
-  let ambienceAllNodes = null; // 정지 후 disconnect할 전체 노드 목록(필터·LFO 포함, 누수 방지)
-  const AMBIENCE_GAIN = 0.04;  // 앰비언스 전용 게인 — 마스터 게인(0.16)을 그대로 통과하므로 훨씬 낮게 잡는다
-
-  // 저장된 무음 선호를 읽는다(막힌 환경이면 소리 켜짐 기본).
-  function loadSoundPref() {
-    try { soundOff = window.localStorage.getItem(SOUND_KEY) === '1'; }
-    catch (e) { soundOff = false; }
-  }
-
-  // 무음 여부를 바꾸고 저장한다. 켜는 순간은 제스처 안이므로 컨텍스트를 깨운다.
-  function setSoundOff(off) {
-    soundOff = !!off;
-    try { window.localStorage.setItem(SOUND_KEY, soundOff ? '1' : '0'); }
-    catch (e) { /* 저장 차단 환경 무시 */ }
-    if (!soundOff) ensureAudio();
-    syncAmbience(); // 끄면 즉시 멈추고, 켜면(제스처 안이므로) 현재 화면에 맞게 다시 채운다
-  }
-
-  // 첫 제스처에 컨텍스트를 만들거나 깨운다. 실패해도 조용히 포기한다.
-  function ensureAudio() {
-    if (soundOff) return null;
-    try {
-      if (!audioCtx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return null;
-        audioCtx = new AC();
-        masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.16; // 마스터 게인 낮게 — 저피로
-        masterGain.connect(audioCtx.destination);
-      }
-      if (audioCtx.state === 'suspended' && audioCtx.resume) audioCtx.resume();
-    } catch (e) {
-      audioCtx = null; // 막히면 조용히 포기
-      return null;
-    }
-    return audioCtx;
-  }
-
-  // 짧은 톤 하나. {freq, to(글라이드 목표), dur(s), type, gain, delay(s)}.
-  function tone(opts) {
-    const ctx = ensureAudio();
-    if (!ctx || !masterGain) return;
-    try {
-      const o = opts || {};
-      const t0 = ctx.currentTime + (o.delay || 0);
-      const dur = o.dur || 0.12;
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = o.type || 'sine';
-      osc.frequency.setValueAtTime(o.freq || 440, t0);
-      if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
-      const peak = o.gain != null ? o.gain : 0.5;
-      // 짧은 어택 + 부드러운 감쇠 — 클릭/거친 소리 방지
-      g.gain.setValueAtTime(0.0001, t0);
-      g.gain.exponentialRampToValueAtTime(peak, t0 + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      osc.connect(g); g.connect(masterGain);
-      osc.start(t0);
-      osc.stop(t0 + dur + 0.03);
-    } catch (e) { /* 무시 */ }
-  }
-
-  // 짧은 감쇠 노이즈 버스트(천/금속 틱·긁힘·둔탁한 낙하). {dur(s), gain, cutoff(Hz), delay(s)}.
-  function noiseBurst(opts) {
-    const ctx = ensureAudio();
-    if (!ctx || !masterGain) return;
-    try {
-      const o = opts || {};
-      const t0 = ctx.currentTime + (o.delay || 0);
-      const dur = o.dur || 0.1;
-      const frames = Math.max(1, Math.floor(ctx.sampleRate * dur));
-      const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / frames);
-      const src = ctx.createBufferSource();
-      src.buffer = buffer;
-      const g = ctx.createGain();
-      const peak = o.gain != null ? o.gain : 0.4;
-      g.gain.setValueAtTime(peak, t0);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      let node = src;
-      if (o.cutoff) {
-        const lp = ctx.createBiquadFilter();
-        lp.type = 'lowpass';
-        lp.frequency.value = o.cutoff;
-        src.connect(lp); node = lp;
-      }
-      node.connect(g); g.connect(masterGain);
-      src.start(t0);
-      src.stop(t0 + dur + 0.03);
-    } catch (e) { /* 무시 */ }
-  }
-
-  // 이름표 하나로 핵심 행동 소리를 재생한다. 무음/막힌 오디오/모르는 이름은 조용히 무시.
-  function playSfx(name) {
-    if (soundOff) return;
-    if (!ensureAudio()) return;
-    switch (name) {
-      case 'grab': // 챙기기 — 짧은 천/금속 틱 + 낮은 확인음
-        noiseBurst({ dur: 0.05, gain: 0.26, cutoff: 2600 });
-        tone({ freq: 320, to: 360, dur: 0.08, type: 'triangle', gain: 0.26, delay: 0.02 });
-        break;
-      case 'drop': // 버리고 도망 — 바닥을 긁는 스크레이프
-        noiseBurst({ dur: 0.22, gain: 0.3, cutoff: 1400 });
-        tone({ freq: 180, to: 90, dur: 0.2, type: 'sawtooth', gain: 0.12 });
-        break;
-      case 'sale': // 판매/반환 — 낮은 확인 펄스 두 번
-        tone({ freq: 210, dur: 0.12, type: 'sine', gain: 0.5 });
-        tone({ freq: 280, dur: 0.16, type: 'sine', gain: 0.42, delay: 0.11 });
-        break;
-      case 'upgrade': // 강화 성공 — 부드럽게 오르는 차임
-        tone({ freq: 440, dur: 0.14, type: 'sine', gain: 0.4 });
-        tone({ freq: 587, dur: 0.16, type: 'sine', gain: 0.4, delay: 0.1 });
-        tone({ freq: 784, dur: 0.24, type: 'sine', gain: 0.34, delay: 0.2 });
-        break;
-      case 'fail': // 실패/기절 — 짧고 둔탁한 낙하(거칠지 않게)
-        tone({ freq: 160, to: 70, dur: 0.32, type: 'sine', gain: 0.5 });
-        noiseBurst({ dur: 0.14, gain: 0.16, cutoff: 500, delay: 0.02 });
-        break;
-      case 'presence-near': // 기척 접근 — 아주 낮고 짧은 맥동 하나
-        tone({ freq: 96, dur: 0.5, type: 'sine', gain: 0.32 });
-        break;
-      case 'presence-contact': // 기척 접촉 — 조금 더 낮고 무거운 맥동 하나
-        tone({ freq: 72, dur: 0.6, type: 'sine', gain: 0.4 });
-        break;
-      default:
-        break;
-    }
-  }
-
-  /* ---------------- 배경 앰비언스 (층 테마별 루프) ----------------
-     조사 중(던전 화면)에서만 아주 조용히 깔리는 배경 루프. 단발 큐(tone/noiseBurst)보다
-     훨씬 낮은 전용 게인(AMBIENCE_GAIN)으로 마스터 게인을 통과시킨다. 지상 화면에서는
-     완전히 멈춘다(게인 램프 후 stop+disconnect). setInterval 폴링 없이 루프 버퍼/오실레이터
-     + LFO만으로 지속음을 만들고, 페이드는 항상 게인 램프로 처리한다. */
-
-  // 1층 도시 잔해 — 저역 필터를 씌운 노이즈 루프에 느린 게인 LFO를 얹어 바람/잔해 울림처럼 흔든다.
-  function buildRuinsAmbience(ctx, out) {
-    const dur = 4;
-    const frames = Math.max(1, Math.floor(ctx.sampleRate * dur));
-    const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1;
-    const src = ctx.createBufferSource();
-    src.buffer = buffer;
-    src.loop = true;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 240; // 낮고 따뜻한 잔해 울림
-    const g = ctx.createGain();
-    g.gain.value = 1;
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.06; // 약 16초 주기로 밀려오듯 느리게
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.32;
-    lfo.connect(lfoGain); lfoGain.connect(g.gain);
-    src.connect(lp); lp.connect(g); g.connect(out);
-    src.start(); lfo.start();
-    return { sources: [src, lfo], nodes: [src, lp, g, lfo, lfoGain] };
-  }
-
-  // 2층 연구시설 — 낮은 사인 험에 삼각파 배음을 살짝 얹고, 아주 느린 LFO로 미세하게만 흔든다.
-  function buildLabAmbience(ctx, out) {
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = 100; // 창백한 전기 험
-    const osc2 = ctx.createOscillator();
-    osc2.type = 'triangle';
-    osc2.frequency.value = 100.6; // 살짝 어긋나 결을 준다
-    const g2 = ctx.createGain();
-    g2.gain.value = 0.3;
-    const g = ctx.createGain();
-    g.gain.value = 1;
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.045; // 아주 느린 미세 변동(호흡하듯)
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.1;
-    lfo.connect(lfoGain); lfoGain.connect(g.gain);
-    osc.connect(g); osc2.connect(g2); g2.connect(g); g.connect(out);
-    osc.start(); osc2.start(); lfo.start();
-    return { sources: [osc, osc2, lfo], nodes: [osc, osc2, g, g2, lfo, lfoGain] };
-  }
-
-  // 3층 이상 심층 — 아주 살짝 어긋난 두 저음 오실레이터가 만드는 맥놀이(비트)로 뒤틀린 드론을 낸다.
-  function buildDeepAmbience(ctx, out) {
-    const osc1 = ctx.createOscillator();
-    osc1.type = 'sine';
-    osc1.frequency.value = 46;
-    const osc2 = ctx.createOscillator();
-    osc2.type = 'sine';
-    osc2.frequency.value = 49; // 3Hz 어긋남이 느린 맥놀이를 만든다
-    const g = ctx.createGain();
-    g.gain.value = 1;
-    osc1.connect(g); osc2.connect(g); g.connect(out);
-    osc1.start(); osc2.start();
-    return { sources: [osc1, osc2], nodes: [osc1, osc2, g] };
-  }
-
-  const AMBIENCE_BUILDERS = { ruins: buildRuinsAmbience, lab: buildLabAmbience, deep: buildDeepAmbience };
-
-  // 층 번호 → 앰비언스 테마. floorThemeClass와 동일한 경계를 쓴다(1층 ruins·2층 lab·3층+ deep).
-  function floorAmbienceTheme(floor) {
-    if (floor >= 3) return 'deep';
-    if (floor === 2) return 'lab';
-    return 'ruins';
-  }
-
-  // 현재 앰비언스를 게인 램프로 내리고 소스 노드를 멈춘 뒤 그래프 전체를 해제한다(누수 방지).
-  function stopAmbience(fadeSec) {
-    const gainNode = ambienceGain;
-    const sources = ambienceSources;
-    const nodes = ambienceAllNodes;
-    ambienceGain = null; ambienceSources = null; ambienceAllNodes = null;
-    ambienceTheme = 'off';
-    if (!audioCtx || !gainNode) return;
-    try {
-      const t0 = audioCtx.currentTime;
-      const dur = fadeSec != null ? fadeSec : 0.7;
-      gainNode.gain.cancelScheduledValues(t0);
-      gainNode.gain.setValueAtTime(Math.max(0.0001, gainNode.gain.value), t0);
-      gainNode.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      const stopAt = t0 + dur + 0.05;
-      const cleanup = () => { try { (nodes || []).forEach((n) => n.disconnect()); gainNode.disconnect(); } catch (e) { /* 무시 */ } };
-      if (sources && sources.length) {
-        sources.forEach((n) => { try { n.stop(stopAt); } catch (e) { /* 무시 */ } });
-        sources[sources.length - 1].onended = cleanup; // 실제 정지 뒤에만 해제한다
-      } else {
-        cleanup();
-      }
-    } catch (e) { /* 무시 */ }
-  }
-
-  // 테마 그래프를 새로 짜고 게인을 0에서 서서히 올린다(스며들 듯 시작).
-  function startAmbience(theme) {
-    const ctx = ensureAudio();
-    if (!ctx || !masterGain) return;
-    const build = AMBIENCE_BUILDERS[theme];
-    if (!build) return;
-    try {
-      const g = ctx.createGain();
-      const t0 = ctx.currentTime;
-      g.gain.setValueAtTime(0.0001, t0);
-      g.gain.exponentialRampToValueAtTime(AMBIENCE_GAIN, t0 + 1.2);
-      g.connect(masterGain);
-      const built = build(ctx, g);
-      ambienceGain = g;
-      ambienceSources = built.sources;
-      ambienceAllNodes = built.nodes.concat([g]);
-      ambienceTheme = theme;
-    } catch (e) { ambienceTheme = 'off'; }
-  }
-
-  // 현재 화면·층에 맞춰 앰비언스를 맞춘다. 던전 화면일 때만 층 테마를 재생하고 그 외엔 멈춘다.
-  // ambienceTheme로 엣지 트리거만 잡으므로 매 렌더 호출돼도 실제 전환은 상태가 바뀔 때만 일어난다.
-  function syncAmbience() {
-    const dungeonActive = !!(el['screen-dungeon'] && el['screen-dungeon'].classList.contains('active'));
-    const desired = (dungeonActive && run && !soundOff) ? floorAmbienceTheme(run.floor) : 'off';
-    if (desired === ambienceTheme) return;
-    if (desired === 'off') { stopAmbience(); return; }
-    if (!ensureAudio()) { ambienceTheme = 'off'; return; }
-    if (ambienceTheme !== 'off') stopAmbience(0.5); // 이전 테마를 짧게 내리고 새 테마로 넘어간다
-    startAmbience(desired);
-  }
-
-  // 첫 사용자 제스처에 오디오를 깨운다(자동재생 금지 준수). 한 번 쓰면 리스너를 뗀다.
-  function unlockAudioOnce() {
-    ensureAudio();
-    document.removeEventListener('pointerdown', unlockAudioOnce);
-    document.removeEventListener('touchstart', unlockAudioOnce);
   }
 
   /* ---------------- 로그 ---------------- */
@@ -1916,7 +1406,7 @@
     const cap = bagCap();
     if (slots >= cap && !run.seenBagAlerts.has('full')) {
       run.seenBagAlerts.add('full');
-      return queueSensoryAlert(bagAlert('full'), 'hot');
+      return queueSensoryAlert(BAG_ALERTS.full, 'hot');
     }
     if (slots >= Math.max(1, cap - 1) && !run.seenBagAlerts.has('heavy')) {
       run.seenBagAlerts.add('heavy');
@@ -1944,13 +1434,22 @@
 
   function tick() {
     if (!run) return;
-    if (run.dialogue) {
+    const liveEncounter = run.pendingEvent && run.pendingEvent.type === 'monster-encounter';
+    if (liveEncounter) {
+      run.encounterTime = Math.max(0, (run.encounterTime || 0) - TICK_MS / 1000);
+      if (run.encounterTime <= 0) {
+        run.failContext = '어두운 형체가 조명 안으로 끝까지 걸어 들어왔다.';
+        log('어두운 형체가 바로 앞까지 왔다.', 'hot');
+        failRun();
+        return;
+      }
+    } else if (run.dialogue) {
       render();
       return;
     }
 
-    // 조명은 잠수 내내 천천히 닳는다.
-    run.light = Math.max(0, run.light - FLOORS[run.floor - 1].drain);
+    // 조명은 켜 둔 동안 천천히 닳는다. 꺼두면 배터리는 아끼지만 시야/멘탈 압박이 커진다.
+    if (run.lightOn !== false) run.light = Math.max(0, run.light - FLOORS[run.floor - 1].drain);
 
     updateMentalByLight();
     if (run.mentalGraceTicks > 0) run.mentalGraceTicks -= 1;
@@ -1978,12 +1477,17 @@
         }
         s.quietSteps += 1; // 새 소음이 없으면 조용한 걸음이 쌓여 결국 다시 잠든다.
       }
-      // 끌개: 버린 물건 자국이 있으면 매 틱 유예를 세고, 어두운 형체가 닿으면 거둬 간다.
+      // 끌개: 버린 물건 자국이 있으면 매 틱 유예를 세고, 놈이 닿으면 거둬 간다.
       maybeRetrieveDroppedLoot();
     }
 
     // 추격 여부는 추격자가 깨어 있는지로만 결정한다.
     run.chasing = stalkerAwake();
+
+    // 조명 정면에 깨어 있는 어두운 형체가 잡히면, 접촉 전에도 짧은 실시간 조우를 연다.
+    if (!pausingEventOpen && run.chasing && visibleStalkerInLight() && stalkerDistance() <= 2) {
+      if (startMonsterEncounter('sight', currentNode(), s && s.kind)) return;
+    }
 
     // 위험은 추격자와의 거리로만 오르내린다: 멀면 0, 붙으면(거리 0) 조우.
     if (!pausingEventOpen) {
@@ -2012,7 +1516,7 @@
   function updateMentalByLight(extra = 1) {
     if (!run) return;
     if (run.mentalGraceTicks > 0) return;
-    const pct = lightPercent();
+    const pct = effectiveLightPercent();
     let delta;
     if (pct >= 75) delta = 0.025;
     else if (pct >= 45) delta = -0.015;
@@ -2040,7 +1544,7 @@
     return true;
   }
 
-  /* ---------------- 조사 진행 액션 ---------------- */
+  /* ---------------- 런 진행 액션 ---------------- */
 
   // 최고 깊이를 갱신하고, 실제로 늘었을 때만 저장한다.
   function bumpMaxDepth(floor) {
@@ -2051,6 +1555,7 @@
   function enterFloor(floor) {
     run.floorMap = generateFloorMap(floor);
     run.currentNodeId = run.floorMap.entryId;
+    run.facing = directionKeyBetween(run.floorMap.nodes[run.floorMap.entryId], nodeById(run.floorMap.nodes[run.floorMap.entryId].exits[0])) || 'n';
     run.holdEvent = null;
     const entry = currentNode();
     entry.entered = true; // 입구 환경 효과는 없음
@@ -2062,45 +1567,9 @@
     if (floor === 1) maybeQueueExtractionTutorial();
   }
 
-  // 다음 조사가 시작될 때, 지난 조사에서 등진(abandoned) 생존자 기록마다 딱 한 번 대가를 치른다.
-  // 거리 소문 한 줄과 의심도 +1(기록당). 위치만 표시(marked)한 기록은 대가가 없다(안내만).
-  function settleSurvivorNotes() {
-    let reportedNow = 0;
-    for (const id of Object.keys(meta.survivorNotes)) {
-      const note = meta.survivorNotes[id];
-      if (note.outcome === 'abandoned' && !note.reported) {
-        meta.suspicion = Math.min(99, meta.suspicion + SURVIVOR_ABANDON_SUSPICION);
-        note.reported = true;
-        reportedNow += 1;
-      }
-    }
-    if (reportedNow > 0) {
-      saveMeta();
-      log(SURVIVOR_STREET_RUMOR, 'hot');
-    }
-  }
-
-  // 지상 의심도가 문턱을 넘으면 위원회 감시가 입구까지 따라붙는다. 결정적·유계 보정이라
-  // 낮을 땐 아무 대가도 없지만(비징벌), 뜨거우면 검문을 피해 내려오느라 시작 멘탈/조명이 깎인다.
-  // 이게 '오늘은 위원회에 식히고 가자'는 선택에 실제 이유를 준다.
-  function applySuspicionStart() {
-    const s = meta.suspicion;
-    if (s >= SUSPICION_HOT) {
-      run.mental = Math.max(20, run.mental - SUSPICION_HOT_MENTAL);
-      run.light = Math.max(20, run.light - SUSPICION_HOT_LIGHT);
-      log('입구에 위원회 밴이 늘어서 있다. 감시등을 피해 기어 내려오느라 진이 빠졌다.', 'hot');
-    } else if (s >= SUSPICION_TENSE) {
-      run.mental = Math.max(30, run.mental - SUSPICION_TENSE_MENTAL);
-      log('입구 근처에 위원회 밴 한 대가 서 있다. 신경이 곤두선 채로 내려간다.');
-    }
-  }
-
   function startNewRun() {
     if (el['log']) el['log'].innerHTML = '<div class="log-line">아래가 열린다.</div>';
-    bagShopOpen = false; // 새 조사로 내려가면 가방 목록은 접어 둔다
     run = newRun();
-    settleSurvivorNotes(); // 지난 조사에서 등진 생존자의 뒤늦은 대가(거리 소문·의심도)를 반영
-    applySuspicionStart(); // 지상 의심도가 높으면 위원회 감시가 입구까지 따라붙어 시작이 불리해진다
     bumpMaxDepth(run.floor);
     enterFloor(1);
     setMetaPanel(false);
@@ -2180,7 +1649,7 @@
     );
   }
 
-  // 던전 진입 연출: 배경이 커지며 화면이 어두워진 뒤 새 조사를 시작한다.
+  // 던전 진입 연출: 배경이 커지며 화면이 어두워진 뒤 새 런을 시작한다.
   function beginEntering() {
     introMode = 'entering';
     markIntroSeen();
@@ -2212,12 +1681,12 @@
       renderIntroLine();
       return;
     }
-    // 재시작·기존 세이브: '들어가기' 버튼을 그대로 눌러 새 조사를 시작한다.
+    // 재시작·기존 세이브: '들어가기' 버튼을 그대로 눌러 새 런을 시작한다.
     if (introMode === 'ready') {
       beginEntering();
       return;
     }
-    // 단서를 다 모았지만 엔딩을 아직 확인하지 않았다면, 새 조사 대신 엔딩을 먼저 보여준다.
+    // 진실을 다 모았지만 엔딩을 아직 확인하지 않았다면, 새 런 대신 엔딩을 먼저 보여준다.
     if (meta.truths.length >= TRUTH_TOTAL && !meta.endingSeen) {
       renderEndingScreen();
       show('screen-ending');
@@ -2232,23 +1701,28 @@
     if (!el['screen-start'] || !el['screen-start'].classList.contains('active')) return;
     // 자체 동작이 있는 버튼(기록 초기화·진입 버튼) 탭은 인트로를 진행시키지 않는다.
     if (event && event.target && event.target.closest &&
-        (event.target.closest('#btn-reset') || event.target.closest('#btn-enter') || event.target.closest('#btn-sound'))) return;
+        (event.target.closest('#btn-reset') || event.target.closest('#btn-enter'))) return;
     if (event) event.preventDefault();
     advanceIntro();
   }
 
-  // 노드 도착: 환경 효과 1회 적용 → 아이템 노출 → 몬스터 이벤트 발동.
-  function arriveAtNode() {
-    const node = currentNode();
+  function applyNodeEntryEffects(node) {
+    if (!node) return false;
     const firstVisit = !node.entered;
-    if (!node.entered) {
+    if (firstVisit) {
       node.entered = true;
-      run.roomsEntered += 1; // 처음 밟은 방만 센다(왜곡 변이 트리거 판정용)
       if (node.light) run.light = Math.max(0, Math.min(maxLight(), run.light + node.light));
       if (node.danger > 0) run.danger = Math.min(100, run.danger + node.danger);
       else if (node.danger < 0) run.danger = Math.max(0, run.danger + node.danger);
     }
     run.currentItem = node.item && !node.itemTaken ? node.item : null;
+    return firstVisit;
+  }
+
+  // 노드 도착: 환경 효과 1회 적용 → 아이템 노출 → 몬스터 이벤트 발동.
+  function arriveAtNode() {
+    const node = currentNode();
+    const firstVisit = applyNodeEntryEffects(node);
     maybeStartRoomEvent(node);
     if (run.pendingEvent) {
       // 방 이벤트가 상황(cue)을 이어받는다 — 별도 도착 대사로 끊지 않고 선택지와 함께 보여준다.
@@ -2269,21 +1743,11 @@
     return { id, label, sub, tone };
   }
 
-  // 위기/상황 선택지 글리프: 톤만 가른다 — 위험(!)·차분(•)·가늠 안 됨(?).
-  // 버튼 테두리와 같은 색 언어를 배지에도 쓰되, 수치·확률·결과는 드러내지 않는다.
-  const EVENT_TONE_GLYPH = { danger: '!', good: '•' };
-  const eventToneGlyph = (tone) => EVENT_TONE_GLYPH[tone] || '?';
-
   // 인던 물건 힌트: RP·수치는 감추고 '소리가 클 것 같다 / 깨질 것 같다'만 짧게 흘린다.
-  // 물건에 hints가 있으면 그 문구를 쓰고, 없으면 태그별 기본 문구로 떨어진다.
   function itemTraitHint(item) {
     const bits = [];
-    const hints = (item && item.hints) || {};
-    if (itemMarked(item)) bits.push(hints.marked || '위원회 직인이 작게 찍혀 있다');
-    if (itemNoise(item) === 'high') bits.push(hints.noise || '금속이 부딪치면 소리가 클 것 같다');
-    if (itemFragile(item)) bits.push(hints.fragile || '모서리가 금 가 있다');
-    // 아주 뜨거운 물건은 손에 남는 열기로만 알린다(의심도 수치는 끝까지 감춘다).
-    if (itemHeat(item) >= MUTATION_TRIGGER_HEAT) bits.push(hints.heat || '쥐고 있으면 손바닥이 미지근해진다');
+    if (itemNoise(item) === 'high') bits.push('금속이 부딪치면 소리가 클 것 같다');
+    if (itemFragile(item)) bits.push('모서리가 금 가 있다');
     return bits.join('. ');
   }
 
@@ -2303,18 +1767,23 @@
     return `${item.name}${subjectParticle(item.name)} 발치에 떨어져 있다 — ${stat}.${hintPart} ${threat}`;
   }
 
-  // 끌개: 되찾을 수 있는, 내가 버린 물건이 이 칸에 아직 그대로 있는가.
+  // 끌개: 되찾을 수 있는, 내가 버린 물건이 이 칸에 아직 남아 있는가.
   function droppedLootHere(node) {
-    const loot = run && run.floorMap ? run.floorMap.droppedLoot : null;
-    return loot && node && loot.nodeId === node.id ? loot : null;
+    if (!node) return null;
+    return droppedLoots().find((loot) => loot.nodeId === node.id) || null;
   }
 
-  // 생존자 조우: 아직 구출 안 한 사람이 있을 때만, 드물게 이 방에서 열린다.
+  function droppedLootCountHere(node) {
+    if (!node) return 0;
+    return droppedLoots().filter((loot) => loot.nodeId === node.id).length;
+  }
+
+  // 생존자 조우: 아직 구출 안 한 사람이 남아 있을 때만, 드물게 이 방에서 열린다.
   // 물건이 없는 방에서만 호출되므로 회수물 이벤트를 밀어내지 않는다. 열면 true.
   function maybeStartSurvivorEvent(node) {
     if (!node || Math.random() >= SURVIVOR_EVENT_CHANCE) return false;
     const id = nextUnrescuedSurvivor();
-    if (!id) return false; // 모두 구출했으면 이벤트 없음
+    if (!id) return false; // 둘 다 구출했으면 이벤트 없음
     const s = SURVIVORS[id];
     node.roomEventResolved = true;
     run.pendingEvent = {
@@ -2326,7 +1795,7 @@
       tone: 'hot',
       choices: [
         eventChoice('rescue', '꺼내준다', s.rescueSub, 'good'),
-        eventChoice('mark', '위치만 표시한다', '벽에 분필로 긋고 물러난다'),
+        eventChoice('mark', '위치만 표시한다', '두고 표시만 남긴다'),
         eventChoice('pass', '그냥 지나간다', '못 본 척 지나친다'),
       ],
     };
@@ -2340,16 +1809,22 @@
     // 버린 물건은 이미 방 이벤트를 끝낸 칸이라도 다시 집을 수 있어야 하므로 roomEventResolved 앞에서 처리한다.
     const loot = droppedLootHere(node);
     if (loot && !run.currentItem) {
-      const item = loot.item;
-      const brokenHint = loot.broken ? ' 모서리가 깨졌지만, 아직 바닥에 걸려 있다.' : '';
+      const loots = droppedLoots().filter((entry) => entry.nodeId === node.id);
+      const count = loots.length;
+      const first = loots[0];
+      const item = first.item;
+      const moreHint = count > 1 ? ` 이 칸에 내려놓은 짐이 ${count}개 있다.` : '';
+      const brokenHint = first.broken ? ' 모서리가 깨졌지만, 아직 바닥에 걸려 있다.' : '';
+      const takeChoices = loots.slice(0, 4).map((entry) => eventChoice(`take-back:${entry.id}`, `${entry.item.name} 챙기기`, `${entry.item.slots}칸${entry.broken ? ' · 깨짐' : ''}`, 'good'));
+      if (loots.length > 4) takeChoices.push(eventChoice('list-more', '나머지는 둔다', `남은 짐 ${loots.length - 4}개는 다음에 정리한다`));
       run.pendingEvent = {
         type: 'dropped-loot',
-        title: '버리고 온 물건',
-        cue: `버리고 도망쳤던 ${item.name}${subjectParticle(item.name)} 아직 이 자리에 있다.${brokenHint} 지금이라면 되챙길 수 있다.`,
+        title: '내려놓은 짐',
+        cue: `바닥에 내려놓은 ${item.name}${subjectParticle(item.name)} 보인다.${moreHint}${brokenHint} 필요한 것만 다시 챙길 수 있다.`,
         node: node.id,
         tone: 'hot',
         choices: [
-          eventChoice('take-back', '다시 챙긴다', loot.broken ? '깨진 채로 회수한다' : '조용히 되챙긴다', 'good'),
+          ...takeChoices,
           eventChoice('leave', '그냥 둔다', '두고 물러난다'),
         ],
       };
@@ -2364,18 +1839,21 @@
     if (run.currentItem) {
       // 물건이 보이면 선택지를 '집기/지나치기'로 물건에 묶는다 → 뒤따르는 별도 줍기 버튼이 없다.
       const item = run.currentItem;
+      const loots = droppedLoots().filter((entry) => entry.nodeId === node.id).slice(0, 2);
       // 서브라벨을 물건 성질에 맞춘다: 깨질 물건은 조심히, 소리 큰 물건은 재빨리 챙길 때 크게 울린다.
       const carefulSub = itemFragile(item) ? '조용히, 깨지지 않게 다룬다' : '조용하지만 시간이 걸린다';
       const grabSub = itemNoise(item) === 'high' ? '빠르지만 크게 울린다' : '빠르지만 소리가 난다';
+      const choices = [
+        eventChoice('careful', '조심히 집는다', carefulSub, 'good'),
+        eventChoice('grab', '재빨리 챙긴다', grabSub, 'danger'),
+        ...loots.map((entry) => eventChoice(`take-back:${entry.id}`, `${entry.item.name} 되챙기기`, `내려놓은 짐 · ${entry.item.slots}칸${entry.broken ? ' · 깨짐' : ''}`, 'good')),
+        eventChoice('skip', '그냥 지나간다', '건드리지 않는다'),
+      ];
       ev = {
         type: 'item-encounter',
         title: '눈앞의 회수물',
         cue: itemEncounterCue(node, item),
-        choices: [
-          eventChoice('careful', '조심히 집는다', carefulSub, 'good'),
-          eventChoice('grab', '재빨리 챙긴다', grabSub, 'danger'),
-          eventChoice('skip', '그냥 지나간다', '건드리지 않는다'),
-        ],
+        choices,
       };
     } else if (node.kind === 'office') {
       ev = {
@@ -2416,23 +1894,6 @@
           eventChoice('pass', '그냥 지나간다', '건드리지 않는다'),
         ],
       };
-      // 전 위원회 직원을 구출했다면 낡은 직원 코드로 조용히 의심도를 더는 안전한 선택지를 연다.
-      if (hasSurvivor('insider')) {
-        ev.choices.splice(1, 0, eventChoice('seal-code', '봉쇄 코드를 넣는다', '낡은 직원 코드를 쓴다', 'good'));
-      }
-    } else if (node.kind === 'missing-trace') {
-      // 실종자 흔적방 v1: 벽의 사진/이름표/배낭/가족 편지. 유품(family)을 조심히 챙기거나, 사진만 확인하거나, 둔다.
-      // 피로가 적고, 선택 큐에 대가(빛·멘탈)를 짧게 드러낸다.
-      ev = {
-        type: 'missing-trace',
-        title: '실종자 흔적',
-        cue: '벽에 사진 몇 장과 이름표가 붙어 있다. 그 아래 작은 배낭이 놓였고, 접힌 가족 편지가 삐져나와 있다. 위원회 사람이 여기서 멈춘 것 같다.',
-        choices: [
-          eventChoice('keep', '조심히 챙긴다', '유품을 조용히 챙긴다 · 빛·멘탈 조금', 'good'),
-          eventChoice('photo', '사진만 확인한다', '이름과 날짜만 눈에 담는다'),
-          eventChoice('leave', '그냥 둔다', '건드리지 않고 지나친다'),
-        ],
-      };
     } else if (node.kind === 'crack' || node.kind === 'corridor') {
       ev = {
         type: 'footprints',
@@ -2462,7 +1923,7 @@
         title: node.kind === 'storage' ? '비상 배터리' : '벽 비상등',
         cue: node.kind === 'storage'
           ? '선반 아래 배터리가 아직 아주 작게 깜빡인다.'
-          : '깨진 비상등 안쪽에서 약한 빛이 새어 나온다.',
+          : '깨진 비상등 안쪽에 약한 빛이 남아 있다.',
         choices: [
           eventChoice('charge', '조명에 연결한다', '배터리를 연결한다', 'good'),
           eventChoice('wipe', '렌즈만 닦는다', '시야를 확보한다', 'good'),
@@ -2486,10 +1947,118 @@
     return run.bag.splice(idx, 1)[0];
   }
 
+  function moveDuringEncounter(targetId, message) {
+    const from = currentNode();
+    const to = nodeById(targetId);
+    if (!from || !to || !from.exits.includes(targetId)) return false;
+    markTravelledEdge(from.id, targetId);
+    run.previousNodeId = from.id;
+    run.currentNodeId = targetId;
+    const firstVisit = applyNodeEntryEffects(to);
+    if (firstVisit) run.encounterArrivalNode = targetId;
+    if (message) run.lastAction = message;
+    return true;
+  }
+
   function resolveMonsterEncounter(ev, choiceId) {
     const kind = MONSTER_ARCHETYPES[ev.monsterKind] || MONSTER_ARCHETYPES.longFace;
     let msg = '';
     let knockedOut = false;
+    const s = stalker();
+
+    if (choiceId === 'backstep') {
+      const targetId = relativeExit('back');
+      if (targetId == null || (s && s.nodeId === targetId)) {
+        msg = '뒷걸음친 순간 등 뒤 어둠에서 차가운 손이 어깨를 눌렀다.';
+        knockedOut = true;
+      } else {
+        moveDuringEncounter(targetId, '정면의 어두운 형체를 보며 한 걸음 물러났다.');
+        if (s) { s.lastHeardId = run.currentNodeId; s.quietSteps = 0; }
+        run.danger = Math.max(run.danger, 72);
+        msg = '정면의 어두운 형체를 보며 뒤로 빠졌다. 발소리는 아직 빛 끝을 따라온다.';
+      }
+      if (knockedOut) run.failContext = msg;
+      return { msg, knockedOut };
+    }
+    if (choiceId === 'side-left' || choiceId === 'side-right') {
+      const targetId = relativeExit(choiceId === 'side-left' ? 'left' : 'right');
+      const load = usedSlots() / Math.max(1, bagCap());
+      const chance = 0.78 - load * 0.28 + (run.mental >= 35 ? 0.08 : -0.12) + (effectiveLightPercent() >= 35 ? 0.06 : -0.08);
+      if (targetId == null) {
+        msg = '몸을 틀었지만 빠질 틈이 없다. 어두운 형체가 바로 앞까지 왔다.';
+        knockedOut = true;
+      } else if (Math.random() < chance) {
+        moveDuringEncounter(targetId, '옆으로 몸을 밀어 넣었다.');
+        if (s) { s.lastHeardId = run.currentNodeId; s.quietSteps = 0; }
+        run.light = Math.max(0, run.light - 7);
+        run.mental = Math.max(0, run.mental - 5);
+        run.danger = Math.max(run.danger, 66);
+        msg = '문틀을 긁으며 옆방으로 뛰어들었다. 어두운 형체는 뒤쪽 복도에서 따라온다.';
+      } else {
+        const lost = takeCheapestBagItem();
+        if (lost) {
+          run.droppedCount += 1;
+          dropLootTrace(lost);
+          run.danger = Math.min(96, run.danger + 10);
+          msg = `${lost.name}${subjectParticle(lost.name)} 가방에서 빠졌다. 몸은 옆방으로 넘어갔지만 발소리가 바로 뒤에 붙었다.`;
+          moveDuringEncounter(targetId, msg);
+        } else {
+          msg = '몸을 틀었지만 늦었다. 어두운 형체의 팔이 조명 앞을 덮었다.';
+          knockedOut = true;
+        }
+      }
+      if (knockedOut) run.failContext = msg;
+      return { msg, knockedOut };
+    }
+    if (choiceId === 'glare') {
+      if (run.light >= 18) {
+        run.light = Math.max(0, run.light - 16);
+        run.encounterTime = Math.min(ENCOUNTER_SECONDS, (run.encounterTime || 0) + 2.2);
+        run.danger = Math.max(55, run.danger - 12);
+        msg = '빛을 정면에 고정했다. 어두운 형체가 잠깐 멈췄지만 고개는 계속 이쪽을 향한다.';
+      } else {
+        run.light = Math.max(0, run.light - 6);
+        run.encounterTime = Math.max(0.8, (run.encounterTime || 0) - 1.4);
+        run.danger = Math.min(98, run.danger + 12);
+        msg = '빛이 두 번 깜빡였다. 어두운 형체는 멈추지 않고 더 가까워졌다.';
+      }
+      return { msg, knockedOut, keepEncounter: true };
+    }
+    if (choiceId === 'throw-bag') {
+      const bait = takeCheapestBagItem();
+      if (bait) {
+        run.droppedCount += 1;
+        dropLootTrace(bait);
+        run.danger = Math.max(0, run.danger - 30);
+        run.encounterTime = Math.min(ENCOUNTER_SECONDS, (run.encounterTime || 0) + 1.5);
+        msg = `${bait.name}${objectParticle(bait.name)} 어둠 반대편으로 던졌다. 어두운 형체의 고개가 금속음 쪽으로 꺾인다.`;
+      } else {
+        msg = '던질 짐이 없다. 빈손이 조명 아래서 떨린다.';
+        run.danger = Math.min(98, run.danger + 8);
+      }
+      return { msg, knockedOut };
+    }
+    if (choiceId === 'hide-dark') {
+      if (!currentRoomHasCover()) {
+        msg = '숨을 곳이 없다. 조명만 흔들렸다.';
+        run.danger = Math.min(98, run.danger + 8);
+      } else {
+        const noisy = usedSlots() >= Math.max(2, Math.ceil(bagCap() * 0.7));
+        run.lightOn = false;
+        if (noisy && Math.random() < 0.45) {
+          msg = '캐비닛 문을 닫는 순간 가방 안 금속이 부딪쳤다. 어두운 형체가 그 소리로 고개를 돌렸다.';
+          knockedOut = true;
+        } else {
+          const st = stalker();
+          if (st) { st.quietSteps = DORMANT_AFTER; st.lastHeardId = null; }
+          run.chasing = false;
+          run.danger = Math.max(0, run.danger - 45);
+          msg = '캐비닛 뒤로 몸을 넣고 조명을 껐다. 발소리가 문 앞에서 멈췄다가 멀어진다.';
+        }
+      }
+      if (knockedOut) run.failContext = msg;
+      return { msg, knockedOut };
+    }
 
     if (ev.monsterKind === 'longFace') {
       if (choiceId === 'shine') {
@@ -2498,7 +2067,7 @@
         if (enoughLight) {
           run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 30);
           run.mental = clamp(run.mental + 2, 0, 100);
-          msg = '빛을 정면에 고정했다. 구부러진 목이 멈춘다. 어두운 형체가 팔로 눈을 가리는 사이 벽 틈으로 빠져나왔다.';
+          msg = '빛을 정면에 고정했다. 구부러진 목이 멈춘다. 놈이 팔로 눈을 가리는 사이 벽 틈으로 빠져나왔다.';
         } else {
           run.danger = Math.min(100, run.danger + 14);
           msg = '빛이 힘없이 튄다. 검은 팔이 깜빡인 방향으로 먼저 뻗는다.';
@@ -2508,7 +2077,7 @@
         run.light = Math.max(0, run.light - 4);
         if (run.danger < 90 || run.mental >= 18) {
           run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 14);
-          msg = '어두운 형체가 몸을 접는 틈에 옆으로 빠져나왔다. 손끝이 벽만 길게 긁고 지나간다.';
+          msg = '놈이 몸을 접는 틈에 옆으로 빠져나왔다. 손끝이 벽만 길게 긁고 지나간다.';
         } else {
           run.danger = Math.min(100, run.danger + 10);
           msg = '비키려는 순간 발이 엉킨다. 길게 뻗은 팔이 퇴로를 가로막는다.';
@@ -2586,7 +2155,7 @@
       }
     } else {
       run.danger = Math.max(0, Math.min(run.danger, MONSTER_GRACE_DANGER) - 10);
-      msg = '어두운 형체가 잠깐 물러난 틈에 빠져나왔다.';
+      msg = '놈이 잠깐 물러난 틈에 빠져나왔다.';
     }
 
     if (knockedOut) run.failContext = msg;
@@ -2615,36 +2184,26 @@
       if (outcome && typeof outcome.apply === 'function') outcome.apply();
       run.mental = MENTAL_BREAK_RECOVERY;
       run.mentalGraceTicks = MENTAL_BREAK_GRACE_TICKS;
-      if (lightPercent() <= 0) run.light = Math.max(run.light, maxLight() * (MENTAL_BREAK_MIN_LIGHT_PCT / 100));
+      if (effectiveLightPercent() <= 0) { run.light = Math.max(run.light, maxLight() * (MENTAL_BREAK_MIN_LIGHT_PCT / 100)); run.lightOn = true; }
       if (run.lastMentalLoss) msg = `${outcome.after} ${run.lastMentalLoss}${subjectParticle(run.lastMentalLoss)} 손에서 빠져나갔다.`;
       else msg = outcome ? outcome.after : '간신히 정신을 붙잡았다.';
     } else if (ev.type === 'cabinet') {
       if (choiceId === 'open') {
-        // 검은 손 변이: 휘어진 손잡이가 너무 쉽게 딸려 와 조명 소모가 준다(결정적).
-        const blackHand = hasMutation('black-hand');
-        run.light = Math.max(0, run.light - (blackHand ? 1 : 3));
-        const foundBag = !run.currentItem ? bagFindCandidate() : null;
-        if (foundBag) {
-          meta.bagLevel = foundBag.level;
-          saveMeta();
-          msg = `찌그러진 캐비닛 안에 멀쩡한 ${foundBag.name}${subjectParticle(foundBag.name)} 걸려 있다. ${foundBag.name}${objectParticle(foundBag.name)} 멨다. ${foundBag.cap}칸 정도의 공간이 생겼다.`;
-        } else if (!run.currentItem && !node.itemTaken) {
+        run.light = Math.max(0, run.light - 3);
+        if (!run.currentItem && !node.itemTaken) {
           node.item = node.item || pickFloorItem(run.floor, node);
           run.currentItem = node.item;
           msg = `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 안쪽에서 굴러 떨어졌다.`;
         } else {
           run.danger = Math.max(0, run.danger - 2);
-          msg = meta.bagLevel >= MAX_BAG_LEVEL
-            ? '낡은 가방 하나가 걸려 있지만, 지금 멘 것보다 나을 게 없다.'
-            : '문을 천천히 닫았다. 철판 속의 빈 소리가 가라앉는다.';
+          msg = '문을 천천히 닫았다. 철판 속의 빈 소리가 가라앉는다.';
         }
-        if (blackHand) msg = `${msg} ${BLACKHAND_CABINET_NOTE}`;
       } else if (choiceId === 'noise') {
         run.danger = Math.min(100, run.danger + 7);
         msg = '금속음이 울렸다. 먼 곳에서 비슷한 소리가 한 번 늦게 돌아온다.';
       } else {
         run.danger = Math.max(0, run.danger - 1);
-        msg = '캐비닛은 그대로 둔다. 열린 틈이 등 뒤에서 계속 벌어져 있다.';
+        msg = '캐비닛은 그대로 둔다. 열린 틈이 등 뒤에서 오래 남는다.';
       }
     } else if (ev.type === 'footprints') {
       if (choiceId === 'hold') {
@@ -2691,7 +2250,7 @@
         msg = '먼지 속을 낮게 기어 잔해 옆을 돌았다. 들보가 머리 위에서 한 번 삐걱였을 뿐이다.';
       } else {
         run.danger = Math.max(0, run.danger - 1);
-        msg = '잔해 더미를 등지고 물러났다. 무너진 통로는 그대로 막혀 있다.';
+        msg = '잔해 더미를 등지고 물러났다. 무너진 통로는 그대로 남는다.';
       }
     } else if (ev.type === 'watchpost') {
       const tense = meta.suspicion >= WATCHPOST_TENSE_SUSPICION;
@@ -2706,59 +2265,27 @@
           saveMeta();
         }
         msg = '단말을 열어 내 회수 이력을 지웠다. 자판이 딸깍이고, 감시등이 한 번 꺼졌다 켜진다.';
-      } else if (choiceId === 'seal-code' && hasSurvivor('insider')) {
-        // 전 직원의 낡은 직원 코드: 소음·위험 없이 의심도를 조금 덜고 봉쇄문/재봉인 단서 한 줄을 흘린다.
-        // 비밀은 공짜로 주지 않는다 — 단서 로그일 뿐.
-        run.light = Math.max(0, run.light - INSIDER_WATCHPOST_LIGHT);
-        if (meta.suspicion > 0) {
-          meta.suspicion = Math.max(0, meta.suspicion - INSIDER_WATCHPOST_RELIEF);
-          saveMeta();
-        }
-        msg = INSIDER_SEAL_LOG;
       } else if (choiceId === 'search') {
         run.light = Math.max(0, run.light - 3);
         if (tense) {
-          // 의심도가 높으면 뒤지는 게 위험하다 — 경보가 표시되고 의심도가 오른다.
+          // 의심도가 높으면 뒤지는 게 위험하다 — 경보가 남고 의심도가 오른다.
           run.danger = Math.min(100, run.danger + 10);
           meta.suspicion = Math.min(99, meta.suspicion + 3);
           saveMeta();
           emitNoise(node.id, { loud: true });
-          msg = '단말을 뒤지자 화면이 붉게 번쩍이며 경보음이 짧게 울렸다. 어둠 저편에서 젖은 발소리가 방향을 튼다.';
+          msg = '단말을 뒤지자 화면이 붉게 번쩍이며 경보음이 짧게 울렸다. 어둠 저편에서 무언가 방향을 튼다.';
         } else if (!run.currentItem && !node.itemTaken && Math.random() < 0.5) {
           const found = pickFloorItem(run.floor, node);
           node.item = found;
           run.currentItem = found;
           msg = `서랍을 뒤지자 ${found.name}${subjectParticle(found.name)} 딸려 나왔다.`;
         } else {
-          // 비밀을 공짜로 풀지 않는다 — 단서 로그 한 줄만 띄운다.
+          // 진실 조각을 공짜로 풀지 않는다 — 단서 로그 한 줄만 남긴다.
           msg = WATCHPOST_LOGS[Math.floor(Math.random() * WATCHPOST_LOGS.length)];
         }
       } else {
         run.danger = Math.max(0, run.danger - 1);
-        msg = '감시소는 건드리지 않고 지나쳤다. 꺼진 감시등이 등 뒤로 멀어진다.';
-      }
-    } else if (ev.type === 'missing-trace') {
-      if (choiceId === 'keep') {
-        // 조심히 챙긴다: 빛·멘탈을 조금 쓰고 유품을 드러낸다.
-        // 실제 줍기는 일반 줍기 흐름이 맡는다 — 거기서는 늘 조심히 다루므로 유품 noise는 큰 소리로 번지지 않는다.
-        run.light = Math.max(0, run.light - 3);
-        run.mental = Math.max(0, run.mental - 2);
-        if (!run.currentItem && !node.itemTaken) {
-          const keepsake = pickFamilyKeepsake();
-          node.item = keepsake;
-          run.currentItem = keepsake;
-          msg = `벽에서 ${keepsake.name}${objectParticle(keepsake.name)} 조심히 떼어 냈다. ${keepsake.familyNote}`;
-        } else {
-          msg = '흐트러진 자리를 조용히 정리했다. 더 가져갈 것은 없다.';
-        }
-      } else if (choiceId === 'photo') {
-        // 사진만 확인: 단서 한 줄, 물건 없음. 비밀은 주지 않는다.
-        run.mental = Math.max(0, run.mental - 1);
-        msg = MISSING_TRACE_LOGS[Math.floor(Math.random() * MISSING_TRACE_LOGS.length)];
-      } else {
-        // 그냥 둔다: 물건 없음, 등을 돌린 작은 대가(멘탈).
-        run.mental = Math.max(0, run.mental - 2);
-        msg = '사진도 배낭도 그대로 두고 등을 돌렸다. 이름을 읽지 않은 게 한동안 마음이 무겁다.';
+        msg = '감시소는 건드리지 않고 지나쳤다. 꺼진 감시등이 등 뒤에 남는다.';
       }
     } else if (ev.type === 'survivor') {
       const s = SURVIVORS[ev.survivorId] || {};
@@ -2768,39 +2295,62 @@
         run.mental = Math.max(0, run.mental - SURVIVOR_RESCUE_MENTAL);
         run.danger = Math.min(100, run.danger + SURVIVOR_RESCUE_DANGER);
         emitNoise(node.id, { loud: false }); // 끌어내는 소리 — 작지 않은 소음
-        if (!hasSurvivor(ev.survivorId)) meta.survivors.push(ev.survivorId);
-        clearSurvivorNote(ev.survivorId); // 예전에 표시해 뒀던 사람이면 그 기록을 지운다
-        saveMeta(); // 구출 즉시 저장 — 이번 조사가 실패로 끝나도 구한 사람은 유지된다
+        if (!hasSurvivor(ev.survivorId)) {
+          meta.survivors.push(ev.survivorId);
+          saveMeta(); // 구출 즉시 저장 — 이번 런이 실패로 끝나도 사람은 남는다
+        }
         msg = s.rescueLog || '갇혀 있던 사람을 끌어냈다.';
       } else if (choiceId === 'mark') {
-        // 위치만 표시: 구출하지 않지만 표식을 새긴다. 소음·의심은 없고, 새긴 자리는 시작 화면에 기록된다.
+        // 위치만 표시: 구출하지 않는다. v1은 되돌아와도 이 방에 다시 열리지 않는다.
         run.mental = Math.max(0, run.mental - 2);
         run.danger = Math.min(100, run.danger + 2);
-        noteSurvivor(ev.survivorId, 'marked');
-        msg = '벽에 분필로 표시를 두고 물러났다. 손이 비면 다시 오겠다고 스스로에게 말했다.';
+        msg = '지금은 손이 없다. 벽에 표식을 긁어 위치만 남기고 물러났다.';
       } else {
-        // 그냥 지나감: 지금은 조용하지만, 다음 조사에서 거리 소문·의심도로 뒤늦게 돌아온다.
-        run.mental = Math.max(0, run.mental - 3);
-        run.danger = Math.min(100, run.danger + 1);
-        noteSurvivor(ev.survivorId, 'abandoned');
-        msg = '못 본 척 등을 돌렸다. 뒤에서 그 사람이 두드리는 소리가 한참 따라왔다.';
+        run.danger = Math.max(0, run.danger - 1);
+        msg = '못 본 척 지나쳤다. 두드림 소리가 등 뒤에서 한동안 이어진다.';
       }
     } else if (ev.type === 'item-encounter') {
       const item = run.currentItem;
-      if (!item) {
+      if (choiceId && choiceId.startsWith('take-back:')) {
+        const requestedId = choiceId.slice('take-back:'.length);
+        const loot = droppedLoots().find((entry) => node && entry.nodeId === node.id && entry.id === requestedId);
+        if (!loot) {
+          msg = '내려놓은 짐은 이미 어둠 속으로 사라졌다.';
+        } else if (!roomFor(loot.item)) {
+          run.seenBagAlerts.add('blocked');
+          run.lastAction = BAG_ALERTS.blocked;
+          log(BAG_ALERTS.blocked, 'hot');
+          showDialogue(BAG_ALERTS.blocked, 'hot');
+          render();
+          return;
+        } else {
+          run.bag.push(loot.item);
+          removeDroppedLoot(loot);
+          run.grabbedCount += 1;
+          run.droppedCount = Math.max(0, run.droppedCount - 1);
+          run.light = Math.max(0, run.light - Math.max(2, GRAB_LIGHT_COST - 1));
+          playGrabFx();
+          run.chasing = true;
+          applyPickupNoise(node.id, loot.item, true);
+          run.danger = Math.min(100, run.danger + Math.max(2, GRAB_DANGER_BUMP - 2));
+          const brokenTail = loot.broken ? ' 깨진 모서리가 손끝을 스친다.' : '';
+          msg = `눈앞의 회수물은 그대로 두고, 내려놓았던 ${loot.item.name}${objectParticle(loot.item.name)} 먼저 가방에 넣었다.${brokenTail}`;
+          maybeQueueBagAlert();
+          maybeQueueLightAlert();
+        }
+      } else if (!item) {
         msg = '물건은 이미 챙겼다.';
       } else if (choiceId === 'skip') {
-        // 지금은 지나친다. 자국은 그대로라, 다시 이 방을 지날 때 조용히 집을 수 있다.
+        // 지금은 지나친다. 자국은 남아, 다시 이 방을 지날 때 조용히 집을 수 있다.
         run.currentItem = null;
         run.danger = Math.max(0, run.danger - 2);
         msg = `${item.name}${objectParticle(item.name)} 그대로 두고 지나쳤다. 발소리를 죽인 채 물러난다.`;
       } else if (!roomFor(item)) {
-        // 가방이 가득 차(맨손이면 손이 가득 차) 집을 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
-        const alert = bagAlert('blocked');
+        // 가방이 가득 차 집을 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
         run.seenBagAlerts.add('blocked');
-        run.lastAction = alert;
-        log(alert, 'hot');
-        showDialogue(alert, 'hot');
+        run.lastAction = BAG_ALERTS.blocked;
+        log(BAG_ALERTS.blocked, 'hot');
+        showDialogue(BAG_ALERTS.blocked, 'hot');
         render();
         return;
       } else {
@@ -2817,7 +2367,7 @@
         const noiseWarn = applyPickupNoise(node.id, item, cautious);
         if (cautious) {
           run.danger = firstGrab ? Math.max(run.danger, GRAB_DANGER_BUMP) : Math.min(100, run.danger + GRAB_DANGER_BUMP);
-          msg = packItemLine(item, 'cautious');
+          msg = `숨을 죽이고 ${item.name}${objectParticle(item.name)} 천천히 가방에 넣었다.`;
           if (noiseWarn) msg += ` ${noiseWarn}`; // 소리 큰 물건은 조심해도 티가 난다.
         } else {
           run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP + 4);
@@ -2825,45 +2375,52 @@
           const cue = dir ? `${dir}에서 발소리가 붙는다.` : '뒤쪽에서 발소리가 붙는다.';
           msg = `${item.name}${objectParticle(item.name)} 재빨리 낚아챘다. ${cue}`;
         }
+        if (usedSlots() >= bagCap() && !run.seenBagAlerts.has('full')) {
+          run.seenBagAlerts.add('full');
+          msg += ` ${BAG_ALERTS.full}`;
+        }
         maybeQueueBagAlert();
         maybeQueueLightAlert();
         maybeQueueMentalAlert();
       }
     } else if (ev.type === 'dropped-loot') {
-      const loot = droppedLootHere(node);
+      const lootsHere = droppedLoots().filter((entry) => node && entry.nodeId === node.id);
+      const requestedId = choiceId && choiceId.startsWith('take-back:') ? choiceId.slice('take-back:'.length) : '';
+      const loot = requestedId ? lootsHere.find((entry) => entry.id === requestedId) : lootsHere[0];
       if (!loot) {
-        msg = '버린 물건은 이미 어둠 속으로 사라졌다.'; // 그새 어두운 형체가 거둬 갔다.
-      } else if (choiceId === 'leave') {
-        // 두고 물러난다 — 바닥의 자국을 따라 어두운 형체가 나중에 되찾으러 온다.
+        msg = '내려놓은 짐은 이미 어둠 속으로 사라졌다.'; // 그새 어두운 형체가 거둬 갔다.
+      } else if (choiceId === 'leave' || choiceId === 'list-more') {
+        // 두고 물러난다 — 자국은 유지된다. 어두운 형체가 나중에 되찾으러 올 몫이다.
         run.danger = Math.max(0, run.danger - 2);
-        msg = `${loot.item.name}${objectParticle(loot.item.name)} 그대로 두고 물러났다. 바닥의 자국을 따라 어두운 형체가 되찾으러 올 것이다.`;
+        msg = choiceId === 'list-more'
+          ? `남은 짐은 그대로 두었다. 바닥의 자국만 다시 확인했다.`
+          : `${loot.item.name}${objectParticle(loot.item.name)} 그대로 두고 물러났다. 바닥의 자국만 다시 확인했다.`;
       } else if (!roomFor(loot.item)) {
-        // 가방이 가득 차(맨손이면 손이 가득 차) 되챙길 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
-        const alert = bagAlert('blocked');
+        // 가방이 가득 차 되챙길 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
         run.seenBagAlerts.add('blocked');
-        run.lastAction = alert;
-        log(alert, 'hot');
-        showDialogue(alert, 'hot');
+        run.lastAction = BAG_ALERTS.blocked;
+        log(BAG_ALERTS.blocked, 'hot');
+        showDialogue(BAG_ALERTS.blocked, 'hot');
         render();
         return;
       } else {
         // 되챙기기: 같은 물건이 가방으로 돌아온다(복제 아님). 되찾으면 버림 카운트도 되돌린다.
-        // 깨진 물건은 깨진 채로 돌아온다 — 값이 크게 떨어진다. 이미 깨진 물건을 또 버렸다 주워도
-        // 더 부서지진 않는다(itemBroken 확인). 단서·표식은 사본이 그대로 지닌다.
-        const taken = loot.broken && !itemBroken(loot.item) ? breakItem(loot.item) : loot.item;
-        run.bag.push(taken);
-        run.floorMap.droppedLoot = null;
+        run.bag.push(loot.item);
+        removeDroppedLoot(loot);
         run.grabbedCount += 1;
         run.droppedCount = Math.max(0, run.droppedCount - 1);
         run.currentItem = null;
         run.light = Math.max(0, run.light - GRAB_LIGHT_COST);
         playGrabFx();
         run.chasing = true;
-        applyPickupNoise(node.id, taken, true); // 되챙기는 소리가 난다(조심히 다뤄도 티가 날 수 있다).
+        applyPickupNoise(node.id, loot.item, true); // 되챙기는 소리가 난다(조심히 다뤄도 티가 날 수 있다).
         run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
-        // 깨진 물건은 값이 떨어진 채로 돌아온다 — 수치 대신 '성한 값은 못 받는다'로만 알린다.
-        const brokenTail = itemBroken(taken) ? ' 깨진 모서리가 손끝을 스친다. 성한 값은 못 받을 것이다.' : '';
-        msg = `${packItemLine(taken, 'recovered')}${brokenTail}`;
+        const brokenTail = loot.broken ? ' 깨진 모서리가 손끝을 스친다.' : '';
+        msg = `버리고 왔던 ${loot.item.name}${objectParticle(loot.item.name)} 다시 가방에 넣었다.${brokenTail}`;
+        if (usedSlots() >= bagCap() && !run.seenBagAlerts.has('full')) {
+          run.seenBagAlerts.add('full');
+          msg += ` ${BAG_ALERTS.full}`;
+        }
         maybeQueueBagAlert();
         maybeQueueLightAlert();
       }
@@ -2880,16 +2437,18 @@
       if (choiceId === 'charge') {
         const gain = node && node.kind === 'storage' ? 22 : 15;
         run.light = clamp(run.light + gain, 0, maxLight());
+        run.lightOn = true;
         run.mental = clamp(run.mental + 3, 0, 100);
         msg = node && node.kind === 'storage'
           ? '비상 배터리를 연결했다. 손전등 빛이 조금 밝아진다.'
           : '비상등의 남은 빛을 끌어왔다. 앞쪽 윤곽이 잠깐 선명해진다.';
       } else if (choiceId === 'wipe') {
         run.light = clamp(run.light + 7, 0, maxLight());
+        run.lightOn = true;
         run.mental = clamp(run.mental + 5, 0, 100);
         msg = '렌즈의 흙탕물을 닦아냈다. 앞뒤의 깊이가 조금 돌아온다.';
       } else {
-        msg = '불안정한 빛은 건드리지 않는다. 등 뒤에서 계속 깜빡인다.';
+        msg = '불안정한 빛은 건드리지 않는다. 깜빡임만 뒤에 남는다.';
       }
     } else if (ev.type === 'monster-encounter') {
       const result = resolveMonsterEncounter(ev, choiceId);
@@ -2902,12 +2461,25 @@
         failRun();
         return;
       }
+      if (result.keepEncounter) {
+        run.lastAction = msg;
+        log(msg, 'hot');
+        clearDialogue();
+        render();
+        return;
+      }
     }
+    const arrivedFromEncounter = ev.type === 'monster-encounter' && run.encounterArrivalNode === run.currentNodeId;
+    run.encounterArrivalNode = null;
     run.pendingEvent = null;
     run.lastAction = msg || '상황을 정리했다.';
-    const actionTone = /울렸다|따라온다|없다|어둠붙이|젖은 발소리|손가락|얼굴|붙는다/.test(run.lastAction) ? 'hot' : undefined;
+    const actionTone = /울렸다|따라온다|없다|어두운 형체|젖은 발소리|손가락|얼굴|붙는다/.test(run.lastAction) ? 'hot' : undefined;
     log(run.lastAction, actionTone);
     showDialogue(run.lastAction, actionTone || (ev.type === 'mental-break' ? 'good' : ''));
+    if (arrivedFromEncounter && !run.currentItem) {
+      maybeStartRoomEvent(currentNode());
+      if (run.pendingEvent) { render(); return; }
+    }
     if (ev.type !== 'monster-encounter' && ev.type !== 'mental-break' && node && node.monster && !node.monsterResolved) {
       triggerMonster(node);
       if (run.pendingEvent) return;
@@ -2933,15 +2505,14 @@
   }
 
   function monsterChoices(monsterKind) {
-    const kind = MONSTER_ARCHETYPES[monsterKind] || MONSTER_ARCHETYPES.longFace;
-    const ctx = {
-      canLight: run.light >= 6,
-      lightStrong: run.light >= 18,
-      mentalOk: run.mental >= 18,
-      hasBag: run.bag.length > 0,
-    };
-    const choices = kind.choices(ctx);
-    return choices.length ? choices : [eventChoice('hold', '버틴다', '', 'danger')];
+    const choices = [];
+    if (relativeExit('back') != null) choices.push(eventChoice('backstep', '뒤로 물러난다', '정면을 본 채 뒷방으로 빠진다', 'good'));
+    if (relativeExit('left') != null) choices.push(eventChoice('side-left', '왼쪽으로 뛰어든다', '문틀에 걸리면 잡힌다', 'danger'));
+    if (relativeExit('right') != null) choices.push(eventChoice('side-right', '오른쪽으로 뛰어든다', '가방이 무거우면 늦다', 'danger'));
+    choices.push(eventChoice('glare', '조명을 고정한다', '몇 초만 늦출 수 있다', run.light >= 18 ? 'good' : 'danger'));
+    if (run.bag.length > 0) choices.push(eventChoice('throw-bag', '짐을 던진다', '소리를 반대쪽으로 보낸다', 'good'));
+    if (currentRoomHasCover()) choices.push(eventChoice('hide-dark', '조명을 끄고 숨는다', '캐비닛 뒤로 몸을 넣는다', 'good'));
+    return choices.length ? choices : [eventChoice('glare', '조명을 고정한다', '빛이 약하면 위험하다', 'danger')];
   }
 
   function startMonsterEncounter(reason, node, kindOverride) {
@@ -2962,6 +2533,7 @@
 
     run.holdEvent = null;
     run.chasing = true;
+    run.encounterTime = Math.max(3.2, ENCOUNTER_SECONDS - Math.max(0, run.danger - 70) / 18);
     run.monsterCrisisCount += 1;
     run.pendingEvent = {
       type: 'monster-encounter',
@@ -2974,7 +2546,7 @@
     };
     run.lastAction = run.pendingEvent.cue;
     log(run.pendingEvent.cue, 'hot');
-    showDialogue(run.pendingEvent.cue, 'hot');
+    clearDialogue();
     render();
     return true;
   }
@@ -3089,10 +2661,28 @@
       run.danger = Math.min(100, run.danger + SIGHT_MOVE_DANGER);
     }
 
+    if (effectiveLightPercent() <= 0) {
+      const load = usedSlots() / Math.max(1, bagCap());
+      const stumbleChance = 0.14 + load * 0.22 + (target.kind === 'stairs' ? 0.14 : 0);
+      run.mental = Math.max(0, run.mental - 3);
+      run.danger = Math.min(100, run.danger + 6 + Math.round(load * 6));
+      emitNoise(node.id, { loud: load > 0.65 });
+      if (Math.random() < stumbleChance) {
+        run.lastAction = target.kind === 'stairs'
+          ? '꺼진 조명으로 계단을 찾다가 발끝이 허공을 긁었다. 내려가기 전에 숨을 다시 고른다.'
+          : '꺼진 조명 속에서 벽에 어깨를 부딪쳤다. 금속음이 낮게 번지고 발걸음이 멈췄다.';
+        log(run.lastAction, 'hot');
+        showDialogue(run.lastAction, 'hot');
+        render();
+        return;
+      }
+      log('조명을 끈 채 더듬어 움직였다. 배터리는 아꼈지만 발소리가 길게 끌렸다.', 'hot');
+    }
+
     if (target.kind === 'stairs') { descend(); return; }
 
     const fromId = node.id;
-    // 이미 깨어 있거나 추격 중이거나 짐을 들었을 때만 발소리를 흘린다.
+    // 이미 깨어 있거나 추격 중이거나 짐을 들었을 때만 발소리를 남긴다.
     // 짐을 집기 전 첫 탐색은 완전히 잠든 추격자를 깨우지 않는다(공정성).
     if (stalkerAwake() || run.chasing || run.bag.length > 0) {
       emitNoise(fromId, { loud: false }); // 발을 떼는 소리로 추격자에게 이 칸을 기억시킨다.
@@ -3105,6 +2695,67 @@
     }, 'move', MOVE_MS);
   }
 
+  function chooseBackstep(targetId) {
+    if (!run || run.moving || run.dialogue || run.pendingEvent) return;
+    const s = stalker();
+    if (s && s.nodeId === targetId && stalkerAwake()) {
+      run.failContext = '뒷걸음친 순간 등 뒤에서 어두운 형체가 어깨를 눌렀다.';
+      failRun();
+      return;
+    } else if (s && s.nodeId === targetId) {
+      run.danger = Math.min(100, run.danger + 12);
+      run.lastAction = '등 뒤 어둠이 차갑게 닿았다. 발목 뒤로 찬 공기가 붙는다.';
+      log(run.lastAction, 'hot');
+    }
+    chooseExit(targetId);
+  }
+
+  function chooseHideInCover() {
+    if (!run || run.moving || run.dialogue || run.pendingEvent || !currentRoomHasCover()) return;
+    clearDialogue();
+    const noisyBag = usedSlots() >= Math.max(2, Math.ceil(bagCap() * 0.7));
+    const pressure = stalkerAwake() && (stalkerDistance() <= 2 || run.danger >= 55);
+    run.lightOn = false;
+    if (pressure && noisyBag && Math.random() < 0.45) {
+      run.danger = Math.min(100, run.danger + 20);
+      run.lastAction = '캐비닛 문을 닫는 순간 가방 안 금속이 부딪쳤다. 어두운 형체가 그 소리로 고개를 돌렸다.';
+      log(run.lastAction, 'hot');
+      startMonsterEncounter('critical', currentNode(), stalker() && stalker().kind);
+      return;
+    }
+    const s = stalker();
+    if (s) { s.quietSteps = DORMANT_AFTER; s.lastHeardId = null; s.nearCued = false; }
+    run.chasing = false;
+    run.danger = Math.max(0, run.danger - (pressure ? 35 : 12));
+    run.lastAction = '캐비닛 뒤로 몸을 넣고 조명을 껐다. 발소리가 문 앞에서 멈췄다가 멀어진다.';
+    log(run.lastAction);
+    showDialogue(run.lastAction);
+    render();
+  }
+
+  function toggleHandLight() {
+    if (!run || run.moving || run.dialogue || run.pendingEvent || run.returnWalk) return;
+    if (run.light <= 0) {
+      run.lastAction = '스위치를 눌렀지만 손전등은 켜지지 않는다.';
+      log(run.lastAction, 'hot');
+      showDialogue(run.lastAction, 'hot');
+      render();
+      return;
+    }
+    run.lightOn = run.lightOn === false;
+    if (run.lightOn) {
+      run.light = Math.max(0, run.light - 1);
+      run.danger = Math.min(100, run.danger + (stalkerAwake() ? 4 : 1));
+      run.lastAction = '조명을 다시 켰다. 앞쪽 윤곽이 돌아오지만, 빛이 복도를 긁는다.';
+      log(run.lastAction);
+    } else {
+      run.danger = Math.max(0, run.danger - (stalkerAwake() ? 8 : 2));
+      run.lastAction = '조명을 껐다. 길은 사라졌지만, 숨소리는 낮아졌다.';
+      log(run.lastAction);
+    }
+    render();
+  }
+
   // 대기. 발소리를 흘려보낸다. 시간이 흘러 조명이 조금 닳고, 조용한 걸음이 쌓여 추격자는 결국 잠든다.
   function chooseWait() {
     if (!run || run.dialogue || run.moving || run.pendingEvent || !stalkerAwake()) return;
@@ -3113,7 +2764,7 @@
     const s = stalker();
     if (s) {
       s.quietSteps += 1 + (Math.random() < 0.5 ? 1 : 0);
-      // 소리 없이 기다리는 동안에도 어두운 형체는 마지막 발소리 쪽으로 느리게 걷는다.
+      // 소리 없이 기다리는 동안에도 놈은 마지막 발소리 쪽으로 느리게 걷는다.
       // 단, 이미 바로 옆(거리 1)이면 무음 걸음으로 플레이어 칸에 올라앉지 않도록 움직이지 않는다.
       if (stalkerAwake() && stalkerDistance() > 1) moveStalkerOneStep({ silent: true });
     }
@@ -3135,11 +2786,10 @@
   function grab() {
     if (!run || run.dialogue || run.pendingEvent || !run.currentItem) return;
     if (!roomFor(run.currentItem)) {
-      const alert = bagAlert('blocked');
       run.seenBagAlerts.add('blocked');
-      run.lastAction = alert;
-      log(alert, 'hot');
-      showDialogue(alert, 'hot');
+      run.lastAction = BAG_ALERTS.blocked;
+      log(BAG_ALERTS.blocked, 'hot');
+      showDialogue(BAG_ALERTS.blocked, 'hot');
       render();
       return;
     }
@@ -3169,8 +2819,8 @@
       run.danger = Math.min(100, run.danger + GRAB_DANGER_BUMP);
       const dir = reversePathDirection(node);
       const cue = dir ? `${dir}에서 발소리가 가까워진다.` : '젖은 발소리가 가까워진다.';
-      run.lastAction = `${packItemLine(item, 'direct')} ${cue}${tail}`;
-      log(`${packItemLine(item, 'direct')} ${cue}${tail}`, 'hot');
+      run.lastAction = `${item.name}까지 챙겼다. ${cue}${tail}`;
+      log(`${item.name}까지 챙겼다. ${cue}${tail}`, 'hot');
       showDialogue(run.lastAction, 'hot');
     }
     maybeQueueBagAlert();
@@ -3196,18 +2846,35 @@
   function dropAndFlee() {
     if (run.dialogue || !run.chasing || run.bag.length === 0) return;
     clearDialogue();
-    // 가장 비싼 물건을 떨군다 → 위험 급감. 이제 물건은 사라지지 않고 바닥 자국으로 바뀐다(끌개):
-    // 던전은 미끼가 아니라 '되찾을 물건'을 좇는다. 어두운 형체보다 먼저 닿으면 다시 집을 수 있다.
+    // 가장 비싼 물건을 떨군다 → 위험 급감. 이제 물건은 사라지지 않고 바닥 자국으로 남는다(끌개):
+    // 던전은 미끼가 아니라 '되찾을 물건'을 좇는다. 놈보다 먼저 닿으면 다시 집을 수 있다.
     let idx = 0;
     run.bag.forEach((it, i) => { if (it.value > run.bag[idx].value) idx = i; });
     const dropped = run.bag.splice(idx, 1)[0];
     run.droppedCount += 1;
     run.danger = Math.max(0, run.danger * DROP_DANGER_FACTOR - DROP_DANGER_MINUS);
-    dropLootTrace(dropped); // 던진 물건 쪽으로 추격자를 돌리고, 되찾을 수 있는 자국을 만든다.
-    playSfx('drop'); // 바닥을 긁는 스크레이프
+    dropLootTrace(dropped); // 던진 물건 쪽으로 추격자를 돌리고, 되찾을 수 있는 자국을 남긴다.
     const droppedObject = `${dropped.name}${objectParticle(dropped.name)}`;
     const shatter = itemFragile(dropped) ? ' 깨지는 소리가 났다.' : '';
     run.lastAction = `${droppedObject} 던지고 반대쪽으로 뛰었다.${shatter} 발소리가 던진 물건 쪽으로 돌아선다.`;
+    log(run.lastAction);
+    showDialogue(run.lastAction);
+    render();
+  }
+
+  function dropBagItem(index) {
+    if (!run || run.moving || run.returnWalk || run.dialogue || run.pendingEvent || run.bag.length === 0) return;
+    const itemIndex = safeInt(index, -1, 0, run.bag.length - 1);
+    if (itemIndex < 0) return;
+    clearDialogue();
+    const dropped = run.bag.splice(itemIndex, 1)[0];
+    if (!dropped) return;
+    run.droppedCount += 1;
+    dropLootHere(dropped);
+    if (run.chasing) run.danger = Math.max(0, run.danger - 4);
+    run.seenBagAlerts.delete('full');
+    run.seenBagAlerts.delete('blocked');
+    run.lastAction = `${dropped.name}${objectParticle(dropped.name)} 가방에서 꺼내 바닥에 놓았다. 빈칸이 생겼다.`;
     log(run.lastAction);
     showDialogue(run.lastAction);
     render();
@@ -3303,7 +2970,7 @@
     run.pendingEvent = null;
     run.returnWalk = true;
     if (opts.lead) showDialogue(opts.lead, opts.leadTone || '');
-    else log('왔던 길을 거슬러 지상으로 향한다.', 'win');
+    else log('왔던 길을 되짚어 지상으로 향한다.', 'win');
     const walk = buildReturnWalkLines(risk, opts);
     const pursuitSet = new Set(RETURN_WALK_PURSUIT);
     walk.forEach((text) => {
@@ -3396,9 +3063,9 @@
     let knockedOut = false;
     const risky = ev.risk.score >= 86;
     const veryRisky = ev.risk.score >= 102;
-    // TODO(끌개 v2): 귀환 중 버린 짐은 dropLootTrace로 자국을 두지 않는다 — 이 시점엔 이미
+    // TODO(끌개 v2): 귀환 중 버린 짐은 dropLootTrace로 자국을 남기지 않는다 — 이 시점엔 이미
     // 계단을 오르며 층을 떠나므로(startReturnWalk) 플레이어가 되찾을 수 없다. 되찾기 루프가
-    // 성립하지 않아 v1에서는 조용히 잃는다. 층에 머물러 다시 내려갈 수 있게 되면 그때 연결한다.
+    // 성립하지 않아 v1에서는 조용히 잃는다. 층에 남아 다시 내려갈 수 있게 되면 그때 연결한다.
     const loseCheapest = (fallback) => {
       const lost = takeCheapestBagItem();
       if (!lost) return fallback || '버릴 짐이 없다. 가방이 빈 소리만 낸다.';
@@ -3488,12 +3155,6 @@
     run.lastSale = run.bag.slice();
     run.chasing = false;
     run.bought = false;
-    // 판매 전에 왜곡 변이 지급을 판정한다(조사당 한 번). 뜨거운 유물을 들고 나왔으면 몸에 흔적이 생긴다.
-    const gainedMutation = grantMutationOnReturn();
-    if (gainedMutation) {
-      run.mutationNote = gainedMutation.gainLog;
-      log(gainedMutation.gainLog, 'hot'); // 장비 화면 요약과 함께 던전 로그에도 함께 띄운다
-    }
     // 빈손 귀환도 판매 화면을 거친다: 출구 경로를 고르고 판매처(위원회/암시장)를 눌러야 강화로 넘어간다.
     // chooseBuyer가 raw 0을 안전 처리하므로 빈 가방이어도 문제없이 진행된다.
     renderReturnScreen();
@@ -3505,21 +3166,16 @@
   function routeEffect() {
     const route = run.exitRoute || 'official';
     if (route === 'crack') {
-      // 이미 깨진 물건은 되챙길 때 값을 한 번 치렀다 — 균열 출구에서 또 긁지 않는다(이중 차감 방지).
-      const fragileValue = run.bag.reduce((s, it) => s + (itemFragile(it) && !itemBroken(it) ? it.value : 0), 0);
-      // 균열 시야 변이: 틈이 너무 많이 보여 빠져나오는 길을 잘못 짚어 긁힘 비율이 조금 커진다(결정적).
-      const fissure = hasMutation('fissure-sight');
-      const scratch = Math.round(fragileValue * (fissure ? FISSURE_SCRATCH_RATE : EXIT_SCRATCH_RATE));
-      let note = scratch > 0
-        ? `균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번 짐은 -${scratch} RP.`
-        : '균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번엔 긁힐 게 없었다.';
-      if (fissure && scratch > 0) note = `${note} ${FISSURE_EXIT_NOTE}`;
+      const fragileValue = run.bag.reduce((s, it) => s + (itemFragile(it) ? it.value : 0), 0);
+      const scratch = Math.round(fragileValue * EXIT_SCRATCH_RATE);
       return {
         route,
         suspDelta: -EXIT_CRACK_SUSP_RELIEF,
         gainDelta: -scratch,
         blackSuspRelief: 0,
-        note,
+        note: scratch > 0
+          ? `균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번 짐은 -${scratch} RP.`
+          : '균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번엔 긁힐 게 없었다.',
       };
     }
     if (route === 'blackpass') {
@@ -3531,50 +3187,20 @@
         gainDelta: noCargo ? 0 : -EXIT_PASSAGE_FEE,
         blackSuspRelief: EXIT_PASSAGE_BLACK_RELIEF,
         note: noCargo
-          ? '암시장 통로 — 빈손이라 통행료를 받지 않았다. 바로 뒷골목에 붙어 꼬리를 덜 잡힌다.'
-          : `암시장 통로 — 통행료 -${EXIT_PASSAGE_FEE} RP로 바로 뒷골목에 붙어 꼬리를 덜 잡힌다.`,
+          ? '암시장 통로 — 빈손이라 통행료를 받지 않았다. 바로 뒷골목에 붙어 꼬리가 덜 남는다.'
+          : `암시장 통로 — 통행료 -${EXIT_PASSAGE_FEE} RP로 바로 뒷골목에 붙어 꼬리가 덜 남는다.`,
       };
     }
     const heatTotal = run.bag.reduce((s, it) => s + itemHeat(it), 0);
-    // 검문이 걸리는 이유를 둘로 나눠 둔다 — 안내 문구가 실제 사유와 맞아야 한다.
-    // (뜨거운 짐 때문인지, 이름이 검문 명단에 올랐는지, 혹은 둘 다인지)
-    const dueHeat = heatTotal >= EXIT_CHECKPOINT_HEAT;
-    const dueSusp = meta.suspicion >= EXIT_CHECKPOINT_SUSP;
-    const checkpoint = dueHeat || dueSusp;
-    const insider = hasSurvivor('insider');
-    let suspAdd = checkpoint ? EXIT_CHECKPOINT_SUSP_ADD : 0;
-    let note;
-    if (checkpoint) {
-      // 전 직원을 구출했다면 미리 넣어 둔 통행 암구호로 오르는 의심도를 조금 덜어낸다.
-      // 다만 완전히 없애진 않는다 — 뜨거운 짐/높은 의심도면 여전히 조금은 오른다.
-      if (insider) {
-        suspAdd = Math.max(0, suspAdd - INSIDER_CHECKPOINT_RELIEF);
-        note = suspAdd > 0
-          ? '공식 출구 — 검문에 걸렸지만, 전 직원이 준비해 둔 통행 암구호로 검문대가 한풀 눅었다.'
-          : '공식 출구 — 검문에 걸렸지만, 전 직원의 통행 암구호에 검문대가 그냥 손을 저었다.';
-      } else if (dueHeat) {
-        // 뜨거운 짐 때문(둘 다인 경우도 포함) — 짐을 걸고 넘어진 게 맞다.
-        note = '공식 출구 — 안전하지만 검문이 있다. 짐이 뜨거워 검문대가 의심도를 조금 올렸다.';
-      } else {
-        // 짐은 뜨겁지 않은데 의심도만 높은 경우 — 이름이 검문 명단에 올라 걸린 것이다.
-        note = '공식 출구 — 안전하지만 검문이 있다. 이름이 검문 명단에 올라 검문대가 의심도를 조금 올렸다.';
-      }
-      // 검은 손 변이: 검문에 걸리면 손이 눈에 띄어 의심도가 조금 더 오른다(과하지 않게 +1).
-      if (hasMutation('black-hand')) {
-        suspAdd += BLACKHAND_CHECKPOINT_SUSP;
-        note = `${note} ${BLACKHAND_CHECKPOINT_NOTE}`;
-      }
-    } else {
-      note = insider
-        ? '공식 출구 — 전 직원이 통행 암구호를 미리 넣어 둬 검문을 매끈하게 통과했다.'
-        : '공식 출구 — 안전하지만 검문이 있다. 이번엔 무사히 통과했다.';
-    }
+    const checkpoint = heatTotal >= EXIT_CHECKPOINT_HEAT || meta.suspicion >= EXIT_CHECKPOINT_SUSP;
     return {
       route,
-      suspDelta: suspAdd,
+      suspDelta: checkpoint ? EXIT_CHECKPOINT_SUSP_ADD : 0,
       gainDelta: 0,
       blackSuspRelief: 0,
-      note,
+      note: checkpoint
+        ? '공식 출구 — 안전하지만 검문이 있다. 짐이 뜨거워 검문대가 의심도를 조금 올렸다.'
+        : '공식 출구 — 안전하지만 검문이 있다. 이번엔 무사히 통과했다.',
     };
   }
 
@@ -3585,88 +3211,20 @@
     if (buyer === 'committee') {
       gained = Math.ceil(raw * 0.72);
       suspDelta = -Math.min(10, 2 + run.bag.length * 2);
-      // 표식 물건은 위원회 추적 명단에 오른 회수물이라, 정식 반납하면 그 명단이 함께 지워져 의심도가 조금 더 눅는다(유계).
-      const markedCount = run.bag.filter(itemMarked).length;
-      if (markedCount) suspDelta -= Math.min(MARKED_SUSPICION_CAP, markedCount * MARKED_COMMITTEE_RELIEF);
-      // 젖은 살갗 변이: 정식 반납의 안전 완화가 1 줄어든다(대가). 제출 자체가 의심도를 올리진 않는다(0 초과 금지).
-      if (hasMutation('muffled-skin')) suspDelta = Math.min(0, suspDelta + MUFFLED_COMMITTEE_SUSP);
-    } else if (buyer === 'family') {
-      // 유품은 가족에게(사례로 값의 일부만), 나머지는 위원회 반납가로 조용히 넘긴다.
-      const familyItems = run.bag.filter(itemFamily);
-      const otherItems = run.bag.filter((it) => !itemFamily(it));
-      const familyRaw = familyItems.reduce((s, it) => s + it.value, 0);
-      const otherRaw = otherItems.reduce((s, it) => s + it.value, 0);
-      gained = Math.ceil(familyRaw * FAMILY_RETURN_RATE) + Math.ceil(otherRaw * 0.72);
-      // 유품 반환 + 조용한 위원회 반납 → 의심도가 눅는다(유품 개수 + 반납 물건 수 기준).
-      const committeeRelief = otherItems.length ? Math.min(10, 2 + otherItems.length * 2) : 0;
-      suspDelta = -(FAMILY_RETURN_SUSP_RELIEF * familyItems.length + committeeRelief);
-      // 유품 자체는 표식이 없다. 위원회 반납분(유품이 아닌 짐)에 표식 물건이 섞여 있으면 그 명단이 함께 지워져 조금 더 눅는다(유계).
-      const markedOther = otherItems.filter(itemMarked).length;
-      if (markedOther) suspDelta -= Math.min(MARKED_SUSPICION_CAP, markedOther * MARKED_COMMITTEE_RELIEF);
     } else {
       // 암시장 의심도는 물건별 heat 합(등급이 아니라 물건 태그). 태그 없으면 등급으로 보정.
       const heat = run.bag.reduce((sum, it) => sum + itemHeat(it), 0);
-      // 과열선(SUSPICION_HOT)을 넘긴 상황이면 물건 출처가 의심스러워 중개상도 부담이 커져 위험 프리미엄을 깎고, 뒷거래로 꼬리가 조금 더 붙는다.
-      // 뜨거울수록 '위험 판매'가 더는 공짜가 아니게 되어 위원회 냉각과 저울질하게 된다(결정적·유계).
-      const hot = meta.suspicion >= SUSPICION_HOT;
-      gained = Math.ceil(raw * (hot ? BLACK_RATE_HOT : BLACK_RATE));
+      gained = Math.ceil(raw * 1.35);
       suspDelta = eff.blackSuspRelief ? Math.max(0, heat - eff.blackSuspRelief) : heat;
-      if (hot) suspDelta += BROKER_HOT_SUSP;
-      // 표식 물건을 뒷골목에 넘기면 표식된 물건이 단속·소문에 다시 떠올라 꼬리가 조금 더 잡힌다(추가 의심도·유계).
-      const markedCount = run.bag.filter(itemMarked).length;
-      if (markedCount) suspDelta += Math.min(MARKED_SUSPICION_CAP, markedCount * MARKED_BLACK_SUSPICION);
     }
     gained = Math.max(0, gained + eff.gainDelta);
     suspDelta += eff.suspDelta;
-    // 젖은 살갗 대가가 실제로 적용됐을 때만(위원회 반납) 접수창 한 줄을 덧붙인다.
-    const muffledNote = buyer === 'committee' && hasMutation('muffled-skin') ? MUFFLED_COMMITTEE_NOTE : '';
-    return { gained, suspDelta, note: eff.note, route: eff.route, muffledNote };
-  }
-
-  // 판매처를 'NPC와의 짧은 대화'로 보여주는 한 줄. 왜 그 값·의심도가 나오는지 숫자 대신 사람 말로 전한다.
-  // 중개상 대사는 상태에 따라 달라진다 — 물건 출처가 의심스러우면 값을 깎고, 이번 짐에 단서가 있으면 장부 한 줄을 흘린다.
-  function buyerDialogue(buyer) {
-    if (buyer === 'committee') {
-      return '접수창 너머 직원이 서류에 도장을 찍는다. “정식 반납이면 값은 낮습니다. 대신 접수증을 끊어 드리죠. 검문에서 이 짐을 어디서 냈는지 설명이 됩니다.”';
-    }
-    if (buyer === 'family') {
-      return '유족이 유품을 두 손으로 받아 든다. “고맙습니다… 이건 조용히 간직하겠습니다.”';
-    }
-    // 암시장 중개상: 이름은 묻지 않고 위로 못 올리는 물건이라 더 쳐주는 대신, 짐이 단속·소문에 걸리면 최초 판매자가 누군지 알아낸다.
-    const unknown = run.lastSale.find((it) => itemTruth(it) && !meta.truths.includes(it.name));
-    const hot = meta.suspicion >= SUSPICION_HOT;
-    let line = hot
-      ? '중개상이 물건을 보다 혀를 찬다. “이 물건, 출처가 너무 의심스러워. 비싸게는 못 쳐줘. 그래도 꼬리는 잡힐 수 있어.”'
-      : '중개상이 천을 걷어 물건을 살핀다. “이름은 안 물어. 위로 못 올리는 물건이라 더 쳐주지. 대신 이게 단속에 걸리면 최초 판매자가 누군지 알아낼 거야.”';
-    if (unknown) line += ' 그가 낡은 장부를 밀어 준다. “이 번호, 싱크홀 전날에도 찍혔어.”';
-    return line;
-  }
-
-  // 표식(marked) 회수물을 이번 판매처로 넘긴 결과를 한 줄로 요약한다(수치·명단은 감춘다).
-  // 표식 물건이 없으면 빈 문자열이라 요약 영역에 아무 줄도 더하지 않는다.
-  function markedSaleNote(buyer) {
-    const markedSold = run.lastSale.filter(itemMarked);
-    if (!markedSold.length) return '';
-    if (buyer === 'black') {
-      return '표식 있는 물건이 뒷골목에 다시 떠올라, 순찰이 이걸 누가 올렸는지 캐고 다닌다.';
-    }
-    if (buyer === 'committee') {
-      return '표식 있는 물건을 정식 창구에 올리자, 그 물건이 공개 수배·검문 목록에서 조용히 빠졌다.';
-    }
-    if (buyer === 'family') {
-      // 유품 자체는 표식이 없다. 위원회 반납분으로 함께 넘어간 표식 짐이 있을 때만 알린다.
-      const markedOther = markedSold.filter((it) => !itemFamily(it));
-      if (markedOther.length) return '유품과 함께 넘긴 표식 물건이 위원회 반납분에서 조용히 정리됐다.';
-    }
-    return '';
+    return { gained, suspDelta, note: eff.note, route: eff.route };
   }
 
   function chooseBuyer(buyer) {
     const quote = saleQuote(buyer);
-    playSfx('sale'); // 판매처/가족 선택 확인 펄스(위원회·암시장·가족 공용)
-    run.exitNote = quote.note; // 장비 화면 요약에 출구 결과를 적어 둔다
-    run.markedNote = markedSaleNote(buyer); // 표식(marked) 회수물 처리 결과 한 줄(있을 때만)
-    run.muffledNote = quote.muffledNote || ''; // 젖은 살갗 대가가 적용됐을 때 한 줄(있을 때만)
+    run.exitNote = quote.note; // 강화 화면 요약에 출구 결과를 남긴다
     const previousTruthCount = meta.truths.length;
     meta.rp += quote.gained;
     meta.totalEarned += quote.gained;
@@ -3675,28 +3233,26 @@
     run.lastTruth = null;
 
     if (buyer === 'black') {
-      // truth 태그가 붙은 회수물만 단서가 된다 — 유품(family, truth 없음)은 팔아도 단서를 늘리지 않는다.
-      const unknown = run.lastSale.find((it) => itemTruth(it) && !meta.truths.includes(it.name));
+      const unknown = run.lastSale.find((it) => !meta.truths.includes(it.name));
       if (unknown) {
         meta.truths.push(unknown.name);
-        run.lastTruth = itemTruthText(unknown);
+        run.lastTruth = unknown.truth;
       }
     }
 
     if (previousTruthCount !== meta.truths.length) {
-      log('암시장 정보상이 단서 하나를 넘겼다.', 'win');
+      log('암시장 정보상이 진실 조각 하나를 넘겼다.', 'win');
     }
-    // 마지막 단서가 이번 판매로 처음 채워졌는가(아래→가득). 매 조사 반복 발동을 막는다.
+    // 마지막 진실 조각이 이번 판매로 처음 채워졌는가(아래→가득). 매 런 반복 발동을 막는다.
     const endingUnlocked =
       previousTruthCount < TRUTH_TOTAL &&
       meta.truths.length >= TRUTH_TOTAL &&
       !meta.endingSeen;
 
     resolveContract(buyer);
-    saveMeta(); // 판매처 선택 후 자동 저장 (RP·의심도·단서 반영)
+    saveMeta(); // 판매처 선택 후 자동 저장 (RP·의심도·진실 조각 반영)
     run.streetNews = makeStreetNews(buyer, quote);
-    bagShopOpen = false; // 새 강화 화면은 가방 목록을 접은 채로 연다
-    // RP/의심도/의뢰/저장은 그대로 반영하고, 장비 화면도 미리 렌더한다(계속 버튼이 곧장 보여줄 수 있게).
+    // RP/의심도/의뢰/저장은 그대로 반영하고, 강화 화면도 미리 렌더한다(계속 버튼이 곧장 보여줄 수 있게).
     renderUpgradeScreen(quote.gained);
     if (endingUnlocked) {
       renderEndingScreen();
@@ -3708,7 +3264,6 @@
 
   function failRun() {
     stopTick();
-    playSfx('fail'); // 기절 — 짧고 둔탁한 낙하(거칠지 않게)
     const lost = bagValue();
     const outcome = RECOVERY_OUTCOMES[Math.floor(Math.random() * RECOVERY_OUTCOMES.length)];
     // 의무병 구출 시: 오르는 의심도를 덜어내고(양수 델타만), 위로 보상을 조금 더 챙겨준다.
@@ -3721,26 +3276,18 @@
       if (lost > 0) { medicBonus = Math.max(1, Math.round(lost * MEDIC_CONSOLATION_RATE)); consolation += medicBonus; }
     }
     const previousSuspicion = meta.suspicion;
-    const lostBag = bagProduct();
-    const hadBag = meta.bagLevel > NO_BAG_LEVEL; // 빼앗길 가방이 있었는가
     meta.rp += consolation;
     meta.totalEarned += consolation;
     meta.suspicion = Math.max(0, Math.min(99, meta.suspicion + suspDelta));
-    meta.bagLevel = NO_BAG_LEVEL; // 가방이 있었으면 통째로 사라지고, 없었으면 그대로 맨손. 다음 조사는 가방 없이 재개.
-    saveMeta(); // 실패 보상·가방 상실 후 자동 저장
+    saveMeta(); // 실패 보상 후 자동 저장
     el['fail-recovery'].innerHTML = `<b>${outcome.elapsed}</b><span>${outcome.title}</span><p>${outcome.body}</p>`;
     const suspChange = meta.suspicion - previousSuspicion;
     const suspText = suspChange === 0 ? '변화 없음' : signed(suspChange);
     el['fail-detail'].innerHTML = [
       run.failContext ? `마지막 순간: ${run.failContext}` : '',
-      hadBag
-        ? (lost > 0
-            ? `어두운 형체가 후려쳐 기절했다. ${lostBag.name}과 안에 든 물건이 사라져있었다. · 위로금 +${consolation} RP`
-            : `어두운 형체가 후려쳐 기절했다. 빈 ${lostBag.name}${subjectParticle(lostBag.name)} 사라져있었다.`)
-        : (lost > 0
-            ? `어두운 형체가 후려쳐 기절했다. 주머니에 숨겨놓은 물건이 사라져있었다. · 위로금 +${consolation} RP`
-            : '어두운 형체가 후려쳐 기절했다. 가진게 없어 사라진 물건은 없었다.'),
-      '다음 조사는 가방 없이 가야할지도 모르겠다.',
+      lost > 0
+        ? `잃은 짐 ${lost} RP · 남은 조각 +${consolation} RP`
+        : '빈손이라 잃은 회수품은 없었다.',
       outcome.loss,
       medic ? `의무병이 상처를 감싸고 뒤처리를 도왔다${medicBonus > 0 ? ` (+${medicBonus} RP)` : ''}.` : '',
       `의심도 ${suspText}`,
@@ -3751,9 +3298,8 @@
     show('screen-fail');
   }
 
-  /* ---------------- 장비/구매 ---------------- */
+  /* ---------------- 강화 ---------------- */
 
-  // 조명·장비 손질(가방은 아래 openBagShop/buyBag로 따로 처리한다).
   function buyUpgrade(type) {
     if (run.bought) return;
     const lvKey = type + 'Level';
@@ -3762,50 +3308,9 @@
     meta.rp -= cost;
     meta[lvKey] += 1;
     run.bought = true;
-    playSfx('upgrade'); // 장비 마련 성공 — 부드럽게 오르는 차임
-    saveMeta(); // 구매 후 자동 저장
+    saveMeta(); // 강화 구매 후 자동 저장
     log(`${UPGRADES[type].label}${objectParticle(UPGRADES[type].label)} 손봤다. 다음엔 더 버틴다.`, 'win');
     renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
-    flashUpgradeSuccess(type); // 성공한 버튼에 짧은 반짝임 + 가벼운 진동감
-  }
-
-  // 가방 구매는 순차 강화가 아니다. '가방 구매'를 누르면 크기 선택 목록을 열고, 원하는 가방을 곧장 산다.
-  function openBagShop() {
-    if (!run || run.bought) return;
-    bagShopOpen = !bagShopOpen;
-    renderUpgradeScreen(null);
-  }
-
-  // 고른 크기의 가방을 산다(맨손 제외, 지금 것보다 큰 것만). RP가 되면 큰 가방도 곧장 살 수 있다.
-  function buyBag(level) {
-    if (run.bought) return;
-    const product = BAG_PRODUCTS.find((bag) => bag.level === level);
-    if (!product || product.level <= NO_BAG_LEVEL) return;
-    if (product.level <= meta.bagLevel) return; // 이미 같은/더 큰 가방을 멨다
-    const cost = bagCost(level);
-    if (cost === Infinity || meta.rp < cost) return;
-    meta.rp -= cost;
-    meta.bagLevel = product.level; // 고른 가방을 그 자리에서 소유·착용
-    run.bought = true;
-    bagShopOpen = false;
-    playSfx('upgrade'); // 가방 마련 성공 — 부드럽게 오르는 차임
-    saveMeta(); // 구매 후 자동 저장
-    log(`${product.name}${objectParticle(product.name)} 샀다. ${product.cap}칸 정도의 공간이 생겼다.`, 'win');
-    renderUpgradeScreen(null); // 잔액/버튼 상태 갱신
-    flashUpgradeSuccess('bag'); // 가방 구매 버튼에 짧은 반짝임 + 가벼운 진동감
-  }
-
-  // 구매/손질이 성공한 그 버튼에만 짧은 반짝임/진동 느낌을 준다. 실패·비활성 탭에는 붙지 않는다.
-  function flashUpgradeSuccess(type) {
-    const btn = el['up-' + type];
-    if (!btn) return;
-    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduced) return; // 모션 최소화 설정이면 정적으로 둔다
-    btn.classList.remove('up-flash');
-    void btn.offsetWidth; // 리플로우로 애니메이션을 확실히 재시작
-    btn.classList.add('up-flash');
-    window.setTimeout(() => btn.classList.remove('up-flash'), 560); // 가장 긴 반짝임 길이 + 여유
-    if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} } // 지원 기기 한정 가벼운 햅틱
   }
 
   function riskState() {
@@ -3860,7 +3365,8 @@
     if (el['risk-panel']) {
       el['risk-panel'].className = `risk-panel ${risk.key} minimal`;
       el['risk-chip'].textContent = risk.label;
-      el['risk-copy'].textContent = risk.copy;
+      const encounter = run.pendingEvent && run.pendingEvent.type === 'monster-encounter';
+      el['risk-copy'].textContent = encounter ? `어두운 형체 접근 ${Math.ceil(run.encounterTime || 0)}초` : risk.copy;
     }
 
     // 가방 슬롯
@@ -3876,17 +3382,12 @@
       el['stage'].classList.toggle('has-loot', !!run.currentItem);
       el['stage'].classList.toggle('monster-encounter', monsterCrisisOpen);
       el['stage'].classList.toggle('returning', !!run.returnWalk);
-      // 현재 층 테마 클래스 하나만 붙인다 — 층을 내려가면(run.floor) 자동으로 바뀌고, 매 렌더에서 유지된다.
-      el['stage'].classList.remove(...FLOOR_THEME_CLASSES);
-      el['stage'].classList.add(floorThemeClass(run.floor));
-      renderPresenceFx();
-      syncAmbience(); // 층 테마에 맞춰 배경 앰비언스도 동기화(엣지 트리거라 같은 테마면 아무 일도 없다)
     }
     renderStage();
     renderDepthRail();
     renderMiniMap();
 
-    // 액션 버튼: 줍기(스테이지 위), 짐 버리고 튀기, 지상으로 나가기/발길 돌리기.
+    // 액션 버튼: 줍기(스테이지 위), 버리고 도망, 나가기.
     if (el['dock']) {
       el['dock'].classList.toggle('hidden', !!(run.moving || dialogueOpen));
       el['dock'].setAttribute('aria-hidden', dialogueOpen ? 'true' : 'false');
@@ -3903,19 +3404,19 @@
     el['btn-drop'].classList.toggle('hidden-action', !showDrop);
     if (el['dock-actions']) el['dock-actions'].classList.toggle('has-drop', showDrop);
     el['btn-return'].disabled = !!(run.moving || run.pendingEvent || dialogueOpen);
-    el['btn-drop'].textContent = '↙ 짐 버리고 튀기';
+    el['btn-drop'].textContent = '↙ 버리고 도망';
     el['btn-return'].textContent = run.pendingEvent && run.pendingEvent.type === 'return-attempt'
       ? '↩ 올라가는 중'
-      : (run.bag.length > 0 ? '↩ 지상으로 나가기' : '↩ 발길 돌리기');
+      : (run.bag.length > 0 ? '↩ 나가기' : '↩ 돌아가기');
   }
 
   function renderBag() {
     const cap = bagCap();
     const cells = [];
-    // 각 물건이 차지하는 칸을 색으로 채운다.
-    run.bag.forEach((item) => {
+    // 각 물건이 차지하는 칸을 색으로 채운다. 채워진 칸은 같은 itemIndex를 공유해 어느 칸을 눌러도 그 물건을 버린다.
+    run.bag.forEach((item, itemIndex) => {
       for (let s = 0; s < item.slots; s++) {
-        cells.push({ color: TIER_COLOR[item.tier], icon: item.icon, name: item.name, label: s === 0 ? item.name : '' });
+        cells.push({ color: TIER_COLOR[item.tier], icon: item.icon, label: s === 0 ? item.name : '', item, itemIndex });
       }
     });
     while (cells.length < cap) cells.push(null);
@@ -3923,10 +3424,24 @@
     el['bag-slots'].innerHTML = '';
     cells.forEach((c) => {
       const d = document.createElement('div');
-      d.className = 'slot' + (c ? ' filled' : '');
+      d.className = 'slot' + (c ? ' filled droppable' : '');
       if (c) {
-      d.style.setProperty('--tier-color', c.color);
-      d.innerHTML = itemIcon(c.icon, c.name) + (c.label ? `<span class="slot-label">${c.label}</span>` : '');
+        d.style.setProperty('--tier-color', c.color);
+        d.setAttribute('role', 'button');
+        d.setAttribute('tabindex', '0');
+        d.setAttribute('aria-label', `${c.item.name} 버리기`);
+        d.dataset.itemIndex = String(c.itemIndex);
+        d.innerHTML = itemIcon(c.icon) + (c.label ? `<span class="slot-label">${c.label}</span>` : '');
+        const handleDrop = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          dropBagItem(d.dataset.itemIndex);
+        };
+        d.addEventListener('click', handleDrop);
+        d.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          handleDrop(event);
+        });
       }
       el['bag-slots'].appendChild(d);
     });
@@ -3965,52 +3480,6 @@
       label: stairs ? '계단' : dir.label,
       aria: stairs ? `${dir.label} 계단 아래로` : `${dir.label} 방향`,
     };
-  }
-
-  // 지도공: 한 출구 목적지에 붙일 짧은 표시. 계단·물건 유무·방 특징만, 낮은 정밀도로.
-  // 정확한 전리품/RP·몬스터 위치·좌표는 절대 드러내지 않는다.
-  function mapperHint(node) {
-    if (!node) return '';
-    if (node.kind === 'stairs') return '계단';
-    if (node.item && !node.itemTaken) return '물건 있음';
-    return MAPPER_FEATURE[node.kind] || '';
-  }
-
-  // 지도공을 구출했을 때만: 현재 방 각 출구의 목적지 특징을 방향 기호와 함께 한 줄로 미리 보여준다.
-  // 방 생성/좌표는 건드리지 않고 이동 선택지 큐에만 붙는다. 방향 배정은 이동 패드와 같은 규칙을 쓴다.
-  function mapperCueLine(node) {
-    if (!hasSurvivor('mapper') || !node || !node.exits || !node.exits.length) return '';
-    const used = new Set();
-    const parts = [];
-    node.exits.forEach((nid, index) => {
-      const t = nodeById(nid);
-      if (!t) return;
-      const dir = directionForExit(node, t, index, used);
-      const hint = mapperHint(t);
-      if (hint) parts.push(`${dir.glyph} ${hint}`);
-    });
-    return parts.length ? `지도공 표시: ${parts.join(' · ')}` : '';
-  }
-
-  // 균열 시야 변이: 지도공을 쓰지 않을 때만, 앞쪽 출구 중 틈/계단/아직 안 집은 물건이 있는 방향을
-  // 방향 기호와 함께 아주 짧게 짚어 준다. 정확한 전리품·RP·좌표·추격자 위치는 절대 드러내지 않는다.
-  // 지도공이 있으면 그쪽 표시가 더 자세하므로 이 줄은 붙이지 않는다(문구가 길어지지 않게).
-  function fissureCueLine(node) {
-    if (!hasMutation('fissure-sight') || hasSurvivor('mapper')) return '';
-    if (!node || !node.exits || !node.exits.length) return '';
-    const used = new Set();
-    const parts = [];
-    node.exits.forEach((nid, index) => {
-      const t = nodeById(nid);
-      if (!t) return;
-      const dir = directionForExit(node, t, index, used);
-      let hint = '';
-      if (t.kind === 'stairs') hint = '계단';
-      else if (t.item && !t.itemTaken) hint = '물건';
-      else if (t.kind === 'crack') hint = '틈';
-      if (hint) parts.push(`${dir.glyph} ${hint}`);
-    });
-    return parts.length ? `균열 시야: ${parts.join(' / ')}` : '';
   }
 
   const GENERIC_SITUATION_SENTENCES = new Set();
@@ -4078,12 +3547,12 @@
     if (run.pendingEvent) {
       const sig = `event:${run.currentNodeId}:${run.pendingEvent.type}:${run.pendingEvent.choices.map((choice) => choice.id).join(',')}`;
       if (dock.dataset.choiceSig !== sig) {
-        dock.classList.remove('spatial');
+        dock.classList.remove('spatial', 'facing-pad');
         dock.classList.add('event-choices');
         dock.innerHTML = run.pendingEvent.choices.map((choice) => {
           const tone = choice.tone ? ` ${choice.tone}` : '';
           const sub = choice.sub ? `<span>${choice.sub}</span>` : '';
-          return `<button class="btn room-btn event-btn${tone}" data-act="event" data-choice="${choice.id}"><i class="dir-glyph" aria-hidden="true">${eventToneGlyph(choice.tone)}</i><span class="choice-text"><b>${choice.label}</b>${sub}</span></button>`;
+          return `<button class="btn room-btn event-btn${tone}" data-act="event" data-choice="${choice.id}"><i class="dir-glyph">?</i><span class="choice-text"><b>${choice.label}</b>${sub}</span></button>`;
         }).join('');
         dock.dataset.choiceSig = sig;
         dock.querySelectorAll('[data-act="event"]').forEach((btn) => {
@@ -4097,56 +3566,55 @@
       return;
     }
 
-    // 지도공을 구출했으면 앞쪽 방 미리보기를, 아니면 균열 시야 변이의 짧은 방향 단서를 이동 큐에 덧붙인다.
-    // (둘은 겹치지 않는다 — fissureCueLine이 지도공이 있으면 빈 문자열을 돌려준다.)
-    const previewLine = mapperCueLine(node) || fissureCueLine(node);
-    const moveCue = previewLine ? `${cue}  ${previewLine}` : cue;
-
-    const s = stalker();
-    const towardId = stalkerTowardExit(); // 깨어 가까이 붙은 추격자 쪽 출구(없으면 null) — 서 있는 동안에도 갱신되게 서명에 포함한다.
-    const waitSig = `wait:${stalkerAwake() ? 1 : 0}:${s ? s.quietSteps : 0}`;
-    const moveSig = `move:${run.currentNodeId}:${waitSig}:${node.exits.join(',')}:t${towardId == null ? '-' : towardId}`;
+    const frontId = relativeExit('front');
+    const backId = relativeExit('back');
+    const towardId = stalkerTowardExit();
+    const moveSig = `face:${run.currentNodeId}:${run.facing}:${frontId == null ? '-' : frontId}:${backId == null ? '-' : backId}:t${towardId == null ? '-' : towardId}:${run.lightOn === false ? 'off' : 'on'}:${lightPercent() <= 0 ? 'dead' : 'charged'}`;
     if (dock.dataset.choiceSig === moveSig) {
-      if (el['choice-cue']) el['choice-cue'].textContent = moveCue;
+      if (el['choice-cue']) el['choice-cue'].textContent = cue;
       return;
     }
 
     dock.classList.remove('event-choices');
-
-    const exitsByDir = new Map();
-    const cues = [];
-    const usedDirs = new Set();
-    let waitButton = '';
-
-    if (stalkerAwake()) {
-      waitButton = `<button class="btn room-btn good dir-wait" data-act="wait"><i class="dir-glyph">•</i><span class="choice-text"><b>멈춤</b></span></button>`;
-      cues.push('• 발소리를 보내며 기다린다');
-    }
-
-    node.exits.forEach((nid, index) => {
-      const t = nodeById(nid);
-      const stairs = t.kind === 'stairs';
-      const dir = directionForExit(node, t, index, usedDirs);
-      const copy = movementChoiceCopy(dir, t);
-      cues.push(`${dir.glyph} ${copy.label}`);
-      const toward = towardId != null && nid === towardId; // 최대 한 개 출구만 표시된다(다음 걸음은 유일하므로).
-      const cls = toward ? `${dir.cls} toward-threat` : dir.cls;
-      const aria = toward ? `${copy.aria} · 기척이 가까운 쪽` : copy.aria;
-      exitsByDir.set(dir.key, `<button class="btn room-btn ${cls}" data-act="${stairs ? 'descend' : 'move'}" data-to="${nid}" aria-label="${aria}"><i class="dir-glyph">${dir.glyph}</i><span class="choice-text"><b>${copy.label}</b></span></button>`);
-    });
-
-    const out = DIR_SLOTS.map((dir) => exitsByDir.get(dir.key) || `<div class="room-pad-empty ${dir.cls}" aria-hidden="true"><i class="dir-glyph">${dir.glyph}</i></div>`);
-    out.splice(4, 0, waitButton || '<div class="room-pad-center" aria-hidden="true"></div>');
-    dock.innerHTML = out.join('');
+    dock.classList.add('spatial', 'facing-pad');
+    const front = frontId != null ? nodeById(frontId) : null;
+    const back = backId != null ? nodeById(backId) : null;
+    const frontTone = frontId != null && frontId === towardId ? ' toward-threat' : '';
+    const frontLabel = front ? (front.kind === 'stairs' ? '계단으로' : '앞으로') : '막힘';
+    const backLabel = back ? '뒤로' : '뒤 막힘';
+    const lightToggleLabel = run.lightOn === false ? '조명 켜기' : '조명 끄기';
+    const lightToggleSub = run.lightOn === false ? '배터리를 쓰고 시야를 되찾는다' : '빛을 숨겨 기척을 낮춘다';
+    const centerControl = run.lightOn === false
+      ? `<button class="btn room-btn dir-wait good" data-act="toggle-light"><i class="dir-glyph">◉</i><span class="choice-text"><b>${lightToggleLabel}</b><span>${lightToggleSub}</span></span></button>`
+      : (currentRoomHasCover()
+        ? '<button class="btn room-btn dir-wait good" data-act="hide-cover"><i class="dir-glyph">•</i><span class="choice-text"><b>조명 끄고 숨기</b><span>캐비닛 뒤로 숨는다</span></span></button>'
+        : (stalkerAwake()
+          ? '<button class="btn room-btn dir-wait good" data-act="wait"><i class="dir-glyph">•</i><span class="choice-text"><b>멈춤</b><span>숨을 죽이고 발소리를 보낸다</span></span></button>'
+          : `<button class="btn room-btn dir-wait" data-act="toggle-light"><i class="dir-glyph">◉</i><span class="choice-text"><b>${lightToggleLabel}</b><span>${lightToggleSub}</span></span></button>`));
+    dock.innerHTML = [
+      '<div class="room-pad-empty dir-nw" aria-hidden="true"></div>',
+      `<button class="btn room-btn dir-n${frontTone}" data-act="forward" ${front ? '' : 'disabled'}><i class="dir-glyph">↑</i><span class="choice-text"><b>${frontLabel}</b><span>${front ? front.label : '벽이 막고 있다'}</span></span></button>`,
+      '<div class="room-pad-empty dir-ne" aria-hidden="true"></div>',
+      '<button class="btn room-btn dir-w" data-act="turn-left"><i class="dir-glyph">↶</i><span class="choice-text"><b>왼쪽 보기</b><span>조명을 돌린다</span></span></button>',
+      centerControl,
+      '<button class="btn room-btn dir-e" data-act="turn-right"><i class="dir-glyph">↷</i><span class="choice-text"><b>오른쪽 보기</b><span>조명을 돌린다</span></span></button>',
+      '<div class="room-pad-empty dir-sw" aria-hidden="true"></div>',
+      `<button class="btn room-btn dir-s danger" data-act="backstep" ${back ? '' : 'disabled'}><i class="dir-glyph">↓</i><span class="choice-text"><b>${backLabel}</b><span>${back ? '보이지 않는 쪽으로 물러난다' : '뒤가 막혔다'}</span></span></button>`,
+      '<div class="room-pad-empty dir-se" aria-hidden="true"></div>',
+    ].join('');
     dock.dataset.choiceSig = moveSig;
-    dock.classList.toggle('spatial', true);
-    if (el['choice-cue']) el['choice-cue'].textContent = moveCue;
+    if (el['choice-cue']) el['choice-cue'].textContent = cue;
     dock.querySelectorAll('[data-act]').forEach((btn) => {
       btn.addEventListener('click', (event) => {
         event.stopPropagation();
         const act = btn.dataset.act;
-        if (act === 'wait') chooseWait();
-        else chooseExit(parseInt(btn.dataset.to, 10));
+        if (act === 'turn-left') turnFacing(-1);
+        else if (act === 'turn-right') turnFacing(1);
+        else if (act === 'forward' && frontId != null) chooseExit(frontId);
+        else if (act === 'backstep' && backId != null) chooseBackstep(backId);
+        else if (act === 'hide-cover') chooseHideInCover();
+        else if (act === 'wait') chooseWait();
+        else if (act === 'toggle-light') toggleHandLight();
       });
     });
   }
@@ -4157,24 +3625,31 @@
     const nodes = run.floorMap.nodes;
     const current = currentNode();
     if (!current || !current.pos) { svg.innerHTML = ''; return; }
+    if (el['mini-mode']) {
+      const modeLabel = meta.minimapMode === 'fixed' ? '고정 지도' : '회전 지도';
+      el['mini-mode'].textContent = `현재: ${modeLabel}`;
+      el['mini-mode'].setAttribute('aria-label', `미니맵 모드 바꾸기, 현재 ${modeLabel}`);
+    }
 
-    // Radar behavior: the player is fixed at the center and only already
-    // travelled nodes/edges are drawn. Unknown branches and unvisited exits stay
-    // hidden; currently active exits may only add tiny center ticks in the same
-    // directions as the movement pad, never target nodes or full path length.
     const seen = (id) => nodes[id] && nodes[id].entered;
     const visibleNodes = nodes.filter((n) => seen(n.id) || n.id === run.currentNodeId);
     const center = { x: 60, y: 45 };
     const pad = 14;
-    const maxDx = Math.max(1, ...visibleNodes.map((n) => Math.abs((n.pos || current.pos).x - current.pos.x)));
-    const maxDy = Math.max(1, ...visibleNodes.map((n) => Math.abs((n.pos || current.pos).y - current.pos.y)));
+    const f = cardinalVector(run.facing || 'n');
+    const right = { dx: -f.dy, dy: f.dx };
+    const relative = (pos) => {
+      const dx = pos.x - current.pos.x;
+      const dy = pos.y - current.pos.y;
+      if (meta.minimapMode === 'fixed') return { dx, dy };
+      return { dx: dx * right.dx + dy * right.dy, dy: -(dx * f.dx + dy * f.dy) };
+    };
+    const rels = visibleNodes.map((n) => relative((n.pos || current.pos)));
+    const maxDx = Math.max(1, ...rels.map((p) => Math.abs(p.dx)));
+    const maxDy = Math.max(1, ...rels.map((p) => Math.abs(p.dy)));
     const cell = Math.min(22, (center.x - pad) / maxDx, (center.y - pad) / maxDy);
     const coords = nodes.map((n) => {
-      const p = n.pos || current.pos;
-      return {
-        x: center.x + (p.x - current.pos.x) * cell,
-        y: center.y + (p.y - current.pos.y) * cell,
-      };
+      const r = relative((n.pos || current.pos));
+      return { x: center.x + r.dx * cell, y: center.y + r.dy * cell };
     });
 
     const travelled = run.floorMap.travelledEdges || new Set();
@@ -4186,46 +3661,35 @@
       html += `<line class="seen" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
     });
 
-    if (!run.moving && !run.pendingEvent) {
-      const usedDirs = new Set();
-      const stubStart = 5.5;
-      const stubEnd = 15;
-      const stairMark = 18;
-      current.exits.forEach((nid, index) => {
-        const target = nodeById(nid);
-        if (!target) return;
-        const slot = directionForExit(current, target, index, usedDirs);
-        const dir = slot && MAP_DIRECTION_BY_KEY[slot.key];
-        if (!dir) return;
-        const len = Math.hypot(dir.dx, dir.dy) || 1;
-        const ux = dir.dx / len;
-        const uy = dir.dy / len;
-        const isTravelled = travelled.has(edgeKey(current.id, nid));
-        const isSeen = seen(nid);
-        const isStairs = target.kind === 'stairs';
-
-        if (!isSeen && !isTravelled) {
-          html += `<line class="exit-hint" x1="${center.x + ux * stubStart}" y1="${center.y + uy * stubStart}" x2="${center.x + ux * stubEnd}" y2="${center.y + uy * stubEnd}"/>`;
-        }
-
-        // Stairs are visible structures, but not map reveal. Mark only the
-        // current exit direction near the center; never draw the stair node or
-        // any destination-floor geometry for an unvisited stair.
-        if (isStairs) {
-          const x = center.x + ux * stairMark;
-          const y = center.y + uy * stairMark;
-          const angle = Math.atan2(uy, ux) * 180 / Math.PI;
-          const state = isSeen || isTravelled ? ' travelled' : '';
-          html += `<g class="stair-marker${state}" transform="translate(${x} ${y}) rotate(${angle})"><path d="M -5 4 H -2 V 1 H 1 V -2 H 4"/><path d="M -4 -4 L 4 -4"/></g>`;
-        }
-      });
+    const frontId = relativeExit('front');
+    if (frontId != null) {
+      const p = coords[frontId];
+      html += `<line class="flashlight-cone" x1="${center.x}" y1="${center.y}" x2="${p.x}" y2="${p.y}"/>`;
     }
+    current.exits.forEach((nid) => {
+      const target = nodeById(nid);
+      if (!target) return;
+      const p = coords[nid];
+      if (!seen(nid) && !travelled.has(edgeKey(current.id, nid))) {
+        html += `<line class="exit-hint" x1="${center.x}" y1="${center.y}" x2="${center.x + (p.x-center.x)*0.36}" y2="${center.y + (p.y-center.y)*0.36}"/>`;
+      }
+      if (target.kind === 'stairs') html += `<circle class="stair-dot" cx="${p.x}" cy="${p.y}" r="3.8"/>`;
+    });
 
     visibleNodes.forEach((n) => {
       const p = coords[n.id];
       const cls = n.id === run.currentNodeId ? 'current' : 'seen';
       html += `<circle class="${cls}" cx="${p.x}" cy="${p.y}" r="${cls === 'current' ? 4.4 : 3}"/>`;
     });
+    const angle = meta.minimapMode === 'fixed'
+      ? ({ n: -90, e: 0, s: 90, w: 180 }[run.facing || 'n'] || -90)
+      : -90;
+    html += `<path class="player-facing" transform="translate(${center.x} ${center.y}) rotate(${angle})" d="M 7 0 L -4 -5 L -2 0 L -4 5 Z"/>`;
+    if (visibleStalkerInLight()) {
+      const st = stalker();
+      const p = coords[st.nodeId];
+      html += `<text class="stalker-mark" x="${p.x}" y="${p.y - 6}" text-anchor="middle">!</text>`;
+    }
     svg.innerHTML = html;
   }
 
@@ -4239,9 +3703,7 @@
       run.lastSale.forEach((it) => {
         const row = document.createElement('div');
         row.className = 'sale-item';
-        // 깨진 물건은 이름 옆에 한 마디만 붙인다. 값은 이미 떨어진 채로 찍힌다.
-        const brokenTag = itemBroken(it) ? ' · 깨짐' : '';
-        row.innerHTML = `<span class="sale-name">${itemIcon(it.icon, it.name)}${it.name}${brokenTag}</span><span class="v">${it.value} RP</span>`;
+        row.innerHTML = `<span class="sale-name">${itemIcon(it.icon)}${it.name}</span><span class="v">${it.value} RP</span>`;
         list.appendChild(row);
       });
     }
@@ -4252,24 +3714,6 @@
     el['committee-susp'].textContent = signed(committee.suspDelta);
     el['black-rp'].textContent = '+' + black.gained;
     el['black-susp'].textContent = signed(black.suspDelta);
-    // 판매처마다 NPC 대사 한 줄을 얹어 '사람과 흥정하는' 느낌을 준다(중개상 대사는 상태에 따라 달라진다).
-    if (el['committee-line']) el['committee-line'].textContent = buyerDialogue('committee');
-    if (el['black-line']) {
-      el['black-line'].textContent = buyerDialogue('black');
-      el['black-line'].classList.toggle('hot', meta.suspicion >= SUSPICION_HOT);
-    }
-    // 가족 반환 v1: 가방에 유품(family)이 있을 때만 '가족에게 돌려준다' 버튼을 연다(없으면 숨겨 잡동사니를 줄인다).
-    if (el['buy-family']) {
-      const showFamily = run.lastSale.some(itemFamily);
-      el['buy-family'].hidden = !showFamily;
-      el['buy-family'].disabled = !showFamily;
-      if (showFamily) {
-        const family = saleQuote('family');
-        el['family-rp'].textContent = '+' + family.gained;
-        el['family-susp'].textContent = signed(family.suspDelta);
-        if (el['family-line']) el['family-line'].textContent = buyerDialogue('family');
-      }
-    }
     // 빈손 귀환이라도 판매처를 골라 계속 진행할 수 있어야 한다(chooseBuyer가 raw 0을 안전 처리).
     el['buy-committee'].disabled = false;
     el['buy-black'].disabled = false;
@@ -4291,26 +3735,72 @@
     renderReturnScreen(); // 견적·의심도·출구 문구를 선택한 길에 맞춰 다시 그린다
   }
 
+  function renderStageObjects(node, pct) {
+    const box = el['stage-objects'];
+    if (!box) return;
+    if (!node || pct <= 0) { box.innerHTML = ''; return; }
+    const objects = [];
+    const prop = roomPropLabel(node);
+    if (prop) objects.push({ cls: `prop ${node.kind || ''}`, label: prop });
+    const loots = droppedLoots().filter((loot) => loot.nodeId === node.id);
+    loots.slice(0, 4).forEach((loot) => objects.push({ cls: 'loot', label: loot.item.name, icon: itemIcon(loot.item.icon) }));
+    if (loots.length > 4) objects.push({ cls: 'loot more', label: `+${loots.length - 4}` });
+    box.innerHTML = objects.map((obj) => `<span class="stage-object ${obj.cls}">${obj.icon || ''}<b>${obj.label}</b></span>`).join('');
+  }
+
   function renderStage() {
     const rpEl = el['recovery-point'];
     const node = currentNode();
+    const front = relativeExit('front') != null ? nodeById(relativeExit('front')) : null;
+    const left = relativeExit('left') != null ? nodeById(relativeExit('left')) : null;
+    const right = relativeExit('right') != null ? nodeById(relativeExit('right')) : null;
+    const pct = effectiveLightPercent();
+    if (el['stage']) {
+      el['stage'].classList.toggle('light-off', pct <= 0);
+      el['stage'].classList.toggle('light-dim', pct > 0 && pct < 35);
+      el['stage'].classList.toggle('light-flicker', pct > 0 && pct < 20);
+      el['stage'].dataset.facing = run.facing || 'n';
+      el['stage'].dataset.roomKind = node ? node.kind : '';
+      el['stage'].dataset.prop = pct > 0 ? roomPropLabel(node) : '';
+      el['stage'].classList.toggle('has-dropped-loot', droppedLootCountHere(node) > 0 && pct > 0);
+      el['stage'].classList.toggle('has-object-layer', pct > 0 && !!node);
+      el['stage'].dataset.droppedCount = String(droppedLootCountHere(node));
+      const view = el['stage'].querySelector('.fp-view');
+      if (view) {
+        view.dataset.prop = pct > 0 ? roomPropLabel(node) : '';
+        view.dataset.dropped = droppedLootCountHere(node) > 0 && pct > 0 ? `내려놓은 짐 ×${droppedLootCountHere(node)}` : '';
+      }
+      renderStageObjects(node, pct);
+    }
+    const setDoor = (sel, target, fallback) => {
+      const d = document.querySelector(sel);
+      if (!d) return;
+      d.classList.toggle('open', !!target && pct > 0);
+      d.classList.toggle('structure', !!target && target.kind !== 'corridor');
+      d.dataset.label = target && pct > 0 ? (target.kind === 'stairs' ? '계단' : target.label) : fallback;
+    };
+    setDoor('.fp-door.fp-left', left, '왼쪽 어둠');
+    setDoor('.fp-door.fp-center', front, pct <= 0 ? '조명 꺼짐' : '정면 벽');
+    setDoor('.fp-door.fp-right', right, '오른쪽 어둠');
     if (run.moving) {
       rpEl.className = 'recovery-point empty';
       rpEl.style.borderColor = '';
       rpEl.innerHTML = '<span class="rp-name">앞으로…</span>';
-    } else if (run.currentItem) {
+    } else if (run.currentItem && pct > 0) {
       const it = run.currentItem;
       rpEl.className = 'recovery-point';
       rpEl.style.borderColor = TIER_COLOR[it.tier];
-      rpEl.innerHTML = `${itemIcon(it.icon, it.name)}<span class="rp-name">${it.name}</span>`;
+      rpEl.innerHTML = `${itemIcon(it.icon)}<span class="rp-name">${it.name}</span>`;
     } else {
       rpEl.className = 'recovery-point empty';
       rpEl.style.borderColor = '';
-      const hint = node && node.kind === 'entry' ? '입구' : node ? node.label : '…';
+      const cover = currentRoomHasCover() ? ' · 숨을 곳' : '';
+      const shape = visibleStalkerInLight() ? ' · 어두운 형체' : '';
+      const hint = pct <= 0 ? '조명이 꺼졌다' : front ? `${front.label}${cover}${shape}` : (node ? `${node.label}${cover}${shape}` : '…');
       rpEl.innerHTML = `<span class="rp-name">${hint}</span>`;
     }
 
-    // 어둠붙이: 위험이 클수록 플레이어(왼쪽)에 가까워진다. 조우 위기 중에는
+    // 어두운 형체: 위험이 클수록 플레이어(왼쪽)에 가까워진다. 조우 위기 중에는
     // 중앙 시야에 고정해 '무엇을 만났는지'를 먼저 보여준다.
     const chaser = el['chaser'];
     const monsterCrisisOpen = !!(run.pendingEvent && run.pendingEvent.type === 'monster-encounter');
@@ -4332,7 +3822,7 @@
   function renderUpgradeScreen(gained) {
     // 판매 내역
     if (gained !== null) {
-      el['sale-buyer'].textContent = run.lastBuyer === 'black' ? '판매처: 암시장' : run.lastBuyer === 'family' ? '판매처: 가족 반환' : '판매처: 위원회';
+      el['sale-buyer'].textContent = run.lastBuyer === 'black' ? '판매처: 암시장' : '판매처: 위원회';
       const list = el['sale-list'];
       list.innerHTML = '';
       if (run.lastSale.length === 0) {
@@ -4341,17 +3831,13 @@
         run.lastSale.forEach((it) => {
           const row = document.createElement('div');
           row.className = 'sale-item';
-          row.innerHTML = `<span class="sale-name">${itemIcon(it.icon, it.name)}${it.name}</span><span class="v">+${it.value}</span>`;
+          row.innerHTML = `<span class="sale-name">${itemIcon(it.icon)}${it.name}</span><span class="v">+${it.value}</span>`;
           list.appendChild(row);
         });
       }
       el['sale-gain'].textContent = '+' + gained;
     }
-    // 출구 결과와, 이번 조사에서 새로 얻은 변이 안내를 한 요약 영역에 함께 보여준다(둘 다 고정 문구).
-    if (el['run-summary']) {
-      const summaryLines = [run.exitNote, run.markedNote, run.mutationNote, run.muffledNote].filter(Boolean);
-      el['run-summary'].innerHTML = summaryLines.join('<br>');
-    }
+    if (el['run-summary']) el['run-summary'].textContent = run.exitNote || '';
     el['sale-balance'].textContent = meta.rp;
     el['sale-susp'].textContent = meta.suspicion;
     renderGoals();
@@ -4359,83 +3845,40 @@
     el['street-news'].textContent = run.streetNews;
     if (run.lastTruth) {
       el['truth-news'].hidden = false;
-      el['truth-news'].textContent = `단서: ${run.lastTruth}`;
+      el['truth-news'].textContent = `진실 조각: ${run.lastTruth}`;
     } else {
       el['truth-news'].hidden = true;
       el['truth-news'].textContent = '';
     }
 
-    // 손질 버튼 2종(조명·장비). 정비공을 구출했으면 장비 설명에 할인을 덧붙인다. 가방은 아래에서 따로 그린다.
+    // 강화 버튼 3종. 정비공을 구출했으면 장비 설명에 할인을 자연스럽게 덧붙인다.
     const weaponSub = hasSurvivor('mechanic') ? `들키는 속도 -25% · 정비공 할인` : `들키는 속도 -25%`;
-    const gearDefs = [
-      ['up-light',  'light',  `조명 손보기`,  `최대 조명 +35`, 8],
-      ['up-weapon', 'weapon', `장비 개조`,   weaponSub,       9],
+    const defs = [
+      ['up-bag',    'bag',    `가방 넓히기`,  `${bagCap()}칸 → ${bagCap() + 2}칸`],
+      ['up-light',  'light',  `조명 손보기`,  `최대 조명 +35`],
+      ['up-weapon', 'weapon', `장비 개조`,  weaponSub],
     ];
-    gearDefs.forEach(([id, type, title, sub, upgradeIcon]) => {
+    defs.forEach(([id, type, title, sub]) => {
       const lvKey = type + 'Level';
       const cost = upgradeCost(type);
       const btn = el[id];
-      const affordable = cost !== Infinity && meta.rp >= cost && !run.bought;
+      const affordable = meta.rp >= cost && !run.bought;
       btn.disabled = !affordable;
       btn.classList.toggle('bought', run.bought);
+      const upgradeIcon = type === 'bag' ? 7 : type === 'light' ? 8 : 9;
       btn.innerHTML =
         `<span class="up-title">${itemIcon(upgradeIcon)}${title}</span>` +
         `<span class="up-sub">${sub} · 현재 Lv.${meta[lvKey]}</span>` +
         `<span class="up-cost">${run.bought ? '오늘은 여기까지' : cost + ' RP'}</span>`;
     });
-
-    renderBagShop();
   }
 
-  // 가방 구매 버튼과 크기 선택 목록을 그린다. 상단 버튼을 누르면 목록이 열리고, 원하는 크기를 곧장 산다.
-  function renderBagShop() {
-    const currentBag = bagProduct();
-    const open = bagShopOpen && !run.bought;
-    const btn = el['up-bag'];
-    if (btn) {
-      btn.disabled = !!run.bought;
-      btn.classList.toggle('bought', run.bought);
-      btn.classList.toggle('open', open);
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      const currentText = currentBag.level === NO_BAG_LEVEL ? '현재: 맨손' : `현재: ${currentBag.name} · ${currentBag.cap}칸`;
-      const hint = run.bought ? '오늘은 여기까지' : (open ? '접기' : '고르기');
-      btn.innerHTML =
-        `<span class="up-title">${itemIcon(7)}가방 구매</span>` +
-        `<span class="up-sub">${currentText}</span>` +
-        `<span class="up-cost">${hint}</span>`;
-    }
-    const panel = el['bag-shop'];
-    if (!panel) return;
-    panel.hidden = !open;
-    panel.innerHTML = '';
-    if (!open) return;
-    purchasableBags().forEach((product) => {
-      const owned = product.level === meta.bagLevel;
-      const smaller = product.level < meta.bagLevel;
-      const cost = bagCost(product.level);
-      const affordable = meta.rp >= cost;
-      const canBuy = !owned && !smaller && affordable;
-      const choice = document.createElement('button');
-      choice.className = 'btn bag-choice' + (owned ? ' owned' : '');
-      choice.disabled = !canBuy;
-      let state;
-      if (owned) state = '사용 중';
-      else if (smaller) state = '가진 것보다 작음';
-      else if (!affordable) state = `${cost} RP · 부족`;
-      else state = `${cost} RP`;
-      choice.innerHTML =
-        `<span class="bag-choice-name">${itemIcon(7)}${product.name}</span>` +
-        `<span class="bag-choice-cap">${product.cap}칸</span>` +
-        `<span class="bag-choice-cost">${state}</span>`;
-      choice.addEventListener('click', (event) => { event.stopPropagation(); buyBag(product.level); });
-      panel.appendChild(choice);
-    });
+  // 진실 6/6 엔딩 화면. 조각 개수만 갱신하면 되므로 run 없이도 안전하게 재표시할 수 있다.
+  function renderEndingScreen() {
+    if (el['ending-truth-count']) el['ending-truth-count'].textContent = meta.truths.length;
   }
 
-  // 단서를 다 모은 뒤 열리는 엔딩 화면. 문구가 전부 고정이라 run 없이도 안전하게 재표시할 수 있다(별도 갱신 불필요).
-  function renderEndingScreen() {}
-
-  // 엔딩을 '확인함'으로 표시하고, 장비 루프로 돌아가 계속 플레이한다.
+  // 엔딩을 '확인함'으로 표시하고, 강화 루프로 돌아가 계속 플레이한다.
   function acknowledgeEnding() {
     meta.endingSeen = true;
     saveMeta();
@@ -4461,15 +3904,19 @@
     setMetaPanel(el['meta-panel'].hidden);
   }
 
+  function handleKeyControl(event) {
+    if (!run || !el['screen-dungeon'] || !el['screen-dungeon'].classList.contains('active')) return;
+    const key = event.key.toLowerCase();
+    if (['arrowleft','arrowright','arrowup','arrowdown','a','d','w','s','l'].includes(key)) event.preventDefault();
+    if (key === 'arrowleft' || key === 'a') turnFacing(-1);
+    else if (key === 'arrowright' || key === 'd') turnFacing(1);
+    else if (key === 'arrowup' || key === 'w') { const id = relativeExit('front'); if (id != null) chooseExit(id); }
+    else if (key === 'arrowdown' || key === 's') { const id = relativeExit('back'); if (id != null) chooseBackstep(id); }
+    else if (key === 'l') toggleHandLight();
+    else if (key === ' ' || key === 'e') grab();
+  }
+
   function bind() {
-    // 첫 사용자 제스처에 오디오 컨텍스트를 깨운다(자동재생 금지). 한 번 쓰면 스스로 뗀다.
-    document.addEventListener('pointerdown', unlockAudioOnce);
-    document.addEventListener('touchstart', unlockAudioOnce);
-    // 탭이 숨겨지면 앰비언스를 멈추고, 돌아오면 현재 화면에 맞춰 다시 채운다(리소스 절약).
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) stopAmbience(0.25);
-      else syncAmbience();
-    });
     el['btn-enter'].addEventListener('click', handleStartButton);
     if (el['screen-start']) el['screen-start'].addEventListener('click', handleStartScreenTap);
     if (el['btn-meta']) el['btn-meta'].addEventListener('click', (event) => {
@@ -4480,6 +3927,8 @@
       toggleMetaPanel();
     });
     if (el['screen-dungeon']) el['screen-dungeon'].addEventListener('click', handleDungeonDialogueTap);
+    if (el['mini-mode']) el['mini-mode'].addEventListener('click', (event) => { event.stopPropagation(); toggleMinimapMode(); });
+    window.addEventListener('keydown', handleKeyControl);
     el['btn-grab'].addEventListener('click', (event) => { event.stopPropagation(); grab(); });
     el['btn-drop'].addEventListener('click', (event) => { event.stopPropagation(); dropAndFlee(); });
     el['btn-return'].addEventListener('click', (event) => { event.stopPropagation(); attemptReturnToSurface(); });
@@ -4489,74 +3938,41 @@
     if (el['route-blackpass']) el['route-blackpass'].addEventListener('click', () => chooseRoute('blackpass'));
     el['buy-committee'].addEventListener('click', () => chooseBuyer('committee'));
     el['buy-black'].addEventListener('click', () => chooseBuyer('black'));
-    if (el['buy-family']) el['buy-family'].addEventListener('click', () => chooseBuyer('family'));
-    el['up-bag'].addEventListener('click', () => openBagShop());
+    el['up-bag'].addEventListener('click', () => buyUpgrade('bag'));
     el['up-light'].addEventListener('click', () => buyUpgrade('light'));
     el['up-weapon'].addEventListener('click', () => buyUpgrade('weapon'));
     el['btn-again'].addEventListener('click', startNewRun);
     el['btn-retry'].addEventListener('click', startNewRun);
     if (el['btn-reset']) el['btn-reset'].addEventListener('click', resetProgress);
-    if (el['btn-sound']) el['btn-sound'].addEventListener('click', (event) => { event.stopPropagation(); toggleSound(); });
     if (el['ending-continue']) el['ending-continue'].addEventListener('click', acknowledgeEnding);
     if (el['ending-reset']) el['ending-reset'].addEventListener('click', resetProgress);
   }
 
   /* ---------------- 시작 ---------------- */
 
-  // 시작 화면의 속마음 한 줄. 숫자 카운터가 아니라 진행에 맞춰 달라지는 캐릭터의 혼잣말이다.
+  // 진실 조각 진행 상태에 맞춘 코덱스 문구(개수/완성/엔딩 확인 여부에 따라 달라진다).
   function codexTail() {
     const n = meta.truths.length;
-    if (n <= 0) return '왜 이런 일이 나에게 일어난 거지…';
-    if (n < TRUTH_TOTAL) return '팔아넘긴 물건마다 이상한 말이 따라온다.';
-    return meta.endingSeen ? '아래가 아직 끝나지 않았다.' : '이제 단서가 다 모인 것 같다.';
+    if (n <= 0) return '아직 아무것도 모른다.';
+    if (n < TRUTH_TOTAL) return '조각이 맞지 않는다.';
+    return meta.endingSeen ? '이제 안다.' : '확인해야 한다.';
   }
 
-  // 시작 화면 속마음 줄을 한곳에서 갱신한다(단서를 다 모으면 색을 바꿔 완성감을 준다).
+  // 시작 화면 코덱스 줄(개수 + 상태 문구 + 완성 표시)을 한곳에서 갱신한다.
   function renderCodex() {
+    el['start-truth-count'].textContent = meta.truths.length;
     el['start-codex-tail'].textContent = codexTail();
     el['start-codex'].classList.toggle('complete', meta.truths.length >= TRUTH_TOTAL);
   }
 
-  // 구출한 생존자와, 구출하지 않고 표시해 둔 자리를 시작 화면에 짧게 표시한다(둘 다 없으면 줄을 숨긴다).
+  // 구출한 생존자를 시작 화면에 짧게 표시한다(없으면 줄을 숨긴다).
   function renderStartSurvivors() {
     const line = el['start-survivors'];
     if (!line) return;
     const names = meta.survivors.map((id) => SURVIVORS[id] && SURVIVORS[id].name).filter(Boolean);
-    const notes = Object.values(meta.survivorNotes);
-    const markedCount = notes.filter((n) => n.outcome === 'marked').length;
-    const abandonedCount = notes.filter((n) => n.outcome === 'abandoned').length;
-    if (!names.length && !markedCount && !abandonedCount) { line.hidden = true; line.textContent = ''; return; }
-    line.hidden = false;
-    const parts = [];
-    if (names.length) parts.push(`구출한 생존자 <b>${names.length}</b>명 · <b>${names.join(', ')}</b>`);
-    if (markedCount) parts.push(`표시해 둔 위치 <b>${markedCount}</b>곳`);
-    if (abandonedCount) parts.push(`등진 생존자 <b>${abandonedCount}</b>명`);
-    line.innerHTML = parts.join(' / ');
-  }
-
-  // 몸에 남은 왜곡 변이를 시작 화면에 짧게 표시한다(없으면 줄을 숨긴다).
-  function renderStartMutations() {
-    const line = el['start-mutations'];
-    if (!line) return;
-    const names = meta.mutations.map((id) => MUTATIONS[id] && MUTATIONS[id].name).filter(Boolean);
     if (!names.length) { line.hidden = true; line.textContent = ''; return; }
     line.hidden = false;
-    line.innerHTML = `몸에 남은 흔적 · <b>${names.join(', ')}</b>`;
-  }
-
-  // 소리/무음 토글 라벨과 상태를 갱신한다(현재 상태를 그대로 표시하는 스위치).
-  function renderSoundToggle() {
-    const btn = el['btn-sound'];
-    if (!btn) return;
-    btn.textContent = soundOff ? '무음' : '소리';
-    btn.setAttribute('aria-pressed', soundOff ? 'true' : 'false');
-    btn.setAttribute('aria-label', soundOff ? '소리 꺼짐, 눌러서 켜기' : '소리 켜짐, 눌러서 끄기');
-  }
-
-  function toggleSound() {
-    setSoundOff(!soundOff);
-    renderSoundToggle();
-    if (!soundOff) playSfx('sale'); // 켜는 순간(제스처 안) 짧은 확인음 하나
+    line.innerHTML = `구출한 생존자 <b>${names.length}</b>명 · <b>${names.join(', ')}</b>`;
   }
 
   // 시작 화면 메타 표시를 한곳에서 갱신한다(초기 진입 + 기록 초기화 공용).
@@ -4566,8 +3982,6 @@
     el['start-susp'].textContent = meta.suspicion;
     renderCodex();
     renderStartSurvivors();
-    renderStartMutations();
-    renderSoundToggle();
     renderGoals();
     renderContractCards();
   }
@@ -4575,7 +3989,6 @@
   function init() {
     cacheDom();
     bind();
-    loadSoundPref(); // 무음 선호 복원 (막힌 환경이면 소리 켜짐 기본)
     loadMeta(); // 저장된 진행도 복원 (없거나 깨졌으면 기본값 유지)
     setupFirstStartIntro();
     renderStartScreen();
@@ -4591,6 +4004,6 @@
 
   // 헤드리스(Node) 검증용: 순수 맵 생성 로직만 노출한다. 브라우저에는 영향 없음.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { generateFloorMap, bfs, FLOORS, ITEM_TABLE, NODE_KINDS, itemTruth, itemTruthText, TRUTH_TOTAL };
+    module.exports = { generateFloorMap, bfs, FLOORS, ITEM_TABLE, NODE_KINDS };
   }
 })();
