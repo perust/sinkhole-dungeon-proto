@@ -1406,6 +1406,8 @@
     }
   }
 
+  let suppressDungeonClickUntil = 0;
+
   function dismissDialogue() {
     if (!run || !run.dialogue) return;
     const queue = run.dialogueQueue || [];
@@ -1425,11 +1427,39 @@
     dismissDialogue();
   }
 
-  function handleDungeonDialogueTap(event) {
-    if (!run || !run.dialogue || !el['screen-dungeon'] || !el['screen-dungeon'].classList.contains('active')) return;
-    if (event && event.target && event.target.closest && event.target.closest('#dialogue-card')) return;
-    if (event) event.preventDefault();
+  function dungeonDialogueActive() {
+    return !!(run && run.dialogue && el['screen-dungeon'] && el['screen-dungeon'].classList.contains('active'));
+  }
+
+  function swallowDungeonEvent(event) {
+    if (!event) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+  }
+
+  function handleDungeonDialoguePointer(event) {
+    if (!dungeonDialogueActive()) return;
+    suppressDungeonClickUntil = Date.now() + 450;
+    swallowDungeonEvent(event);
     dismissDialogue();
+  }
+
+  function handleDungeonDialogueTap(event) {
+    if (Date.now() < suppressDungeonClickUntil) {
+      swallowDungeonEvent(event);
+      return;
+    }
+    if (!dungeonDialogueActive()) return;
+    swallowDungeonEvent(event);
+    dismissDialogue();
+  }
+
+  function showBagBlockedDialogue() {
+    run.seenBagAlerts.add('blocked');
+    run.lastAction = `${bagAlert('blocked')} 가방 슬롯을 눌러 짐을 내려놓거나, 이 물건은 그냥 지나가자.`;
+    log(run.lastAction, 'hot');
+    showDialogue(run.lastAction, 'hot');
   }
 
   function queueSensoryAlert(text, tone = 'hot') {
@@ -2392,10 +2422,7 @@
         if (!loot) {
           msg = '내려놓은 짐은 이미 어둠 속으로 사라졌다.';
         } else if (!roomFor(loot.item)) {
-          run.seenBagAlerts.add('blocked');
-          run.lastAction = bagAlert('blocked');
-          log(bagAlert('blocked'), 'hot');
-          showDialogue(bagAlert('blocked'), 'hot');
+          showBagBlockedDialogue();
           render();
           return;
         } else {
@@ -2422,10 +2449,7 @@
         msg = `${item.name}${objectParticle(item.name)} 그대로 두고 지나쳤다. 발소리를 죽인 채 물러난다.`;
       } else if (!roomFor(item)) {
         // 가방이 가득 차 집을 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
-        run.seenBagAlerts.add('blocked');
-        run.lastAction = bagAlert('blocked');
-        log(bagAlert('blocked'), 'hot');
-        showDialogue(bagAlert('blocked'), 'hot');
+        showBagBlockedDialogue();
         render();
         return;
       } else {
@@ -2472,10 +2496,7 @@
           : `${loot.item.name}${objectParticle(loot.item.name)} 그대로 두고 물러났다. 바닥의 자국만 다시 확인했다.`;
       } else if (!roomFor(loot.item)) {
         // 가방이 가득 차 되챙길 수 없다 → 이벤트를 유지해 지나치기/재선택하게 둔다.
-        run.seenBagAlerts.add('blocked');
-        run.lastAction = bagAlert('blocked');
-        log(bagAlert('blocked'), 'hot');
-        showDialogue(bagAlert('blocked'), 'hot');
+        showBagBlockedDialogue();
         render();
         return;
       } else {
@@ -2861,10 +2882,7 @@
   function grab() {
     if (!run || run.dialogue || run.pendingEvent || !run.currentItem) return;
     if (!roomFor(run.currentItem)) {
-      run.seenBagAlerts.add('blocked');
-      run.lastAction = bagAlert('blocked');
-      log(bagAlert('blocked'), 'hot');
-      showDialogue(bagAlert('blocked'), 'hot');
+      showBagBlockedDialogue();
       render();
       return;
     }
@@ -4133,7 +4151,10 @@
       }
       toggleMetaPanel();
     });
-    if (el['screen-dungeon']) el['screen-dungeon'].addEventListener('click', handleDungeonDialogueTap);
+    if (el['screen-dungeon']) {
+      el['screen-dungeon'].addEventListener('pointerdown', handleDungeonDialoguePointer, true);
+      el['screen-dungeon'].addEventListener('click', handleDungeonDialogueTap, true);
+    }
     if (el['mini-mode']) el['mini-mode'].addEventListener('click', (event) => { event.stopPropagation(); toggleMinimapMode(); });
     window.addEventListener('keydown', handleKeyControl);
     el['btn-grab'].addEventListener('click', (event) => { event.stopPropagation(); grab(); });
