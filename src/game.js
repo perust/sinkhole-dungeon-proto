@@ -339,7 +339,7 @@
 
   /* ---------------- 생존자 v1 ---------------- */
   // 던전에서 구출해 지상으로 데려온 사람들. 런을 넘어 유지되며(meta.survivors),
-  // 각자 하나의 영구 효과를 준다. v1은 정비공(장비 강화 할인)·의무병(기절 후유증 완화) 둘.
+  // 각자 하나의 영구 효과를 준다.
   const SURVIVORS = {
     mechanic: {
       id: 'mechanic',
@@ -358,6 +358,22 @@
       rescueSub: '선반을 들어 다리를 뺀다',
       rescueLog: '선반을 들어 올려 다리를 빼냈다. 의무병이라던 사람이 절뚝이며 따라붙는다. 다음에 쓰러져도 뒤처리를 도와줄 것이다.',
     },
+    mapper: {
+      id: 'mapper',
+      name: '지도공',
+      eventTitle: '벽 뒤의 사람',
+      eventCue: '휘어진 벽판 뒤에서 접힌 지도를 쥔 손이 흔들린다. 젖은 종이에는 아래층 통로가 손으로 그려져 있다.',
+      rescueSub: '벽판을 뜯어 끌어낸다',
+      rescueLog: '휘어진 벽판을 뜯어 그 사람을 끌어냈다. 지도공이라던 이가 젖은 지도를 접어 넣으며 따라붙는다. 이제부터 갈림길마다 앞쪽 방이 뭔지 짚어 준다.',
+    },
+    insider: {
+      id: 'insider',
+      name: '전 위원회 직원',
+      eventTitle: '게이트에 낀 사람',
+      eventCue: '부서진 ID 게이트 사이에 팔이 낀 사람이 몸을 비튼다. 찢어진 끈에 위원회 출입증이 매달려 흔들린다.',
+      rescueSub: '게이트 틈을 벌려 빼낸다',
+      rescueLog: '뒤틀린 ID 게이트를 벌려 그 사람을 빼냈다. 전 위원회 직원이라던 이가 출입증을 움켜쥔 채 따라붙는다. 감시소 단말과 지상 검문에서 낡은 직원 코드가 쓸모가 있다.',
+    },
   };
   const SURVIVOR_IDS = Object.keys(SURVIVORS);
   const KNOWN_SURVIVORS = new Set(SURVIVOR_IDS);
@@ -365,6 +381,13 @@
   const MECHANIC_DISCOUNT = 0.25;        // 정비공: 장비(weapon) 강화 비용을 이 비율만큼 깎는다
   const MEDIC_SUSPICION_RELIEF = 2;      // 의무병: 기절 시 오르는 의심도를 이만큼 덜어낸다(양수 델타에만)
   const MEDIC_CONSOLATION_RATE = 0.15;   // 의무병: 잃은 짐 값의 이 비율만큼 위로 보상을 더 챙겨준다
+  const INSIDER_WATCHPOST_LIGHT = 3;     // 전 직원: 봉쇄 코드를 넣느라 드는 조명(소음·위험 없음)
+  const INSIDER_CHECKPOINT_RELIEF = 2;   // 전 직원: 공식 출구 검문에서 의심도 상승을 덜어낸다
+  const INSIDER_SEAL_LOG = '낡은 직원 코드가 먹혔다. 단말이 순순히 열리고 한 줄이 떠오른다 — “봉쇄문 재봉인은 3단계, 마지막 인증은 현장 직원 코드.”';
+  const MAPPER_FEATURE = {
+    corridor: '곧은 복도', crack: '젖은 균열', storage: '낮은 창고', office: '관리실',
+    watchpost: '감시소', hall: '무너진 통로', door: '비상등 문', vent: '낮은 틈', stairs: '아래 계단',
+  };
 
   const SURVIVOR_EVENT_CHANCE = 0.16;    // 방 도착 시 생존자 조우가 열릴 확률(드물게)
   const SURVIVOR_RESCUE_LIGHT = 8;       // 구출: 끌어내느라 드는 조명
@@ -1917,6 +1940,9 @@
           eventChoice('pass', '그냥 지나간다', '건드리지 않는다'),
         ],
       };
+      if (hasSurvivor('insider')) {
+        ev.choices.splice(1, 0, eventChoice('seal-code', '봉쇄 코드를 넣는다', '낡은 직원 코드를 쓴다', 'good'));
+      }
     } else if (node.kind === 'crack' || node.kind === 'corridor') {
       ev = {
         type: 'footprints',
@@ -2277,7 +2303,14 @@
       }
     } else if (ev.type === 'watchpost') {
       const tense = meta.suspicion >= WATCHPOST_TENSE_SUSPICION;
-      if (choiceId === 'wipe-log') {
+      if (choiceId === 'seal-code' && hasSurvivor('insider')) {
+        run.light = Math.max(0, run.light - INSIDER_WATCHPOST_LIGHT);
+        if (meta.suspicion > 0) {
+          meta.suspicion = Math.max(0, meta.suspicion - 4);
+          saveMeta();
+        }
+        msg = INSIDER_SEAL_LOG;
+      } else if (choiceId === 'wipe-log') {
         // 기록 삭제: 의심도를 조금 낮추고 빛·멘탈을 쓰며 작은 소음을 낸다.
         run.light = Math.max(0, run.light - 4);
         run.mental = Math.max(0, run.mental - 3);
@@ -3216,13 +3249,16 @@
     }
     const heatTotal = run.bag.reduce((s, it) => s + itemHeat(it), 0);
     const checkpoint = heatTotal >= EXIT_CHECKPOINT_HEAT || meta.suspicion >= EXIT_CHECKPOINT_SUSP;
+    const insiderRelief = checkpoint && hasSurvivor('insider') ? INSIDER_CHECKPOINT_RELIEF : 0;
     return {
       route,
-      suspDelta: checkpoint ? EXIT_CHECKPOINT_SUSP_ADD : 0,
+      suspDelta: checkpoint ? Math.max(0, EXIT_CHECKPOINT_SUSP_ADD - insiderRelief) : 0,
       gainDelta: 0,
       blackSuspRelief: 0,
       note: checkpoint
-        ? '공식 출구 — 안전하지만 검문이 있다. 짐이 뜨거워 검문대가 의심도를 조금 올렸다.'
+        ? (insiderRelief > 0
+          ? '공식 출구 — 검문이 있었지만 낡은 직원 코드가 의심을 조금 눌렀다.'
+          : '공식 출구 — 안전하지만 검문이 있다. 짐이 뜨거워 검문대가 의심도를 조금 올렸다.')
         : '공식 출구 — 안전하지만 검문이 있다. 이번엔 무사히 통과했다.',
     };
   }
@@ -3579,6 +3615,30 @@
     if (hint && dialogue) hint.textContent = dialogue.sticky ? '선택으로 대응' : '탭해서 계속';
   }
 
+  function mapperHint(node) {
+    if (!node) return '';
+    if (node.kind === 'stairs') return '아래 계단';
+    if (node.item && !node.itemTaken) return '짐 그림자';
+    return MAPPER_FEATURE[node.kind] || '';
+  }
+
+  function mapperCueLine(node) {
+    if (!hasSurvivor('mapper') || !node) return '';
+    const pairs = [
+      ['앞', relativeExit('front')],
+      ['왼쪽', relativeExit('left')],
+      ['오른쪽', relativeExit('right')],
+      ['뒤', relativeExit('back')],
+    ];
+    const parts = [];
+    pairs.forEach(([label, id]) => {
+      if (id == null) return;
+      const hint = mapperHint(nodeById(id));
+      if (hint) parts.push(`${label} ${hint}`);
+    });
+    return parts.length ? `지도공 표시: ${parts.slice(0, 3).join(' · ')}` : '';
+  }
+
   // 현재 노드의 출구(+상황 선택지)를 8방향 패드로 그린다. 장소명은 도착 후 상황 텍스트로만 알려준다.
   function renderChoices() {
     const dock = el['room-choices'];
@@ -3592,7 +3652,9 @@
       return;
     }
     const node = currentNode();
-    const cue = situationCopy(node);
+    const baseCue = situationCopy(node);
+    const mapperLine = mapperCueLine(node);
+    const cue = mapperLine ? `${baseCue} ${mapperLine}` : baseCue;
 
     if (run.pendingEvent) {
       const sig = `event:${run.currentNodeId}:${run.pendingEvent.type}:${run.pendingEvent.choices.map((choice) => choice.id).join(',')}`;
