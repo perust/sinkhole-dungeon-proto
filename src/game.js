@@ -646,17 +646,13 @@
   }
 
   const MAP_DIRECTIONS = [
-    { key: 'n',  dx: 0,  dy: -1 },
-    { key: 'ne', dx: 1,  dy: -1 },
-    { key: 'e',  dx: 1,  dy: 0 },
-    { key: 'se', dx: 1,  dy: 1 },
-    { key: 's',  dx: 0,  dy: 1 },
-    { key: 'sw', dx: -1, dy: 1 },
-    { key: 'w',  dx: -1, dy: 0 },
-    { key: 'nw', dx: -1, dy: -1 },
+    { key: 'n', dx: 0,  dy: -1 },
+    { key: 'e', dx: 1,  dy: 0 },
+    { key: 's', dx: 0,  dy: 1 },
+    { key: 'w', dx: -1, dy: 0 },
   ];
   const MAP_DIRECTION_BY_KEY = Object.fromEntries(MAP_DIRECTIONS.map((d) => [d.key, d]));
-  const MAP_DIRECTION_ORDER = ['n', 'ne', 'nw', 'e', 'w', 'se', 'sw', 's'];
+  const MAP_DIRECTION_ORDER = ['n', 'e', 'w', 's'];
   const CARDINAL_DIRECTIONS = ['n', 'e', 's', 'w'];
   const FACING_LABELS = { n: '북쪽', e: '동쪽', s: '남쪽', w: '서쪽' };
   const ENCOUNTER_SECONDS = 6.0;
@@ -1133,12 +1129,33 @@
     }
   }
 
-  // 각 층 진입 시 8~11개 노드짜리 조금 큰 맵을 만든다.
-  // - 0번은 입구. 가장 깊은 잎 노드는 계단(다음 층 입구)으로 둔다(마지막 층 제외).
-  // - 계단은 항상 차수 1(잎)이라, 계단 직전 노드를 반드시 지나가야 한다.
+  function adjacentGridPairs(nodes, blockedId = -1) {
+    const pairs = [];
+    const byPos = new Map(nodes.filter((n) => n.pos).map((n) => [posKey(n.pos), n.id]));
+    nodes.forEach((node) => {
+      if (!node.pos || node.id === blockedId) return;
+      MAP_DIRECTIONS.forEach((dir) => {
+        const other = byPos.get(posKey({ x: node.pos.x + dir.dx, y: node.pos.y + dir.dy }));
+        if (other == null || other <= node.id || other === blockedId || node.exits.includes(other)) return;
+        pairs.push([node.id, other]);
+      });
+    });
+    return pairs;
+  }
+
+  function freeGridDirections(nodes, nodeId) {
+    const node = nodes[nodeId];
+    if (!node || !node.pos) return [];
+    const occupied = new Set(nodes.filter((n) => n.pos).map((n) => posKey(n.pos)));
+    return MAP_DIRECTIONS.filter((dir) => !occupied.has(posKey({ x: node.pos.x + dir.dx, y: node.pos.y + dir.dy })));
+  }
+
+  // 각 층 진입 시 9~12개 방을 블럭형 격자로 만든다.
+  // - 모든 방은 동서남북으로만 붙는다. 대각선/비스듬한 길은 만들지 않는다.
+  // - 0번은 입구. 가장 먼 잎 노드는 계단(다음 층 입구)으로 둔다(마지막 층 제외).
   function generateFloorMap(floor) {
     const isLast = floor >= FLOORS.length;
-    const count = 8 + Math.floor(Math.random() * 4); // 8..11
+    const count = 9 + Math.floor(Math.random() * 4); // 9..12
     const nodes = [];
     for (let i = 0; i < count; i++) {
       nodes.push({
@@ -1149,42 +1166,57 @@
     }
     nodes[0].pos = { x: 0, y: 0 };
 
-    // 1) 깊이가 보장되도록 등뼈(backbone)를 직선으로 잇는다.
-    const spine = Math.max(3, Math.ceil(count * 0.6));
-    for (let i = 1; i < spine; i++) addPositionedEdge(nodes, i - 1, i, ['n', 'ne', 'nw']);
-    // 2) 나머지 노드는 앞쪽 노드 어딘가에 가지로 붙인다.
-    for (let i = spine; i < count; i++) addPositionedEdge(nodes, Math.floor(Math.random() * i), i, ['e', 'w', 'ne', 'nw', 'se', 'sw']);
+    const placeFrom = (parentId, childId, preferredKeys = []) => {
+      const parent = nodes[parentId];
+      const free = freeGridDirections(nodes, parentId);
+      if (!parent || !parent.pos || !free.length) return false;
+      const ordered = preferredKeys
+        .map((key) => free.find((dir) => dir.key === key))
+        .filter(Boolean)
+        .concat(shuffle(free.filter((dir) => !preferredKeys.includes(dir.key))));
+      const dir = ordered[0];
+      nodes[childId].pos = { x: parent.pos.x + dir.dx, y: parent.pos.y + dir.dy };
+      addEdge(nodes, parentId, childId);
+      return true;
+    };
 
-    // 3) 계단(또는 마지막 층의 가장 깊은 방)은 트리상 가장 먼 잎으로 정한다.
+    // 입구 주변부터 직교 갈림길을 만든다. 화면/미니맵에서 초반 선택지가 블럭처럼 읽히게 한다.
+    if (count > 1) placeFrom(0, 1, ['n']);
+    if (count > 2) placeFrom(0, 2, ['e', 'w']);
+
+    for (let i = 3; i < count; i++) {
+      const placed = nodes.filter((n) => n.pos && freeGridDirections(nodes, n.id).length);
+      placed.sort((a, b) => {
+        const da = Math.abs(a.pos.x) + Math.abs(a.pos.y);
+        const db = Math.abs(b.pos.x) + Math.abs(b.pos.y);
+        return (db - da) || (Math.random() < 0.5 ? -1 : 1);
+      });
+      const parent = placed[Math.floor(Math.random() * Math.min(4, placed.length))] || placed[0];
+      if (!parent || !placeFrom(parent.id, i, ['n', 'e', 'w', 's'])) {
+        const fallback = nodes.find((n) => n.pos && freeGridDirections(nodes, n.id).length);
+        if (fallback) placeFrom(fallback.id, i, MAP_DIRECTION_ORDER);
+      }
+    }
+
+    // 계단(또는 마지막 층의 가장 깊은 방)은 그래프상 가장 먼 잎을 우선한다.
     const treeDist = bfs(nodes, 0);
     let deepestId = 1;
-    for (let i = 1; i < count; i++) if (treeDist[i] > treeDist[deepestId]) deepestId = i;
+    for (let i = 1; i < count; i++) {
+      const leafBonus = nodes[i].exits.length <= 1 ? 0.25 : 0;
+      const cur = (treeDist[i] || 0) + leafBonus;
+      const best = (treeDist[deepestId] || 0) + (nodes[deepestId].exits.length <= 1 ? 0.25 : 0);
+      if (cur > best) deepestId = i;
+    }
     const stairsId = isLast ? -1 : deepestId;
 
-    // 4) 입구에 갈림길 느낌을 주기 위해 차수를 최소 2로 보장한다.
-    if (nodes[0].exits.length < 2) {
-      const cand = [];
-      for (let k = 1; k < count; k++) if (k !== stairsId && !nodes[0].exits.includes(k)) cand.push(k);
-      if (cand.length) {
-        const free = cand.filter((id) => canAddVisibleDirectionEdge(nodes, 0, id));
-        addEdge(nodes, 0, (free.length ? free : cand)[Math.floor(Math.random() * (free.length ? free.length : cand.length))]);
-      }
-    }
-
-    // 5) 갈림길을 더 만들기 위해 여분의 연결을 1~2개 추가한다(계단은 잎으로 보존).
+    // 격자에서 붙어 있는 방끼리만 여분 연결을 1~2개 추가한다(계단은 잎으로 보존).
     const extra = 1 + Math.floor(Math.random() * 2);
-    const extraCandidates = [];
-    for (let a = 0; a < count; a++) {
-      for (let b = a + 1; b < count; b++) {
-        if (a !== stairsId && b !== stairsId && canAddVisibleDirectionEdge(nodes, a, b)) extraCandidates.push([a, b]);
-      }
-    }
-    shuffle(extraCandidates);
+    const extraCandidates = shuffle(adjacentGridPairs(nodes, stairsId));
     for (let e = 0; e < extra && e < extraCandidates.length; e++) {
       addEdge(nodes, extraCandidates[e][0], extraCandidates[e][1]);
     }
 
-    // 6) 방 유형 배정. 흔한 유형만 기본 풀에 넣고, 감시소 같은 드문 유형은 따로 주입한다.
+    // 방 유형 배정. 흔한 유형만 기본 풀에 넣고, 감시소 같은 드문 유형은 따로 주입한다.
     applyKind(nodes[0], ENTRY_KIND);
     if (stairsId >= 0) applyKind(nodes[stairsId], STAIRS_KIND);
     const others = [];
@@ -1192,7 +1224,6 @@
     const pool = shuffle(NODE_KINDS.filter((k) => !k.uncommon));
     others.forEach((id, idx) => applyKind(nodes[id], pool[idx % pool.length]));
 
-    // 위원회 감시소는 드물게 등장한다: 낮은 확률로 비입구/비계단 노드 하나를 감시소로 바꾼다.
     let watchpostId = -1;
     const watchpostKind = NODE_KINDS.find((k) => k.key === 'watchpost');
     if (watchpostKind && others.length && Math.random() < WATCHPOST_SPAWN_CHANCE) {
@@ -1200,15 +1231,11 @@
       applyKind(nodes[watchpostId], watchpostKind);
     }
 
-    // 7) 아이템 배치: 입구/계단/감시소를 제외한 노드 중 2~3개(감시소 이벤트가 물건에 가려지지 않게).
     const itemSlots = shuffle(others.filter((id) => id !== watchpostId));
     const itemCount = Math.min(itemSlots.length, 2 + (Math.random() < 0.5 ? 1 : 0));
     for (let i = 0; i < itemCount; i++) nodes[itemSlots[i]].item = pickFloorItem(floor, nodes[itemSlots[i]]);
 
-    // 8) 몬스터 이벤트 배치(시딩/분위기용 — 실제 조우는 숨은 추격자가 전담한다).
     placeMonsters(nodes, others, stairsId, floor);
-
-    // 9) 숨은 이동 추격자 하나를 배치한다.
     const stalker = seedStalker(nodes, 0, stairsId, floor);
 
     return { nodes, entryId: 0, stairsId, count, travelledEdges: new Set(), stalker, droppedLoot: [] };
