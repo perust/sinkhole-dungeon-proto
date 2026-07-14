@@ -711,28 +711,20 @@
   function relativeExit(rel) {
     if (!run || !run.floorMap) return null;
     const node = currentNode();
-    if (!node) return null;
+    if (!node || !node.pos) return null;
     const f = cardinalVector(run.facing || 'n');
-    let best = null;
-    let bestScore = -Infinity;
-    node.exits.forEach((id) => {
+    const desired = {
+      front: { dx: f.dx, dy: f.dy },
+      back: { dx: -f.dx, dy: -f.dy },
+      left: { dx: f.dy, dy: -f.dx },
+      right: { dx: -f.dy, dy: f.dx },
+    }[rel];
+    if (!desired) return null;
+    return node.exits.find((id) => {
       const to = nodeById(id);
-      if (!to || !to.pos || !node.pos) return;
-      const dx = sign(to.pos.x - node.pos.x);
-      const dy = sign(to.pos.y - node.pos.y);
-      const front = dx * f.dx + dy * f.dy;
-      const side = dx * (-f.dy) + dy * f.dx;
-      let score = -Infinity;
-      if (rel === 'front') score = front * 3 - Math.abs(side);
-      if (rel === 'back') score = -front * 3 - Math.abs(side);
-      if (rel === 'left') score = -side * 3 + Math.max(0, front);
-      if (rel === 'right') score = side * 3 + Math.max(0, front);
-      if (score > bestScore) { bestScore = score; best = id; }
-    });
-    if (best == null) return null;
-    if ((rel === 'front' || rel === 'back') && bestScore < 1.5) return null;
-    if ((rel === 'left' || rel === 'right') && bestScore < 1.2) return null;
-    return best;
+      if (!to || !to.pos) return false;
+      return (to.pos.x - node.pos.x) === desired.dx && (to.pos.y - node.pos.y) === desired.dy;
+    }) ?? null;
   }
 
   function visibleStalkerInLight() {
