@@ -1428,7 +1428,8 @@
   }
 
   function dungeonDialogueActive() {
-    return !!(run && run.dialogue && el['screen-dungeon'] && el['screen-dungeon'].classList.contains('active'));
+    const card = el['dialogue-card'];
+    return !!(run && run.dialogue && card && !card.classList.contains('hidden') && el['screen-dungeon'] && el['screen-dungeon'].classList.contains('active'));
   }
 
   function swallowDungeonEvent(event) {
@@ -3806,6 +3807,12 @@
 
     const travelled = run.floorMap.travelledEdges || new Set();
     let html = '';
+    const compassLabels = meta.minimapMode === 'fixed'
+      ? [ ['N', 60, 9], ['E', 112, 48], ['S', 60, 86], ['W', 8, 48] ]
+      : [ ['앞', 60, 9], ['오', 112, 48], ['뒤', 60, 86], ['왼', 8, 48] ];
+    compassLabels.forEach(([label, x, y]) => {
+      html += `<text class="compass-label" x="${x}" y="${y}" text-anchor="middle">${label}</text>`;
+    });
     travelled.forEach((key) => {
       const [aId, bId] = key.split('-').map((v) => parseInt(v, 10));
       if (!seen(aId) || !seen(bId)) return;
