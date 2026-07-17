@@ -129,6 +129,7 @@
     { level: 4, name: '특대 가방', cap: 9, cost: 56 },
   ];
   const MAX_BAG_LEVEL = BAG_PRODUCTS[BAG_PRODUCTS.length - 1].level;
+  const CABINET_BAG_FIND_RATES = { 1: 0.18, 2: 0.075, 3: 0.032, 4: 0.014 }; // 캐비닛에서 더 큰 가방을 발견할 확률. 큰 제품일수록 낮다.
   const NO_BAG_ALERTS = {
     full: '손이 가득 찼다. 맨손이라 더는 못 든다.',
     blocked: '맨손이라 더 쥘 자리가 없다. 손에 쥔 것만으로 벅차다.',
@@ -140,6 +141,20 @@
   function bagAlert(key) {
     if (meta.bagLevel === NO_BAG_LEVEL && NO_BAG_ALERTS[key]) return NO_BAG_ALERTS[key];
     return BAG_ALERTS[key];
+  }
+  function largerBagProducts() {
+    return BAG_PRODUCTS.filter((bag) => bag.level > NO_BAG_LEVEL && bag.level > meta.bagLevel);
+  }
+  function bagFindCandidate() {
+    const candidates = largerBagProducts();
+    if (!candidates.length) return null;
+    const roll = Math.random();
+    let acc = 0;
+    for (const bag of candidates) {
+      acc += CABINET_BAG_FIND_RATES[bag.level] || 0;
+      if (roll < acc) return bag;
+    }
+    return null;
   }
 
   function itemIcon(index) {
@@ -2289,13 +2304,21 @@
     } else if (ev.type === 'cabinet') {
       if (choiceId === 'open') {
         run.light = Math.max(0, run.light - 3);
-        if (!run.currentItem && !node.itemTaken) {
+        const foundBag = !node.cabinetBagChecked ? bagFindCandidate() : null;
+        node.cabinetBagChecked = true;
+        if (foundBag) {
+          meta.bagLevel = foundBag.level;
+          saveMeta();
+          msg = `찌그러진 캐비닛 안에 멀쩡한 ${foundBag.name}${subjectParticle(foundBag.name)} 걸려 있다. ${foundBag.name}${objectParticle(foundBag.name)} 멨다. 이제 ${foundBag.cap}칸까지 챙길 수 있다.`;
+        } else if (!run.currentItem && !node.itemTaken) {
           node.item = node.item || pickFloorItem(run.floor, node);
           run.currentItem = node.item;
           msg = `${run.currentItem.name}${subjectParticle(run.currentItem.name)} 안쪽에서 굴러 떨어졌다.`;
         } else {
           run.danger = Math.max(0, run.danger - 2);
-          msg = '문을 천천히 닫았다. 철판 속의 빈 소리가 가라앉는다.';
+          msg = meta.bagLevel >= MAX_BAG_LEVEL
+            ? '낡은 가방 하나가 걸려 있지만, 지금 멘 것보다 나을 게 없다.'
+            : '문을 천천히 닫았다. 철판 속의 빈 소리가 가라앉는다.';
         }
       } else if (choiceId === 'noise') {
         run.danger = Math.min(100, run.danger + 7);
