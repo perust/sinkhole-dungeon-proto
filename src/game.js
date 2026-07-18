@@ -142,19 +142,23 @@
     if (meta.bagLevel === NO_BAG_LEVEL && NO_BAG_ALERTS[key]) return NO_BAG_ALERTS[key];
     return BAG_ALERTS[key];
   }
-  function largerBagProducts() {
-    return BAG_PRODUCTS.filter((bag) => bag.level > NO_BAG_LEVEL && bag.level > meta.bagLevel);
+  function largerBagProducts(currentLevel = meta.bagLevel) {
+    return BAG_PRODUCTS.filter((bag) => bag.level > NO_BAG_LEVEL && bag.level > currentLevel);
   }
-  function bagFindCandidate() {
-    const candidates = largerBagProducts();
+  function cabinetBagFindCandidate(currentLevel, roll) {
+    const level = Math.max(NO_BAG_LEVEL, Math.min(MAX_BAG_LEVEL, Math.floor(Number(currentLevel)) || 0));
+    const chanceRoll = Math.max(0, Math.min(1, Number(roll)));
+    const candidates = largerBagProducts(level);
     if (!candidates.length) return null;
-    const roll = Math.random();
     let acc = 0;
     for (const bag of candidates) {
       acc += CABINET_BAG_FIND_RATES[bag.level] || 0;
-      if (roll < acc) return bag;
+      if (chanceRoll < acc) return bag;
     }
     return null;
+  }
+  function bagFindCandidate() {
+    return cabinetBagFindCandidate(meta.bagLevel, Math.random());
   }
 
   function itemIcon(index) {
@@ -4260,8 +4264,18 @@
     }
   }
 
-  // 헤드리스(Node) 검증용: 순수 맵 생성 로직만 노출한다. 브라우저에는 영향 없음.
+  // 헤드리스(Node) 검증용: 순수 로직만 노출한다. 브라우저에는 영향 없음.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { generateFloorMap, bfs, FLOORS, ITEM_TABLE, NODE_KINDS };
+    module.exports = {
+      generateFloorMap,
+      bfs,
+      FLOORS,
+      ITEM_TABLE,
+      NODE_KINDS,
+      BAG_PRODUCTS,
+      CABINET_BAG_FIND_RATES,
+      MAX_BAG_LEVEL,
+      cabinetBagFindCandidate,
+    };
   }
 })();
