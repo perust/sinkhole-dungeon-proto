@@ -1858,6 +1858,89 @@
     return { id, label, sub, tone };
   }
 
+  // 헤드리스/브라우저 QA용: 플레이어가 직접 누르는 이벤트 선택지 id/라벨 fixture.
+  // 새 정적 eventChoice를 추가하면 scripts/event-choice-smoke.js가 이 allowlist 갱신을 요구한다.
+  const KNOWN_PLAYER_CHOICE_FIXTURES = Object.freeze([
+    { type: 'monster-archetype', source: 'longFace', choices: Object.freeze([
+      { id: 'shine', label: '조명을 정면으로 비추며 물러난다' },
+      { id: 'sidestep', label: '옆으로 피하며 달려나간다' },
+      { id: 'hold', label: '숨 죽이고 구석으로 숨는다' },
+    ]) },
+    { type: 'monster-archetype', source: 'wetFeet', choices: Object.freeze([
+      { id: 'hold', label: '발을 멈추고 숨을 죽인다' },
+      { id: 'bait', label: '미끼를 던지고 반대로 뛴다' },
+      { id: 'run', label: '젖은 바닥을 박차고 뛴다' },
+    ]) },
+    { type: 'monster-archetype', source: 'doorHand', choices: Object.freeze([
+      { id: 'strike', label: '손목을 후려치고 빠져나간다' },
+      { id: 'kick', label: '문틀을 걷어차고 몸을 뺀다' },
+      { id: 'shine', label: '조명을 비추며 손을 떼어낸다' },
+      { id: 'run', label: '몸을 비틀어 달아난다' },
+    ]) },
+    { type: 'mental', source: 'mental-break', choices: Object.freeze([
+      { id: 'recover', label: '*' },
+      ...MENTAL_BREAK_EVENTS.map((entry) => ({ id: 'recover', label: entry.choice })),
+    ]) },
+    { type: 'room-event', source: 'survivor', choices: Object.freeze([
+      { id: 'rescue', label: '꺼내준다' },
+      { id: 'mark', label: '위치만 표시한다' },
+      { id: 'pass', label: '그냥 지나간다' },
+    ]) },
+    { type: 'room-event', source: 'dropped-loot', choices: Object.freeze([
+      { id: 'take-back:*', label: '* 챙기기' },
+      { id: 'list-more', label: '나머지는 둔다' },
+      { id: 'leave', label: '그냥 둔다' },
+    ]) },
+    { type: 'room-event', source: 'item-encounter', choices: Object.freeze([
+      { id: 'careful', label: '조심히 집는다' },
+      { id: 'grab', label: '재빨리 챙긴다' },
+      { id: 'take-back:*', label: '* 되챙기기' },
+      { id: 'skip', label: '그냥 지나간다' },
+    ]) },
+    { type: 'room-event', source: 'cabinet', choices: Object.freeze([
+      { id: 'open', label: '조심히 연다' },
+      { id: 'skip', label: '그냥 지나간다' },
+      { id: 'noise', label: '소리를 내서 확인한다' },
+    ]) },
+    { type: 'room-event', source: 'collapsed-passage', choices: Object.freeze([
+      { id: 'cross', label: '잔해를 넘어간다' },
+      { id: 'low', label: '낮게 돌아간다' },
+      { id: 'give-up', label: '포기한다' },
+    ]) },
+    { type: 'room-event', source: 'watchpost', choices: Object.freeze([
+      { id: 'wipe-log', label: '기록을 지운다' },
+      { id: 'search', label: '단말을 뒤진다' },
+      { id: 'pass', label: '그냥 지나간다' },
+      { id: 'seal-code', label: '봉쇄 코드를 넣는다' },
+    ]) },
+    { type: 'room-event', source: 'footprints', choices: Object.freeze([
+      { id: 'hold', label: '숨을 죽인다' },
+      { id: 'rush', label: '빠르게 지난다' },
+      { id: 'bait', label: '미끼를 던진다' },
+    ]) },
+    { type: 'room-event', source: 'vent', choices: Object.freeze([
+      { id: 'crawl', label: '기어서 통과한다' },
+      { id: 'turn', label: '돌아선다' },
+    ]) },
+    { type: 'room-event', source: 'light-recovery', choices: Object.freeze([
+      { id: 'charge', label: '조명에 연결한다' },
+      { id: 'wipe', label: '렌즈만 닦는다' },
+      { id: 'skip', label: '그냥 둔다' },
+    ]) },
+    { type: 'monster', source: 'monster-encounter', choices: Object.freeze([
+      { id: 'backstep', label: '뒤로 물러난다' },
+      { id: 'side-left', label: '왼쪽으로 뛰어든다' },
+      { id: 'side-right', label: '오른쪽으로 뛰어든다' },
+      { id: 'glare', label: '조명을 고정한다' },
+      { id: 'throw-bag', label: '짐을 던진다' },
+      { id: 'hide-dark', label: '조명을 끄고 숨는다' },
+    ]) },
+  ]);
+
+  function collectKnownPlayerChoiceFixtures() {
+    return KNOWN_PLAYER_CHOICE_FIXTURES;
+  }
+
   // 인던 물건 힌트: RP·수치는 감추고 '소리가 클 것 같다 / 깨질 것 같다'만 짧게 흘린다.
   function itemTraitHint(item) {
     const bits = [];
@@ -4276,6 +4359,8 @@
       CABINET_BAG_FIND_RATES,
       MAX_BAG_LEVEL,
       cabinetBagFindCandidate,
+      KNOWN_PLAYER_CHOICE_FIXTURES,
+      collectKnownPlayerChoiceFixtures,
     };
   }
 })();
