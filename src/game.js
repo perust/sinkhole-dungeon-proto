@@ -433,6 +433,17 @@
   const SURVIVOR_RESCUE_MENTAL = 5;      // 구출: 끌어내느라 드는 멘탈
   const SURVIVOR_RESCUE_DANGER = 6;      // 구출: 소음으로 오르는 위험
 
+  const MUTATIONS = {
+    'fissure-sight': { id: 'fissure-sight', name: '균열 시야', gainLog: '벽 틈이 더 선명하게 보인다. 물건과 계단이 있는 쪽이 어렴풋이 짚인다.' },
+    'black-hand': { id: 'black-hand', name: '검은 손', gainLog: '손등에 검은 얼룩이 번졌다. 손가락이 전보다 쉽게 틈을 비집는다.' },
+    'muffled-skin': { id: 'muffled-skin', name: '젖은 살갗', gainLog: '살갗이 짙은 물기에 덮였다. 손끝에 닿는 것들이 소리를 덜 낸다.' },
+  };
+  const MUTATION_ORDER = ['fissure-sight', 'black-hand', 'muffled-skin'];
+  const KNOWN_MUTATIONS = new Set(MUTATION_ORDER);
+  const MUTATION_TRIGGER_HEAT = 15;
+  const MUTATION_TRIGGER_ROOMS = 3;
+  const MUTATION_TRIGGER_FLOOR = 2;
+
   /* ---------------- 상태 ---------------- */
 
   const meta = {
@@ -448,10 +459,35 @@
     extractionCueSeen: false,
     endingSeen: false,
     survivors: [],   // 구출해 지상으로 데려온 생존자 id 목록(런을 넘어 유지)
+    mutations: [],   // 몸에 남은 왜곡 변이 id 목록(런을 넘어 유지)
     minimapMode: 'rotate', // rotate: 바라보는 방향 12시 / fixed: 지도 고정
   };
 
   const hasSurvivor = (id) => meta.survivors.includes(id);
+  const hasMutation = (id) => meta.mutations.includes(id);
+  function nextMutationId(current = meta.mutations) {
+    const known = new Set((Array.isArray(current) ? current : []).filter((id) => KNOWN_MUTATIONS.has(id)));
+    return MUTATION_ORDER.find((id) => !known.has(id)) || null;
+  }
+  function mutationCandidateForReturn(ctx) {
+    const bag = Array.isArray(ctx && ctx.bag) ? ctx.bag : [];
+    const current = Array.isArray(ctx && ctx.mutations) ? ctx.mutations : [];
+    if (!bag.length) return null;
+    if (!bag.some((it) => itemHeat(it) >= MUTATION_TRIGGER_HEAT)) return null;
+    const deepEnough = (ctx && ctx.maxFloor >= MUTATION_TRIGGER_FLOOR) || (ctx && ctx.roomsEntered >= MUTATION_TRIGGER_ROOMS);
+    if (!deepEnough) return null;
+    const id = nextMutationId(current);
+    return id ? MUTATIONS[id] : null;
+  }
+  function grantMutationOnReturn() {
+    if (!run || run.mutationChecked) return null;
+    run.mutationChecked = true;
+    const mutation = mutationCandidateForReturn({ bag: run.bag, maxFloor: run.maxFloor, roomsEntered: run.roomsEntered, mutations: meta.mutations });
+    if (!mutation) return null;
+    if (!hasMutation(mutation.id)) meta.mutations.push(mutation.id);
+    saveMeta();
+    return mutation;
+  }
   // 아직 구출하지 않은 생존자 중 하나를 고른다(중복 방지). 없으면 null.
   function nextUnrescuedSurvivor() {
     const pool = SURVIVOR_IDS.filter((id) => !hasSurvivor(id));
@@ -515,6 +551,7 @@
         extractionCueSeen: !!meta.extractionCueSeen,
         endingSeen: !!meta.endingSeen,
         survivors: meta.survivors,
+        mutations: meta.mutations,
         minimapMode: meta.minimapMode === 'fixed' ? 'fixed' : 'rotate',
       };
       window.localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
@@ -557,6 +594,10 @@
     if (Array.isArray(data.survivors)) {
       meta.survivors = [...new Set(data.survivors.filter((id) => KNOWN_SURVIVORS.has(id)))];
     }
+    if (Array.isArray(data.mutations)) {
+      const known = new Set(data.mutations.filter((id) => KNOWN_MUTATIONS.has(id)));
+      meta.mutations = MUTATION_ORDER.filter((id) => known.has(id));
+    }
     meta.minimapMode = data.minimapMode === 'fixed' ? 'fixed' : 'rotate';
   }
 
@@ -567,12 +608,12 @@
 
   // '기록 초기화' — 저장값을 지우고 meta를 출고 상태로 되돌린다.
   function resetProgress() {
-    if (!window.confirm('모든 기록(RP·강화·깊이·의심도·진실 조각·생존자)을 지울까요?')) return;
+    if (!window.confirm('모든 기록(RP·강화·깊이·의심도·진실 조각·생존자·변이)을 지울까요?')) return;
     clearSave();
     Object.assign(meta, {
       rp: 0, bagLevel: NO_BAG_LEVEL, lightLevel: 1, weaponLevel: 1,
       maxDepth: 1, totalEarned: 0, suspicion: 0, truths: [], contractIndex: 0, extractionCueSeen: false,
-      endingSeen: false, survivors: [], minimapMode: 'rotate',
+      endingSeen: false, survivors: [], mutations: [], minimapMode: 'rotate',
     });
     renderStartScreen();
   }
@@ -665,6 +706,9 @@
       seenMentalAlerts: new Set(),
       seenBagAlerts: new Set(),
       maxFloor: 1,
+      roomsEntered: 0,
+      mutationChecked: false,
+      mutationNote: '',
       grabbedCount: 0,
       droppedCount: 0,
       bought: false,     // 이번 귀환에서 강화를 샀는가
@@ -1433,7 +1477,7 @@
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
     'buy-committee', 'buy-black', 'buy-family', 'family-rp', 'family-susp', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
-    'start-survivors',
+    'start-survivors', 'start-mutations',
     'up-bag', 'bag-shop', 'up-light', 'up-weapon', 'btn-again',
     'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
     'ending-truth-count', 'ending-continue', 'ending-reset',
@@ -1950,6 +1994,7 @@
     const firstVisit = !node.entered;
     if (firstVisit) {
       node.entered = true;
+      run.roomsEntered += 1;
       if (node.light) run.light = Math.max(0, Math.min(maxLight(), run.light + node.light));
       if (node.danger > 0) run.danger = Math.min(100, run.danger + node.danger);
       else if (node.danger < 0) run.danger = Math.max(0, run.danger + node.danger);
@@ -3518,6 +3563,11 @@
     run.lastSale = run.bag.slice();
     run.chasing = false;
     run.bought = false;
+    const gainedMutation = grantMutationOnReturn();
+    if (gainedMutation) {
+      run.mutationNote = gainedMutation.gainLog;
+      log(gainedMutation.gainLog, 'hot');
+    }
     // 빈손 귀환도 판매 화면을 거친다: 출구 경로를 고르고 판매처(위원회/암시장)를 눌러야 강화로 넘어간다.
     // chooseBuyer가 raw 0을 안전 처리하므로 빈 가방이어도 문제없이 진행된다.
     renderReturnScreen();
@@ -4323,7 +4373,8 @@
   function renderUpgradeScreen(gained) {
     // 판매 내역
     if (gained !== null) {
-      el['sale-buyer'].textContent = run.lastBuyer === 'black' ? '판매처: 암시장' : '판매처: 위원회';
+      const buyerLabel = run.lastBuyer === 'black' ? '암시장' : run.lastBuyer === 'family' ? '가족 반환' : '위원회';
+      el['sale-buyer'].textContent = `판매처: ${buyerLabel}`;
       const list = el['sale-list'];
       list.innerHTML = '';
       if (run.lastSale.length === 0) {
@@ -4338,7 +4389,10 @@
       }
       el['sale-gain'].textContent = '+' + gained;
     }
-    if (el['run-summary']) el['run-summary'].textContent = run.exitNote || '';
+    if (el['run-summary']) {
+      const summaryLines = [run.exitNote, run.mutationNote].filter(Boolean);
+      el['run-summary'].innerHTML = summaryLines.join('<br>');
+    }
     el['sale-balance'].textContent = meta.rp;
     el['sale-susp'].textContent = meta.suspicion;
     renderGoals();
@@ -4494,6 +4548,15 @@
     line.innerHTML = `구출한 생존자 <b>${names.length}</b>명 · <b>${names.join(', ')}</b>`;
   }
 
+  function renderStartMutations() {
+    const line = el['start-mutations'];
+    if (!line) return;
+    const names = meta.mutations.map((id) => MUTATIONS[id] && MUTATIONS[id].name).filter(Boolean);
+    if (!names.length) { line.hidden = true; line.textContent = ''; return; }
+    line.hidden = false;
+    line.innerHTML = `몸에 남은 흔적 · <b>${names.join(', ')}</b>`;
+  }
+
   // 시작 화면 메타 표시를 한곳에서 갱신한다(초기 진입 + 기록 초기화 공용).
   function renderStartScreen() {
     el['start-rp'].textContent = meta.rp;
@@ -4501,6 +4564,7 @@
     el['start-susp'].textContent = meta.suspicion;
     renderCodex();
     renderStartSurvivors();
+    renderStartMutations();
     renderGoals();
     renderContractCards();
   }
@@ -4537,6 +4601,12 @@
       MISSING_TRACE_SPAWN_CHANCE,
       FAMILY_RETURN_RATE,
       FAMILY_RETURN_SUSP_RELIEF,
+      MUTATIONS,
+      MUTATION_ORDER,
+      MUTATION_TRIGGER_HEAT,
+      MUTATION_TRIGGER_ROOMS,
+      MUTATION_TRIGGER_FLOOR,
+      mutationCandidateForReturn,
       familyReturnQuote,
       cabinetBagFindCandidate,
       createBagDropReclaimSmokeState,
