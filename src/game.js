@@ -50,7 +50,17 @@
   function itemHeat(it)  { return it && Number.isFinite(it.heat) ? it.heat : (TIER_HEAT[it && it.tier] || 4); }
   function itemNoise(it) { return it && it.noise ? it.noise : (TIER_NOISE[it && it.tier] || 'medium'); }
   function itemFragile(it) { return !!(it && it.fragile); }
+  function itemFamily(it) { return !!(it && it.family); }
   const TRUTH_TOTAL = Object.values(ITEM_TABLE).flat().length;
+
+  // 실종자 흔적방에서만 나오는 개인 유품. 진실 조각 수에는 포함하지 않고,
+  // 지상에서는 낮은 값의 개인 물건으로 처리한다(가족 반환 루트는 다음 패스 후보).
+  const FAMILY_KEEPSAKES = [
+    { name: '가족 사진', slots: 1, value: 4, tier: 'common', icon: 3, heat: 1, noise: 'low', fragile: true, family: true, familyNote: '사진 뒤에 “아빠 꼭 돌아와”라고 적혀 있다.' },
+    { name: '이름표 목걸이', slots: 1, value: 5, tier: 'common', icon: 0, heat: 1, noise: 'medium', fragile: false, family: true, familyNote: '목걸이에 아이 이름과 집 주소가 새겨져 있다.' },
+    { name: '아이 배낭', slots: 1, value: 3, tier: 'common', icon: 1, heat: 1, noise: 'low', fragile: false, family: true, familyNote: '배낭 안에 반쯤 쓴 색연필과 위원회 출입증이 들어 있다.' },
+  ];
+  function pickFamilyKeepsake() { return { ...FAMILY_KEEPSAKES[Math.floor(Math.random() * FAMILY_KEEPSAKES.length)] }; }
 
   // 짧은 의뢰는 "한 번 더 내려가기"의 명분과 판매처 선택의 압박을 만든다.
   const CONTRACTS = [
@@ -72,6 +82,8 @@
     { key: 'crack',    label: '오른쪽 균열', desc: '젖은 발자국',        style: 'danger', light: -8, danger: 9 },
     // 위원회 감시소: 드물게 등장(uncommon). 의심도가 높으면 단말/기록 조작이 위험해진다.
     { key: 'watchpost',label: '위원회 감시소', desc: '꺼진 감시등',        style: '',       light: -2, danger: 2, uncommon: true },
+    // 실종자 흔적방: 드물게 등장. 유품 회수와 가족 반환 후보로 이어지는 방이다.
+    { key: 'missing-trace', label: '실종자 흔적', desc: '벽에 붙은 사진', style: '', light: -1, danger: 1, uncommon: true },
   ];
   const ENTRY_KIND  = { key: 'entry',  label: '입구',       desc: '',            style: '', light: 0, danger: 0 };
   const STAIRS_KIND = { key: 'stairs', label: '계단 아래로', desc: '더 깊은 냉기', style: '', light: 0, danger: 0 };
@@ -83,6 +95,12 @@
     '단말 로그: “회수물은 폐기가 아니라 재봉인 창고로 이송.” 날짜 칸은 지워져 있다.',
     '깨진 화면에 한 줄이 남아 있다 — “감시등 소등은 상부 지시.” 서명란은 비어 있다.',
     '명단이 스친다. 회수자 몇 사람 이름 옆에 붉은 표시가 찍혀 있다.',
+  ];
+  const MISSING_TRACE_SPAWN_CHANCE = 0.24;
+  const MISSING_TRACE_LOGS = [
+    '사진 뒤에 날짜가 적혀 있다 — 싱크홀이 열리기 사흘 전. 이 사람은 그날 이후로 올라오지 않았다.',
+    '이름표에 “3구역 회수반”이 찍혀 있다. 위원회 실종 명단에서 지워진 번호다.',
+    '편지 한 줄만 읽힌다 — “여보, 이번이 마지막이야.” 다음 줄은 물에 번져 지워졌다.',
   ];
 
   // 출구 선택 v1: 지상으로 나가는 세 갈래 길. 보정값은 결정적(무작위 없음)이라 판매 견적에 그대로 반영된다.
@@ -405,7 +423,7 @@
   const INSIDER_SEAL_LOG = '낡은 직원 코드가 먹혔다. 단말이 순순히 열리고 한 줄이 떠오른다 — “봉쇄문 재봉인은 3단계, 마지막 인증은 현장 직원 코드.”';
   const MAPPER_FEATURE = {
     corridor: '곧은 복도', crack: '젖은 균열', storage: '낮은 창고', office: '관리실',
-    watchpost: '감시소', hall: '무너진 통로', door: '비상등 문', vent: '낮은 틈', stairs: '아래 계단',
+    watchpost: '감시소', hall: '무너진 통로', door: '비상등 문', vent: '낮은 틈', 'missing-trace': '사진 흔적', stairs: '아래 계단',
   };
 
   const SURVIVOR_EVENT_CHANCE = 0.16;    // 방 도착 시 생존자 조우가 열릴 확률(드물게)
@@ -773,6 +791,7 @@
       hall: '무너진 잔해',
       vent: '낮은 환풍구',
       crack: '젖은 균열',
+      'missing-trace': '벽에 붙은 사진',
       corridor: '긴 복도',
       stairs: '아래 계단',
       entry: '입구 표식',
@@ -1323,7 +1342,17 @@
       applyKind(nodes[watchpostId], watchpostKind);
     }
 
-    const itemSlots = shuffle(others.filter((id) => id !== watchpostId));
+    let traceId = -1;
+    const traceKind = NODE_KINDS.find((k) => k.key === 'missing-trace');
+    if (traceKind && others.length && Math.random() < MISSING_TRACE_SPAWN_CHANCE) {
+      const traceCandidates = others.filter((id) => id !== watchpostId);
+      if (traceCandidates.length) {
+        traceId = traceCandidates[Math.floor(Math.random() * traceCandidates.length)];
+        applyKind(nodes[traceId], traceKind);
+      }
+    }
+
+    const itemSlots = shuffle(others.filter((id) => id !== watchpostId && id !== traceId));
     const itemCount = Math.min(itemSlots.length, 2 + (Math.random() < 0.5 ? 1 : 0));
     for (let i = 0; i < itemCount; i++) nodes[itemSlots[i]].item = pickFloorItem(floor, nodes[itemSlots[i]]);
 
@@ -1994,6 +2023,11 @@
       { id: 'pass', label: '그냥 지나간다' },
       { id: 'seal-code', label: '봉쇄 코드를 넣는다' },
     ]) },
+    { type: 'room-event', source: 'missing-trace', choices: Object.freeze([
+      { id: 'recover', label: '유품을 챙긴다' },
+      { id: 'inspect', label: '사진만 확인한다' },
+      { id: 'pass', label: '그냥 지나간다' },
+    ]) },
     { type: 'room-event', source: 'footprints', choices: Object.freeze([
       { id: 'hold', label: '숨을 죽인다' },
       { id: 'rush', label: '빠르게 지난다' },
@@ -2176,6 +2210,17 @@
       if (hasSurvivor('insider')) {
         ev.choices.splice(1, 0, eventChoice('seal-code', '봉쇄 코드를 넣는다', '낡은 직원 코드를 쓴다', 'good'));
       }
+    } else if (node.kind === 'missing-trace') {
+      ev = {
+        type: 'missing-trace',
+        title: '실종자 흔적',
+        cue: '벽에 젖은 사진과 이름표가 붙어 있다. 누군가 이 방에서 오래 기다린 흔적이 남았다.',
+        choices: [
+          eventChoice('recover', '유품을 챙긴다', '가족에게 돌아갈지도 모른다', 'good'),
+          eventChoice('inspect', '사진만 확인한다', '단서만 읽고 둔다'),
+          eventChoice('pass', '그냥 지나간다', '못 본 척 지나친다'),
+        ],
+      };
     } else if (node.kind === 'crack' || node.kind === 'corridor') {
       ev = {
         type: 'footprints',
@@ -2583,6 +2628,25 @@
       } else {
         run.danger = Math.max(0, run.danger - 1);
         msg = '감시소는 건드리지 않고 지나쳤다. 꺼진 감시등이 등 뒤에 남는다.';
+      }
+    } else if (ev.type === 'missing-trace') {
+      if (choiceId === 'recover') {
+        run.light = Math.max(0, run.light - 2);
+        run.mental = Math.max(0, run.mental - 2);
+        if (!run.currentItem && !node.itemTaken) {
+          const keepsake = pickFamilyKeepsake();
+          node.item = keepsake;
+          run.currentItem = keepsake;
+          msg = `${keepsake.name}${subjectParticle(keepsake.name)} 사진 아래에 놓여 있다. ${keepsake.familyNote || '가족에게 돌아갈 물건이다.'}`;
+        } else {
+          msg = '사진 아래 빈자리만 남았다. 이미 챙긴 흔적이 있다.';
+        }
+      } else if (choiceId === 'inspect') {
+        run.light = Math.max(0, run.light - 1);
+        msg = MISSING_TRACE_LOGS[Math.floor(Math.random() * MISSING_TRACE_LOGS.length)];
+      } else {
+        run.danger = Math.max(0, run.danger - 1);
+        msg = '사진과 이름표를 그대로 두고 지나쳤다. 테이프가 벽에서 천천히 떨어진다.';
       }
     } else if (ev.type === 'survivor') {
       const s = SURVIVORS[ev.survivorId] || {};
@@ -3521,7 +3585,7 @@
     run.lastTruth = null;
 
     if (buyer === 'black') {
-      const unknown = run.lastSale.find((it) => !meta.truths.includes(it.name));
+      const unknown = run.lastSale.find((it) => it.truth && !meta.truths.includes(it.name));
       if (unknown) {
         meta.truths.push(unknown.name);
         run.lastTruth = unknown.truth;
@@ -4443,6 +4507,9 @@
       BAG_PRODUCTS,
       CABINET_BAG_FIND_RATES,
       MAX_BAG_LEVEL,
+      FAMILY_KEEPSAKES,
+      MISSING_TRACE_LOGS,
+      MISSING_TRACE_SPAWN_CHANCE,
       cabinetBagFindCandidate,
       createBagDropReclaimSmokeState,
       smokeUsedSlots,
