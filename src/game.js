@@ -111,6 +111,8 @@
   const EXIT_SCRATCH_RATE = 0.15;       // 균열 출구에서 파손되기 쉬운 물건이 긁혀 깎이는 값 비율
   const EXIT_PASSAGE_FEE = 8;           // 암시장 통로 통행료(RP)
   const EXIT_PASSAGE_BLACK_RELIEF = 4;  // 암시장 통로로 뒷골목에 바로 붙어 줄어드는 암시장 의심도
+  const FAMILY_RETURN_RATE = 0.4;       // 가족 유품 값 중 사례로 돌아오는 비율
+  const FAMILY_RETURN_SUSP_RELIEF = 2;  // 유품 하나를 가족에게 돌려줄 때마다 줄어드는 의심도
 
   const FLOOR_OPEN_CUE = [
     '아래에서 찬바람이 올라온다.',
@@ -596,6 +598,17 @@
   const weaponFactor = () => 1 + (meta.weaponLevel - 1) * 0.25; // 위험 상승 둔화
   const usedSlots  = () => run.bag.reduce((s, i) => s + i.slots, 0);
   const bagValue   = () => run.bag.reduce((s, i) => s + i.value, 0);
+  function familyReturnQuote(items, effect = { gainDelta: 0, suspDelta: 0, note: '', route: 'official' }) {
+    const familyItems = (Array.isArray(items) ? items : []).filter(itemFamily);
+    const raw = familyItems.reduce((sum, it) => sum + (Number(it.value) || 0), 0);
+    return {
+      gained: Math.max(0, Math.ceil(raw * FAMILY_RETURN_RATE) + (effect.gainDelta || 0)),
+      suspDelta: -(familyItems.length * FAMILY_RETURN_SUSP_RELIEF) + (effect.suspDelta || 0),
+      familyCount: familyItems.length,
+      note: effect.note || '',
+      route: effect.route || 'official',
+    };
+  }
   const roomFor    = (item) => bagCap() - usedSlots() >= item.slots;
 
   function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
@@ -1419,7 +1432,7 @@
     'btn-grab', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
-    'buy-committee', 'buy-black', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
+    'buy-committee', 'buy-black', 'buy-family', 'family-rp', 'family-susp', 'sale-buyer', 'run-summary', 'sale-list', 'sale-gain', 'sale-balance', 'sale-susp', 'truth-news', 'sale-contract', 'street-news', 'return-goal',
     'start-survivors',
     'up-bag', 'bag-shop', 'up-light', 'up-weapon', 'btn-again',
     'fail-recovery', 'fail-detail', 'fail-susp', 'btn-retry',
@@ -1463,6 +1476,7 @@
   }
 
   function makeStreetNews(buyer, quote) {
+    if (buyer === 'family') return '거리 소문: 가족에게 돌아간 유품 때문에, 지상 소문이 조금 누그러졌다.';
     const hot = quote.suspDelta > 10 || meta.suspicion >= 55;
     if (buyer === 'black' && hot) return '뉴스: “싱크홀 밀반출 급증”… 검문 드론이 한 블록 가까워졌다.';
     if (buyer === 'black') return '소문: 암시장 매입가가 올랐다. 대신 허가소가 이름을 묻기 시작했다.';
@@ -3563,6 +3577,8 @@
     if (buyer === 'committee') {
       gained = Math.ceil(raw * 0.72);
       suspDelta = -Math.min(10, 2 + run.bag.length * 2);
+    } else if (buyer === 'family') {
+      return familyReturnQuote(run.bag, eff);
     } else {
       // 암시장 의심도는 물건별 heat 합(등급이 아니라 물건 태그). 태그 없으면 등급으로 보정.
       const heat = run.bag.reduce((sum, it) => sum + itemHeat(it), 0);
@@ -4132,11 +4148,19 @@
     }
     const committee = saleQuote('committee');
     const black = saleQuote('black');
+    const family = saleQuote('family');
+    const hasFamily = family.familyCount > 0;
     el['return-susp'].textContent = meta.suspicion;
     el['committee-rp'].textContent = '+' + committee.gained;
     el['committee-susp'].textContent = signed(committee.suspDelta);
     el['black-rp'].textContent = '+' + black.gained;
     el['black-susp'].textContent = signed(black.suspDelta);
+    if (el['buy-family']) {
+      el['buy-family'].hidden = !hasFamily;
+      el['buy-family'].disabled = !hasFamily;
+    }
+    if (el['family-rp']) el['family-rp'].textContent = '+' + family.gained;
+    if (el['family-susp']) el['family-susp'].textContent = signed(family.suspDelta);
     // 빈손 귀환이라도 판매처를 골라 계속 진행할 수 있어야 한다(chooseBuyer가 raw 0을 안전 처리).
     el['buy-committee'].disabled = false;
     el['buy-black'].disabled = false;
@@ -4432,6 +4456,7 @@
     if (el['route-blackpass']) el['route-blackpass'].addEventListener('click', () => chooseRoute('blackpass'));
     el['buy-committee'].addEventListener('click', () => chooseBuyer('committee'));
     el['buy-black'].addEventListener('click', () => chooseBuyer('black'));
+    if (el['buy-family']) el['buy-family'].addEventListener('click', () => chooseBuyer('family'));
     el['up-bag'].addEventListener('click', () => buyUpgrade('bag'));
     el['up-light'].addEventListener('click', () => buyUpgrade('light'));
     el['up-weapon'].addEventListener('click', () => buyUpgrade('weapon'));
@@ -4510,6 +4535,9 @@
       FAMILY_KEEPSAKES,
       MISSING_TRACE_LOGS,
       MISSING_TRACE_SPAWN_CHANCE,
+      FAMILY_RETURN_RATE,
+      FAMILY_RETURN_SUSP_RELIEF,
+      familyReturnQuote,
       cabinetBagFindCandidate,
       createBagDropReclaimSmokeState,
       smokeUsedSlots,
