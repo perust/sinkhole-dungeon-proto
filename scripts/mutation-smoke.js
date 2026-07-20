@@ -11,6 +11,12 @@ const {
   MUTATION_TRIGGER_HEAT,
   MUTATION_TRIGGER_ROOMS,
   MUTATION_TRIGGER_FLOOR,
+  FISSURE_SCRATCH_RATE,
+  BLACKHAND_CABINET_LIGHT,
+  BLACKHAND_CHECKPOINT_SUSP,
+  MUFFLED_COMMITTEE_SUSP,
+  pickupNoiseLevel,
+  committeeSuspicionDelta,
   mutationCandidateForReturn,
 } = require('../src/game.js');
 
@@ -23,6 +29,16 @@ for (const id of MUTATION_ORDER) {
 assert.equal(MUTATION_TRIGGER_HEAT, 15, 'hot cargo threshold should match epic item heat');
 assert.ok(MUTATION_TRIGGER_ROOMS >= 2, 'room threshold should require a meaningful run');
 assert.ok(MUTATION_TRIGGER_FLOOR >= 2, 'floor threshold should require depth');
+assert.equal(FISSURE_SCRATCH_RATE, 0.2, 'fissure sight scratch tradeoff should be 20%');
+assert.equal(BLACKHAND_CABINET_LIGHT, 1, 'black hand should lower cabinet light cost to 1');
+assert.equal(BLACKHAND_CHECKPOINT_SUSP, 1, 'black hand checkpoint cost should be +1 suspicion');
+assert.equal(MUFFLED_COMMITTEE_SUSP, 1, 'muffled skin committee cost should weaken relief by 1');
+assert.equal(pickupNoiseLevel({ noise: 'high' }, true), 'medium', 'muffled skin should lower high pickup noise');
+assert.equal(pickupNoiseLevel({ noise: 'medium' }, true), 'low', 'muffled skin should lower medium pickup noise');
+assert.equal(pickupNoiseLevel({ noise: 'low' }, true), 'low', 'muffled skin should leave low pickup noise low');
+assert.equal(pickupNoiseLevel({ noise: 'high' }, false), 'high', 'normal pickup noise should stay unchanged');
+assert.equal(committeeSuspicionDelta(2, false), -6, 'normal committee relief should remain unchanged');
+assert.equal(committeeSuspicionDelta(2, true), -5, 'muffled skin should weaken committee relief by exactly 1');
 
 const hot = ITEM_TABLE[3].find((it) => it.heat >= MUTATION_TRIGGER_HEAT);
 const cold = ITEM_TABLE[1][0];
@@ -49,6 +65,14 @@ for (const needle of [
   'renderStartMutations()',
   "'start-mutations'",
   'mutations: meta.mutations',
+  "pickupNoiseLevel(item, hasMutation('muffled-skin'))",
+  "blackHand ? BLACKHAND_CABINET_LIGHT : 3",
+  "hasMutation('fissure-sight')",
+  "hasMutation('black-hand')",
+  'committeeSuspicionDelta(run.bag.length',
+  'fissureCueLine(node)',
+  'BLACKHAND_CHECKPOINT_NOTE',
+  'MUFFLED_COMMITTEE_NOTE',
 ]) {
   assert.ok(source.includes(needle), `source missing ${needle}`);
 }

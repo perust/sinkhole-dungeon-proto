@@ -443,6 +443,14 @@
   const MUTATION_TRIGGER_HEAT = 15;
   const MUTATION_TRIGGER_ROOMS = 3;
   const MUTATION_TRIGGER_FLOOR = 2;
+  const FISSURE_SCRATCH_RATE = 0.20;
+  const FISSURE_EXIT_NOTE = '벽 틈이 너무 많이 보여 빠져나오는 길을 한번 잘못 짚었다.';
+  const BLACKHAND_CABINET_LIGHT = 1;
+  const BLACKHAND_CHECKPOINT_SUSP = 1;
+  const BLACKHAND_CABINET_NOTE = '검게 물든 손가락이 휘어진 손잡이를 너무 쉽게 비집었다.';
+  const BLACKHAND_CHECKPOINT_NOTE = '검문관의 시선이 검게 물든 손에 오래 머물렀다.';
+  const MUFFLED_COMMITTEE_SUSP = 1;
+  const MUFFLED_COMMITTEE_NOTE = '접수관이 젖은 살갗을 보고 서류를 한 번 더 넘겼다.';
 
   /* ---------------- 상태 ---------------- */
 
@@ -1034,16 +1042,17 @@
     s.stepCounter = 0;
   }
 
-  // 집기 소음 처리: 아이템 noise와 조심/재빨리에 따라 추격 압박을 다르게 준다.
-  // - careful: 어느 noise든 즉시 한 칸 끌어당기지 않는다(loud=false).
-  //     · low/medium: 깨우고 이 칸을 기억시키는 정도.
-  //     · high: 조용히 다뤄도 티가 난다 — 이미 두 칸 이상 떨어져 있으면 소리 없이 한 칸 좁혀오고
-  //       경고 한 줄을 남긴다. 붙어 있을 때(dist<=1)는 좁히지 않아 부당한 즉살은 없다.
-  // - quick: medium/high는 큰 소리라 즉시 한 칸 끌어당긴다(loud=true).
-  //     low는 재빨라도 즉시 한 칸까지는 아니다(loud=false) — 대신 호출부에서 위험만 더 오른다.
-  // 반환: 상황 문구에 덧붙일 경고(없으면 '').
-  function applyPickupNoise(nodeId, item, cautious) {
+  function pickupNoiseLevel(item, muffled) {
     const noise = itemNoise(item);
+    if (!muffled) return noise;
+    if (noise === 'high') return 'medium';
+    if (noise === 'medium') return 'low';
+    return noise;
+  }
+
+  // 집기 소음 처리: 젖은 살갗은 실제 추격 압박에서만 소음을 한 단계 낮춘다.
+  function applyPickupNoise(nodeId, item, cautious) {
+    const noise = pickupNoiseLevel(item, hasMutation('muffled-skin'));
     const loud = !cautious && noise !== 'low';
     emitNoise(nodeId, { loud });
     if (cautious && noise === 'high') {
@@ -2575,7 +2584,8 @@
       else msg = outcome ? outcome.after : '간신히 정신을 붙잡았다.';
     } else if (ev.type === 'cabinet') {
       if (choiceId === 'open') {
-        run.light = Math.max(0, run.light - 3);
+        const blackHand = hasMutation('black-hand');
+        run.light = Math.max(0, run.light - (blackHand ? BLACKHAND_CABINET_LIGHT : 3));
         const foundBag = !node.cabinetBagChecked ? bagFindCandidate() : null;
         node.cabinetBagChecked = true;
         if (foundBag) {
@@ -2592,6 +2602,7 @@
             ? '낡은 가방 하나가 걸려 있지만, 지금 멘 것보다 나을 게 없다.'
             : '문을 천천히 닫았다. 철판 속의 빈 소리가 가라앉는다.';
         }
+        if (blackHand) msg = `${msg} ${BLACKHAND_CABINET_NOTE}`;
       } else if (choiceId === 'noise') {
         run.danger = Math.min(100, run.danger + 7);
         msg = '금속음이 울렸다. 먼 곳에서 비슷한 소리가 한 번 늦게 돌아온다.';
@@ -3580,15 +3591,18 @@
     const route = run.exitRoute || 'official';
     if (route === 'crack') {
       const fragileValue = run.bag.reduce((s, it) => s + (itemFragile(it) ? it.value : 0), 0);
-      const scratch = Math.round(fragileValue * EXIT_SCRATCH_RATE);
+      const fissure = hasMutation('fissure-sight');
+      const scratch = Math.round(fragileValue * (fissure ? FISSURE_SCRATCH_RATE : EXIT_SCRATCH_RATE));
+      let note = scratch > 0
+        ? `균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번 짐은 -${scratch} RP.`
+        : '균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번엔 긁힐 게 없었다.';
+      if (fissure && scratch > 0) note = `${note} ${FISSURE_EXIT_NOTE}`;
       return {
         route,
         suspDelta: -EXIT_CRACK_SUSP_RELIEF,
         gainDelta: -scratch,
         blackSuspRelief: 0,
-        note: scratch > 0
-          ? `균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번 짐은 -${scratch} RP.`
-          : '균열 출구 — 검문을 피하지만 물건이 긁힌다. 이번엔 긁힐 게 없었다.',
+        note,
       };
     }
     if (route === 'blackpass') {
@@ -3605,19 +3619,35 @@
       };
     }
     const heatTotal = run.bag.reduce((s, it) => s + itemHeat(it), 0);
-    const checkpoint = heatTotal >= EXIT_CHECKPOINT_HEAT || meta.suspicion >= EXIT_CHECKPOINT_SUSP;
+    const dueHeat = heatTotal >= EXIT_CHECKPOINT_HEAT;
+    const dueSusp = meta.suspicion >= EXIT_CHECKPOINT_SUSP;
+    const checkpoint = dueHeat || dueSusp;
     const insiderRelief = checkpoint && hasSurvivor('insider') ? INSIDER_CHECKPOINT_RELIEF : 0;
+    let suspDelta = checkpoint ? Math.max(0, EXIT_CHECKPOINT_SUSP_ADD - insiderRelief) : 0;
+    let note = checkpoint
+      ? (insiderRelief > 0
+        ? '공식 출구 — 검문이 있었지만 낡은 직원 코드가 의심을 조금 눌렀다.'
+        : dueHeat
+          ? '공식 출구 — 안전하지만 검문이 있다. 짐이 뜨거워 검문대가 의심도를 조금 올렸다.'
+          : '공식 출구 — 안전하지만 검문이 있다. 이름이 검문 명단에 올라 의심도가 조금 올랐다.')
+      : '공식 출구 — 안전하지만 검문이 있다. 이번엔 무사히 통과했다.';
+    if (checkpoint && hasMutation('black-hand')) {
+      suspDelta += BLACKHAND_CHECKPOINT_SUSP;
+      note = `${note} ${BLACKHAND_CHECKPOINT_NOTE}`;
+    }
     return {
       route,
-      suspDelta: checkpoint ? Math.max(0, EXIT_CHECKPOINT_SUSP_ADD - insiderRelief) : 0,
+      suspDelta,
       gainDelta: 0,
       blackSuspRelief: 0,
-      note: checkpoint
-        ? (insiderRelief > 0
-          ? '공식 출구 — 검문이 있었지만 낡은 직원 코드가 의심을 조금 눌렀다.'
-          : '공식 출구 — 안전하지만 검문이 있다. 짐이 뜨거워 검문대가 의심도를 조금 올렸다.')
-        : '공식 출구 — 안전하지만 검문이 있다. 이번엔 무사히 통과했다.',
+      note,
     };
+  }
+
+  function committeeSuspicionDelta(itemCount, muffled) {
+    let delta = -Math.min(10, 2 + Math.max(0, itemCount) * 2);
+    if (muffled) delta = Math.min(0, delta + MUFFLED_COMMITTEE_SUSP);
+    return delta;
   }
 
   function saleQuote(buyer) {
@@ -3626,7 +3656,7 @@
     let gained, suspDelta;
     if (buyer === 'committee') {
       gained = Math.ceil(raw * 0.72);
-      suspDelta = -Math.min(10, 2 + run.bag.length * 2);
+      suspDelta = committeeSuspicionDelta(run.bag.length, hasMutation('muffled-skin'));
     } else if (buyer === 'family') {
       return familyReturnQuote(run.bag, eff);
     } else {
@@ -3637,7 +3667,8 @@
     }
     gained = Math.max(0, gained + eff.gainDelta);
     suspDelta += eff.suspDelta;
-    return { gained, suspDelta, note: eff.note, route: eff.route };
+    const muffledNote = buyer === 'committee' && hasMutation('muffled-skin') ? MUFFLED_COMMITTEE_NOTE : '';
+    return { gained, suspDelta, note: [eff.note, muffledNote].filter(Boolean).join(' '), route: eff.route };
   }
 
   function chooseBuyer(buyer) {
@@ -3998,6 +4029,24 @@
     return parts.length ? `지도공 표시: ${parts.slice(0, 3).join(' · ')}` : '';
   }
 
+  function fissureCueLine(node) {
+    if (!hasMutation('fissure-sight') || hasSurvivor('mapper') || !node) return '';
+    const pairs = [
+      ['앞', relativeExit('front')],
+      ['왼쪽', relativeExit('left')],
+      ['오른쪽', relativeExit('right')],
+      ['뒤', relativeExit('back')],
+    ];
+    const parts = [];
+    pairs.forEach(([label, id]) => {
+      if (id == null) return;
+      const target = nodeById(id);
+      const hint = target && (target.kind === 'stairs' ? '계단' : target.item && !target.itemTaken ? '물건' : target.kind === 'crack' ? '틈' : '');
+      if (hint) parts.push(`${label} ${hint}`);
+    });
+    return parts.length ? `균열 시야: ${parts.slice(0, 2).join(' / ')}` : '';
+  }
+
   // 현재 노드의 출구(+상황 선택지)를 8방향 패드로 그린다. 장소명은 도착 후 상황 텍스트로만 알려준다.
   function renderChoices() {
     const dock = el['room-choices'];
@@ -4013,7 +4062,8 @@
     const node = currentNode();
     const baseCue = situationCopy(node);
     const mapperLine = mapperCueLine(node);
-    const cue = mapperLine ? `${baseCue} ${mapperLine}` : baseCue;
+    const fissureLine = mapperLine ? '' : fissureCueLine(node);
+    const cue = [baseCue, mapperLine, fissureLine].filter(Boolean).join(' ');
 
     if (run.pendingEvent) {
       const sig = `event:${run.currentNodeId}:${run.pendingEvent.type}:${run.pendingEvent.choices.map((choice) => choice.id).join(',')}`;
@@ -4606,6 +4656,12 @@
       MUTATION_TRIGGER_HEAT,
       MUTATION_TRIGGER_ROOMS,
       MUTATION_TRIGGER_FLOOR,
+      FISSURE_SCRATCH_RATE,
+      BLACKHAND_CABINET_LIGHT,
+      BLACKHAND_CHECKPOINT_SUSP,
+      MUFFLED_COMMITTEE_SUSP,
+      pickupNoiseLevel,
+      committeeSuspicionDelta,
       mutationCandidateForReturn,
       familyReturnQuote,
       cabinetBagFindCandidate,
