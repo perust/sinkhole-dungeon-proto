@@ -1065,6 +1065,87 @@
     return run.floorMap.droppedLoot;
   }
 
+  function smokeCloneItem(item) {
+    return item && typeof item === 'object' ? { ...item } : item;
+  }
+
+  function smokeCloneLoot(loot) {
+    return loot && typeof loot === 'object'
+      ? { ...loot, item: smokeCloneItem(loot.item) }
+      : loot;
+  }
+
+  // 헤드리스 QA용 순수 가방/바닥 자국 시뮬레이터. 실제 브라우저 런 상태나 무작위 id에는 손대지 않는다.
+  function createBagDropReclaimSmokeState(options = {}) {
+    const bag = Array.isArray(options.bag) ? options.bag.map(smokeCloneItem) : [];
+    const droppedLoot = Array.isArray(options.droppedLoot) ? options.droppedLoot.map(smokeCloneLoot) : [];
+    return {
+      cap: Math.max(0, Math.floor(Number(options.cap)) || 0),
+      currentNodeId: Math.max(0, Math.floor(Number(options.currentNodeId)) || 0),
+      bag,
+      droppedLoot,
+      nextLootSerial: Math.max(0, Math.floor(Number(options.nextLootSerial)) || 0),
+    };
+  }
+
+  function smokeUsedSlots(state) {
+    if (!state || !Array.isArray(state.bag)) return 0;
+    return state.bag.reduce((sum, item) => sum + Math.max(0, Math.floor(Number(item && item.slots)) || 0), 0);
+  }
+
+  function smokeRoomFor(state, item) {
+    const slots = Math.max(0, Math.floor(Number(item && item.slots)) || 0);
+    return Math.max(0, Math.floor(Number(state && state.cap)) || 0) - smokeUsedSlots(state) >= slots;
+  }
+
+  function smokeDropBagItem(state, index, nodeId = state && state.currentNodeId) {
+    const next = createBagDropReclaimSmokeState(state);
+    const itemIndex = safeInt(index, -1, 0, next.bag.length - 1);
+    if (itemIndex < 0) return { ok: false, reason: 'missing-item', state: next };
+    const item = next.bag.splice(itemIndex, 1)[0];
+    const serial = next.nextLootSerial;
+    next.nextLootSerial += 1;
+    const safeNodeId = Math.max(0, Math.floor(Number(nodeId)) || 0);
+    const loot = {
+      id: `smoke-loot-${safeNodeId}-${serial}`,
+      nodeId: safeNodeId,
+      item,
+      ticks: 0,
+      broken: itemFragile(item),
+      source: 'manual',
+    };
+    next.droppedLoot.push(loot);
+    return { ok: true, state: next, loot, usedSlots: smokeUsedSlots(next), freeSlots: Math.max(0, next.cap - smokeUsedSlots(next)) };
+  }
+
+  function smokeReclaimDroppedLoot(state, lootId) {
+    const next = createBagDropReclaimSmokeState(state);
+    const lootIndex = next.droppedLoot.findIndex((loot) => loot && loot.id === lootId);
+    if (lootIndex < 0) return { ok: false, reason: 'missing-loot', state: next };
+    const loot = next.droppedLoot[lootIndex];
+    if (!smokeRoomFor(next, loot.item)) {
+      return { ok: false, reason: 'no-capacity', state: next, loot };
+    }
+    next.droppedLoot.splice(lootIndex, 1);
+    next.bag.push(loot.item);
+    return { ok: true, state: next, loot, usedSlots: smokeUsedSlots(next), freeSlots: Math.max(0, next.cap - smokeUsedSlots(next)) };
+  }
+
+  function smokeDroppedLootChoices(state, nodeId = state && state.currentNodeId) {
+    const safeNodeId = Math.max(0, Math.floor(Number(nodeId)) || 0);
+    const loots = (state && Array.isArray(state.droppedLoot) ? state.droppedLoot : [])
+      .filter((loot) => loot && loot.nodeId === safeNodeId);
+    const choices = loots.slice(0, 4).map((loot) => ({
+      id: `take-back:${loot.id}`,
+      label: `${loot.item.name} 챙기기`,
+      sub: `${loot.item.slots}칸${loot.broken ? ' · 깨짐' : ''}`,
+      tone: 'good',
+    }));
+    if (loots.length > 4) choices.push({ id: 'list-more', label: '나머지는 둔다', sub: `남은 짐 ${loots.length - 4}개는 다음에 정리한다` });
+    choices.push({ id: 'leave', label: '그냥 둔다', sub: '두고 물러난다' });
+    return choices;
+  }
+
   function addDroppedLoot(item, nodeId, options = {}) {
     if (!run || !run.floorMap || !item || nodeId == null) return null;
     const loot = {
@@ -4359,6 +4440,12 @@
       CABINET_BAG_FIND_RATES,
       MAX_BAG_LEVEL,
       cabinetBagFindCandidate,
+      createBagDropReclaimSmokeState,
+      smokeUsedSlots,
+      smokeRoomFor,
+      smokeDropBagItem,
+      smokeReclaimDroppedLoot,
+      smokeDroppedLootChoices,
       KNOWN_PLAYER_CHOICE_FIXTURES,
       collectKnownPlayerChoiceFixtures,
     };
