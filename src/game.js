@@ -151,6 +151,7 @@
   const MAX_BAG_LEVEL = BAG_PRODUCTS[BAG_PRODUCTS.length - 1].level;
   const CABINET_BAG_FIND_RATES = { 1: 0.18, 2: 0.075, 3: 0.032, 4: 0.014 }; // 캐비닛에서 더 큰 가방을 발견할 확률. 큰 제품일수록 낮다.
   const NO_BAG_ALERTS = {
+    heavy: '한 손이 짐에 묶였다. 더 챙기려면 지금 든 것을 먼저 내려놓아야 한다.',
     full: '손이 가득 찼다. 손에 든 물건을 눌러 내려놓거나 지상으로 돌아가자.',
     blocked: '맨손이라 이 물건을 더 쥘 자리가 없다.',
   };
@@ -162,18 +163,23 @@
     if (meta.bagLevel === NO_BAG_LEVEL && NO_BAG_ALERTS[key]) return NO_BAG_ALERTS[key];
     return BAG_ALERTS[key];
   }
-  function bagStatusText(level, used, cap, currentItem) {
+  function bagStatusText(level, used, cap, currentItem, dropState = 'allowed') {
     const noBag = level === NO_BAG_LEVEL;
     const safeUsed = Math.max(0, Number(used) || 0);
     const safeCap = Math.max(1, Number(cap) || 1);
     const blocked = !!(currentItem && safeCap - safeUsed < Math.max(1, Number(currentItem.slots) || 1));
     const base = noBag ? `맨손 · ${safeUsed}/${safeCap}` : `가방 · ${safeUsed}/${safeCap}칸`;
+    const dropCopy = () => {
+      const target = noBag ? '손에 든 물건' : '가방 슬롯';
+      if (dropState === 'locked') return '지금은 짐 정리 불가 · 먼저 상황에 대응하기';
+      if (dropState === 'dialogue') return `안내를 닫은 뒤 ${target} 눌러 내려놓기`;
+      return `${target} 눌러 내려놓기`;
+    };
     if (blocked) {
       const name = currentItem.name || '이 물건';
-      const action = noBag ? '손에 든 물건을 눌러 내려놓기' : '가방 슬롯을 눌러 짐 내려놓기';
-      return `${base} · ${name} 넣을 공간 없음 · ${action}`;
+      return `${base} · ${name} 넣을 공간 없음 · ${dropCopy()}`;
     }
-    if (safeUsed >= safeCap) return `${base} · 가득 참 · ${noBag ? '손에 든 물건' : '짐'}을 눌러 내려놓기`;
+    if (safeUsed >= safeCap) return `${base} · 가득 참 · ${dropCopy()}`;
     return base;
   }
   function largerBagProducts(currentLevel = meta.bagLevel) {
@@ -3872,14 +3878,19 @@
       el['risk-copy'].textContent = encounter ? `어두운 형체 접근 ${Math.ceil(run.encounterTime || 0)}초` : risk.copy;
     }
 
-    // 가방 슬롯
-    renderBag();
+    // 가방 슬롯. 긴급 이벤트/대화 중에는 안내와 실제 클릭 가능 상태를 맞춘다.
+    const bagEventType = run.pendingEvent ? run.pendingEvent.type : null;
+    const bagDropState = !bagDropAllowedDuringEvent(bagEventType)
+      ? 'locked'
+      : (run.dialogue ? 'dialogue' : 'allowed');
+    renderBag(bagDropState);
     if (el['bag-status']) {
       const blocked = !!(run.currentItem && !roomFor(run.currentItem));
-      const nextBagStatus = bagStatusText(meta.bagLevel, usedSlots(), bagCap(), blocked ? run.currentItem : null);
+      const nextBagStatus = bagStatusText(meta.bagLevel, usedSlots(), bagCap(), blocked ? run.currentItem : null, bagDropState);
       // 같은 문구를 매 프레임 다시 넣으면 aria-live가 이동/렌더마다 반복될 수 있다.
       if (el['bag-status'].textContent !== nextBagStatus) el['bag-status'].textContent = nextBagStatus;
       el['bag-status'].classList.toggle('blocked', blocked || usedSlots() >= bagCap());
+      el['bag-status'].classList.toggle('locked', bagDropState !== 'allowed');
     }
 
     // 갈림길 / 스테이지 / 깊이 레일
@@ -3920,8 +3931,17 @@
       : (run.bag.length > 0 ? '↩ 나가기' : '↩ 돌아가기');
   }
 
-  function renderBag() {
+  function renderBag(dropState = 'allowed') {
     const cap = bagCap();
+    const canDrop = dropState === 'allowed';
+    const bagSig = JSON.stringify([
+      cap,
+      dropState,
+      run.bag.map((item) => [item.name, item.slots, item.tier, item.icon]),
+    ]);
+    // 150ms tick마다 슬롯 노드를 갈아끼우면 pointerdown과 click 사이에 타깃이 사라질 수 있다.
+    if (el['bag-slots'].dataset.bagSig === bagSig) return;
+    el['bag-slots'].dataset.bagSig = bagSig;
     const cells = [];
     // 각 물건이 차지하는 칸을 색으로 채운다. 채워진 칸은 같은 itemIndex를 공유해 어느 칸을 눌러도 그 물건을 버린다.
     run.bag.forEach((item, itemIndex) => {
@@ -3934,24 +3954,29 @@
     el['bag-slots'].innerHTML = '';
     cells.forEach((c) => {
       const d = document.createElement('div');
-      d.className = 'slot' + (c ? ' filled droppable' : '');
+      d.className = 'slot' + (c ? ` filled${canDrop ? ' droppable' : ' locked'}` : '');
       if (c) {
         d.style.setProperty('--tier-color', c.color);
-        d.setAttribute('role', 'button');
-        d.setAttribute('tabindex', '0');
-        d.setAttribute('aria-label', `${c.item.name} 버리기`);
         d.dataset.itemIndex = String(c.itemIndex);
         d.innerHTML = itemIcon(c.icon) + (c.label ? `<span class="slot-label">${c.label}</span>` : '');
-        const handleDrop = (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          dropBagItem(d.dataset.itemIndex);
-        };
-        d.addEventListener('click', handleDrop);
-        d.addEventListener('keydown', (event) => {
-          if (event.key !== 'Enter' && event.key !== ' ') return;
-          handleDrop(event);
-        });
+        if (canDrop) {
+          d.setAttribute('role', 'button');
+          d.setAttribute('tabindex', '0');
+          d.setAttribute('aria-label', `${c.item.name} 버리기`);
+          const handleDrop = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            dropBagItem(d.dataset.itemIndex);
+          };
+          d.addEventListener('click', handleDrop);
+          d.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            handleDrop(event);
+          });
+        } else {
+          d.setAttribute('aria-disabled', 'true');
+          d.setAttribute('aria-label', `${c.item.name} · 지금은 버릴 수 없음`);
+        }
       }
       el['bag-slots'].appendChild(d);
     });
@@ -4033,7 +4058,7 @@
       : null;
     const dialogue = run.dialogue || pendingCue;
     card.className = 'dialogue-card' + (dialogue ? '' : ' hidden') + (dialogue && dialogue.tone ? ` ${dialogue.tone}` : '') + (dialogue && dialogue.sticky ? ' sticky' : '');
-    if (dialogue) el['dialogue-copy'].textContent = dialogue.text;
+    if (dialogue && el['dialogue-copy'].textContent !== dialogue.text) el['dialogue-copy'].textContent = dialogue.text;
     if (dialogue) card.setAttribute('aria-label', dialogue.sticky ? '조우 상황' : '상황 대화 계속');
     const hint = card.querySelector('.dialogue-hint');
     if (hint && dialogue) hint.textContent = dialogue.sticky ? '선택으로 대응' : '탭해서 계속';

@@ -383,6 +383,11 @@ body {
   outline-offset: 2px;
 }
 .slot.droppable:hover { filter: brightness(1.12); }
+.slot.locked {
+  cursor: not-allowed;
+  opacity: 0.48;
+  filter: grayscale(0.45);
+}
 .bag-status {
   min-height: 18px;
   margin-top: 5px;

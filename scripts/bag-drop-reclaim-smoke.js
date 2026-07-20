@@ -38,9 +38,11 @@ const note = { ...ITEM_TABLE[2][1] };    // 1 slot, fragile
 const core = { ...ITEM_TABLE[3][0] };    // 2 slots
 
 assert.equal(bagStatusText(1, 0, 3, null), '가방 · 0/3칸', 'bag status should stay visible when empty');
-assert.match(bagStatusText(1, 3, 3, null), /가득 참.*짐을 눌러 내려놓기/, 'full bag status should explain on-site drop');
+assert.match(bagStatusText(1, 3, 3, null), /가득 참.*가방 슬롯.*내려놓기/, 'full bag status should explain on-site drop');
 assert.match(bagStatusText(1, 2, 3, core), /안정화 코어 넣을 공간 없음.*가방 슬롯/, 'blocked item status should name item and slot action');
 assert.match(bagStatusText(NO_BAG_LEVEL, 1, 1, battery), /맨손.*넣을 공간 없음.*손에 든 물건/, 'hand-full status should avoid bag wording');
+assert.match(bagStatusText(1, 3, 3, null, 'dialogue'), /안내를 닫은 뒤.*가방 슬롯/, 'dialogue state should explain that drop unlocks after dismissal');
+assert.match(bagStatusText(1, 3, 3, null, 'locked'), /지금은 짐 정리 불가.*먼저 상황에 대응/, 'critical event status must not promise an unavailable slot action');
 assert.equal(bagDropAllowedDuringEvent(null), true, 'bag slot drop should work outside events');
 assert.equal(bagDropAllowedDuringEvent('item-encounter'), true, 'bag slot drop must work while blocked by a found item');
 assert.equal(bagDropAllowedDuringEvent('dropped-loot'), true, 'bag slot drop must work while reclaiming floor loot');
@@ -148,10 +150,15 @@ assert.match(sourceText, /function dropBagItem\(index\)/, 'manual bag-slot drop 
 assert.match(sourceText, /dropLootHere\(dropped\)/, 'manual bag-slot drop should place loot at current node');
 assert.ok(sourceText.includes('d.dataset.itemIndex = String(c.itemIndex);'), 'bag slots should surface item index for deterministic drop selection');
 assert.ok(sourceText.includes('d.setAttribute(\'aria-label\', `${c.item.name} 버리기`);'), 'bag slots should expose discard/drop label');
+assert.ok(sourceText.includes("heavy: '한 손이 짐에 묶였다."), 'hand-carry mode should not describe a nonexistent bag strap');
 assert.ok(indexText.includes('id="bag-status"') && indexText.includes('aria-live="polite"'), 'inline bag status live region should exist');
 assert.match(cssText, /\.slot\s*\{[^}]*height:\s*44px/s, 'bag slot touch target height should be 44px');
 assert.ok(cssText.includes('.bag-status.blocked'), 'blocked bag status styling should exist');
-assert.ok(sourceText.includes('suppressDungeonClickUntil = 0;'), 'dialogue pointer suppression should consume only the matching synthetic click');
+assert.ok(cssText.includes('.slot.locked'), 'temporarily unavailable bag slots should have a disabled style');
+assert.match(sourceText, /if \(Date\.now\(\) < suppressDungeonClickUntil\) \{[\s\S]*?suppressDungeonClickUntil = 0;[\s\S]*?swallowDungeonEvent\(event\);[\s\S]*?return;[\s\S]*?\}/, 'dialogue pointer suppression branch should consume only its matching synthetic click');
 assert.ok(sourceText.includes("el['bag-status'].textContent !== nextBagStatus"), 'bag live region should update only when its copy changes');
+assert.ok(sourceText.includes("el['dialogue-copy'].textContent !== dialogue.text"), 'dialogue live region should update only when its copy changes');
+assert.ok(sourceText.includes("el['bag-slots'].dataset.bagSig === bagSig"), 'bag DOM should remain stable while inventory and lock state are unchanged');
+assert.ok(sourceText.includes("d.setAttribute('aria-disabled', 'true')"), 'locked bag cells should expose disabled state');
 
 console.log(`bag drop reclaim smoke passed: cap ${state.cap}, used ${smokeUsedSlots(state)}, dropped ${state.droppedLoot.length}, choices ${choices.length}`);
