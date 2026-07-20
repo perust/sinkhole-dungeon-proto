@@ -137,8 +137,8 @@
 
   const BAG_ALERTS = {
     heavy: '가방 끈이 어깨를 세게 누른다. 뛰면 금방 균형을 잃을 것 같다.',
-    full: '더 넣을 곳이 없다. 돌아가서 짐을 정리하자.',
-    blocked: '더 넣을 곳이 없다. 돌아가서 짐을 정리하자.',
+    full: '가방이 가득 찼다. 가방 슬롯을 눌러 짐을 내려놓거나 지상으로 돌아가 정리하자.',
+    blocked: '이 물건을 넣을 공간이 없다.',
   };
   const NO_BAG_LEVEL = 0;
   const BAG_PRODUCTS = [
@@ -151,8 +151,8 @@
   const MAX_BAG_LEVEL = BAG_PRODUCTS[BAG_PRODUCTS.length - 1].level;
   const CABINET_BAG_FIND_RATES = { 1: 0.18, 2: 0.075, 3: 0.032, 4: 0.014 }; // 캐비닛에서 더 큰 가방을 발견할 확률. 큰 제품일수록 낮다.
   const NO_BAG_ALERTS = {
-    full: '손이 가득 찼다. 맨손이라 더는 못 든다.',
-    blocked: '맨손이라 더 쥘 자리가 없다. 손에 쥔 것만으로 벅차다.',
+    full: '손이 가득 찼다. 손에 든 물건을 눌러 내려놓거나 지상으로 돌아가자.',
+    blocked: '맨손이라 이 물건을 더 쥘 자리가 없다.',
   };
   function bagProduct(level = meta.bagLevel) {
     const safe = Math.max(NO_BAG_LEVEL, Math.min(MAX_BAG_LEVEL, Math.floor(Number(level)) || 0));
@@ -161,6 +161,20 @@
   function bagAlert(key) {
     if (meta.bagLevel === NO_BAG_LEVEL && NO_BAG_ALERTS[key]) return NO_BAG_ALERTS[key];
     return BAG_ALERTS[key];
+  }
+  function bagStatusText(level, used, cap, currentItem) {
+    const noBag = level === NO_BAG_LEVEL;
+    const safeUsed = Math.max(0, Number(used) || 0);
+    const safeCap = Math.max(1, Number(cap) || 1);
+    const blocked = !!(currentItem && safeCap - safeUsed < Math.max(1, Number(currentItem.slots) || 1));
+    const base = noBag ? `맨손 · ${safeUsed}/${safeCap}` : `가방 · ${safeUsed}/${safeCap}칸`;
+    if (blocked) {
+      const name = currentItem.name || '이 물건';
+      const action = noBag ? '손에 든 물건을 눌러 내려놓기' : '가방 슬롯을 눌러 짐 내려놓기';
+      return `${base} · ${name} 넣을 공간 없음 · ${action}`;
+    }
+    if (safeUsed >= safeCap) return `${base} · 가득 참 · ${noBag ? '손에 든 물건' : '짐'}을 눌러 내려놓기`;
+    return base;
   }
   function largerBagProducts(currentLevel = meta.bagLevel) {
     return BAG_PRODUCTS.filter((bag) => bag.level > NO_BAG_LEVEL && bag.level > currentLevel);
@@ -1481,7 +1495,7 @@
     'floor-num', 'floor-name',
     'light-val', 'light-fill', 'mental-val', 'mental-fill', 'danger-val', 'danger-fill', 'risk-panel', 'risk-chip', 'risk-copy',
     'room-choices', 'dock', 'dock-actions',
-    'bag-slots', 'choice-cue', 'mini-map', 'mini-mode', 'recovery-point', 'stage-objects', 'chaser', 'stage', 'stage-situation', 'dialogue-card', 'dialogue-copy', 'depth-rail', 'log',
+    'bag-slots', 'bag-status', 'choice-cue', 'mini-map', 'mini-mode', 'recovery-point', 'stage-objects', 'chaser', 'stage', 'stage-situation', 'dialogue-card', 'dialogue-copy', 'depth-rail', 'log',
     'btn-grab', 'btn-drop', 'btn-return',
     'return-list', 'return-susp', 'committee-rp', 'committee-susp', 'black-rp', 'black-susp', 'return-contract',
     'route-choice', 'route-official', 'route-crack', 'route-blackpass', 'route-note',
@@ -1654,7 +1668,10 @@
 
   function showBagBlockedDialogue() {
     run.seenBagAlerts.add('blocked');
-    run.lastAction = `${bagAlert('blocked')} 가방 슬롯을 눌러 짐을 내려놓거나, 이 물건은 그냥 지나가자.`;
+    const action = meta.bagLevel === NO_BAG_LEVEL
+      ? '손에 든 물건을 눌러 내려놓거나, 이 물건은 그냥 지나가자.'
+      : '가방 슬롯을 눌러 짐을 내려놓거나, 이 물건은 그냥 지나가자.';
+    run.lastAction = `${bagAlert('blocked')} ${action}`;
     log(run.lastAction, 'hot');
     showDialogue(run.lastAction, 'hot');
   }
@@ -3281,8 +3298,13 @@
     render();
   }
 
+  function bagDropAllowedDuringEvent(eventType) {
+    return eventType == null || eventType === 'item-encounter' || eventType === 'dropped-loot';
+  }
+
   function dropBagItem(index) {
-    if (!run || run.moving || run.returnWalk || run.dialogue || run.pendingEvent || run.bag.length === 0) return;
+    const eventType = run && run.pendingEvent ? run.pendingEvent.type : null;
+    if (!run || run.moving || run.returnWalk || run.dialogue || !bagDropAllowedDuringEvent(eventType) || run.bag.length === 0) return;
     const itemIndex = safeInt(index, -1, 0, run.bag.length - 1);
     if (itemIndex < 0) return;
     clearDialogue();
@@ -3293,7 +3315,9 @@
     if (run.chasing) run.danger = Math.max(0, run.danger - 4);
     run.seenBagAlerts.delete('full');
     run.seenBagAlerts.delete('blocked');
-    run.lastAction = `${dropped.name}${objectParticle(dropped.name)} 가방에서 꺼내 바닥에 놓았다. 빈칸이 생겼다.`;
+    run.lastAction = meta.bagLevel === NO_BAG_LEVEL
+      ? `${dropped.name}${objectParticle(dropped.name)} 손에서 내려 바닥에 놓았다. 다시 쥘 자리가 생겼다.`
+      : `${dropped.name}${objectParticle(dropped.name)} 가방에서 꺼내 바닥에 놓았다. 빈칸이 생겼다.`;
     log(run.lastAction);
     showDialogue(run.lastAction);
     render();
@@ -3847,6 +3871,11 @@
 
     // 가방 슬롯
     renderBag();
+    if (el['bag-status']) {
+      const blocked = !!(run.currentItem && !roomFor(run.currentItem));
+      el['bag-status'].textContent = bagStatusText(meta.bagLevel, usedSlots(), bagCap(), blocked ? run.currentItem : null);
+      el['bag-status'].classList.toggle('blocked', blocked || usedSlots() >= bagCap());
+    }
 
     // 갈림길 / 스테이지 / 깊이 레일
     renderChoices();
@@ -4644,6 +4673,9 @@
       ITEM_TABLE,
       NODE_KINDS,
       BAG_PRODUCTS,
+      NO_BAG_LEVEL,
+      bagStatusText,
+      bagDropAllowedDuringEvent,
       CABINET_BAG_FIND_RATES,
       MAX_BAG_LEVEL,
       FAMILY_KEEPSAKES,

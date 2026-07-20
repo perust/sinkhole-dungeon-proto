@@ -6,6 +6,9 @@ const fs = require('fs');
 const path = require('path');
 const {
   ITEM_TABLE,
+  NO_BAG_LEVEL,
+  bagStatusText,
+  bagDropAllowedDuringEvent,
   KNOWN_PLAYER_CHOICE_FIXTURES,
   createBagDropReclaimSmokeState,
   smokeUsedSlots,
@@ -16,6 +19,8 @@ const {
 } = require('../src/game.js');
 
 for (const [name, fn] of Object.entries({
+  bagStatusText,
+  bagDropAllowedDuringEvent,
   createBagDropReclaimSmokeState,
   smokeUsedSlots,
   smokeRoomFor,
@@ -31,6 +36,16 @@ const pipe = { ...ITEM_TABLE[1][1] };    // 1 slot
 const chip = { ...ITEM_TABLE[2][0] };    // 2 slots, fragile
 const note = { ...ITEM_TABLE[2][1] };    // 1 slot, fragile
 const core = { ...ITEM_TABLE[3][0] };    // 2 slots
+
+assert.equal(bagStatusText(1, 0, 3, null), '가방 · 0/3칸', 'bag status should stay visible when empty');
+assert.match(bagStatusText(1, 3, 3, null), /가득 참.*짐을 눌러 내려놓기/, 'full bag status should explain on-site drop');
+assert.match(bagStatusText(1, 2, 3, core), /안정화 코어 넣을 공간 없음.*가방 슬롯/, 'blocked item status should name item and slot action');
+assert.match(bagStatusText(NO_BAG_LEVEL, 1, 1, battery), /맨손.*넣을 공간 없음.*손에 든 물건/, 'hand-full status should avoid bag wording');
+assert.equal(bagDropAllowedDuringEvent(null), true, 'bag slot drop should work outside events');
+assert.equal(bagDropAllowedDuringEvent('item-encounter'), true, 'bag slot drop must work while blocked by a found item');
+assert.equal(bagDropAllowedDuringEvent('dropped-loot'), true, 'bag slot drop must work while reclaiming floor loot');
+assert.equal(bagDropAllowedDuringEvent('monster-encounter'), false, 'critical encounter should still block inventory cleanup');
+assert.equal(bagDropAllowedDuringEvent('return-attempt'), false, 'return attempt should still block inventory cleanup');
 
 let state = createBagDropReclaimSmokeState({
   cap: 3,
@@ -127,9 +142,14 @@ assert.ok(
 );
 
 const sourceText = fs.readFileSync(path.join(__dirname, '..', 'src', 'game.js'), 'utf8');
+const indexText = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const cssText = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8');
 assert.match(sourceText, /function dropBagItem\(index\)/, 'manual bag-slot drop handler should exist');
 assert.match(sourceText, /dropLootHere\(dropped\)/, 'manual bag-slot drop should place loot at current node');
 assert.ok(sourceText.includes('d.dataset.itemIndex = String(c.itemIndex);'), 'bag slots should surface item index for deterministic drop selection');
 assert.ok(sourceText.includes('d.setAttribute(\'aria-label\', `${c.item.name} 버리기`);'), 'bag slots should expose discard/drop label');
+assert.ok(indexText.includes('id="bag-status"') && indexText.includes('aria-live="polite"'), 'inline bag status live region should exist');
+assert.match(cssText, /\.slot\s*\{[^}]*height:\s*44px/s, 'bag slot touch target height should be 44px');
+assert.ok(cssText.includes('.bag-status.blocked'), 'blocked bag status styling should exist');
 
 console.log(`bag drop reclaim smoke passed: cap ${state.cap}, used ${smokeUsedSlots(state)}, dropped ${state.droppedLoot.length}, choices ${choices.length}`);

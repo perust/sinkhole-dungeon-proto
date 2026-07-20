@@ -367,9 +367,9 @@ body {
 
 /* 가방 슬롯 ------------------------------------------------- */
 .bag-row { margin-top: 12px; }
-.bag-slots { display: flex; gap: 6px; flex-wrap: wrap; }
+.bag-slots { display: flex; gap: 4px; flex-wrap: wrap; }
 .slot {
-  flex: 1 1 0; min-width: 34px; height: 34px;
+  flex: 1 1 0; min-width: 32px; height: 44px;
   border-radius: 8px; border: 1px solid var(--line);
   background: #0c1020;
   display: flex; align-items: center; justify-content: center;
@@ -383,6 +383,15 @@ body {
   outline-offset: 2px;
 }
 .slot.droppable:hover { filter: brightness(1.12); }
+.bag-status {
+  min-height: 18px;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+}
+.bag-status.blocked { color: #ffd166; font-weight: 800; }
 
 /* 무대 (추격 연출) ----------------------------------------- */
 .stage {
