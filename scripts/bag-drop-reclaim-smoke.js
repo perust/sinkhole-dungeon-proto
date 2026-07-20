@@ -43,6 +43,8 @@ assert.match(bagStatusText(1, 2, 3, core), /안정화 코어 넣을 공간 없�
 assert.match(bagStatusText(NO_BAG_LEVEL, 1, 1, battery), /맨손.*넣을 공간 없음.*손에 든 물건/, 'hand-full status should avoid bag wording');
 assert.match(bagStatusText(1, 3, 3, null, 'dialogue'), /안내를 닫은 뒤.*가방 슬롯/, 'dialogue state should explain that drop unlocks after dismissal');
 assert.match(bagStatusText(1, 3, 3, null, 'locked'), /지금은 짐 정리 불가.*먼저 상황에 대응/, 'critical event status must not promise an unavailable slot action');
+assert.match(bagStatusText(1, 3, 3, null, 'moving'), /이동이 끝난 뒤 짐 정리/, 'movement status should defer inventory actions until arrival');
+assert.match(bagStatusText(1, 3, 3, null, 'returning'), /귀환이 끝난 뒤 짐 정리/, 'return walk status should defer inventory actions until return resolves');
 assert.equal(bagDropAllowedDuringEvent(null), true, 'bag slot drop should work outside events');
 assert.equal(bagDropAllowedDuringEvent('item-encounter'), true, 'bag slot drop must work while blocked by a found item');
 assert.equal(bagDropAllowedDuringEvent('dropped-loot'), true, 'bag slot drop must work while reclaiming floor loot');
@@ -159,6 +161,7 @@ assert.match(sourceText, /if \(Date\.now\(\) < suppressDungeonClickUntil\) \{[\s
 assert.ok(sourceText.includes("el['bag-status'].textContent !== nextBagStatus"), 'bag live region should update only when its copy changes');
 assert.ok(sourceText.includes("el['dialogue-copy'].textContent !== dialogue.text"), 'dialogue live region should update only when its copy changes');
 assert.ok(sourceText.includes("el['bag-slots'].dataset.bagSig === bagSig"), 'bag DOM should remain stable while inventory and lock state are unchanged');
+assert.match(sourceText, /const bagDropState = run\.returnWalk[\s\S]*?run\.moving[\s\S]*?bagDropAllowedDuringEvent\(bagEventType\)/, 'bag render lock state should cover the same moving/return guards as dropBagItem');
 assert.ok(sourceText.includes("d.setAttribute('aria-disabled', 'true')"), 'locked bag cells should expose disabled state');
 
 console.log(`bag drop reclaim smoke passed: cap ${state.cap}, used ${smokeUsedSlots(state)}, dropped ${state.droppedLoot.length}, choices ${choices.length}`);

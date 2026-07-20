@@ -172,6 +172,8 @@
     const dropCopy = () => {
       const target = noBag ? '손에 든 물건' : '가방 슬롯';
       if (dropState === 'locked') return '지금은 짐 정리 불가 · 먼저 상황에 대응하기';
+      if (dropState === 'moving') return '이동이 끝난 뒤 짐 정리하기';
+      if (dropState === 'returning') return '귀환이 끝난 뒤 짐 정리하기';
       if (dropState === 'dialogue') return `안내를 닫은 뒤 ${target} 눌러 내려놓기`;
       return `${target} 눌러 내려놓기`;
     };
@@ -3880,9 +3882,13 @@
 
     // 가방 슬롯. 긴급 이벤트/대화 중에는 안내와 실제 클릭 가능 상태를 맞춘다.
     const bagEventType = run.pendingEvent ? run.pendingEvent.type : null;
-    const bagDropState = !bagDropAllowedDuringEvent(bagEventType)
-      ? 'locked'
-      : (run.dialogue ? 'dialogue' : 'allowed');
+    const bagDropState = run.returnWalk
+      ? 'returning'
+      : (run.moving
+        ? 'moving'
+        : (!bagDropAllowedDuringEvent(bagEventType)
+          ? 'locked'
+          : (run.dialogue ? 'dialogue' : 'allowed')));
     renderBag(bagDropState);
     if (el['bag-status']) {
       const blocked = !!(run.currentItem && !roomFor(run.currentItem));
