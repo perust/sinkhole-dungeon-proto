@@ -1658,6 +1658,9 @@
 
   function handleDungeonDialogueTap(event) {
     if (Date.now() < suppressDungeonClickUntil) {
+      // pointerdown 뒤에 합성되는 같은 탭의 click 한 번만 삼킨다.
+      // 타임윈도 전체를 유지하면 사용자의 빠른 두 번째 슬롯 탭까지 막힌다.
+      suppressDungeonClickUntil = 0;
       swallowDungeonEvent(event);
       return;
     }
@@ -3873,7 +3876,9 @@
     renderBag();
     if (el['bag-status']) {
       const blocked = !!(run.currentItem && !roomFor(run.currentItem));
-      el['bag-status'].textContent = bagStatusText(meta.bagLevel, usedSlots(), bagCap(), blocked ? run.currentItem : null);
+      const nextBagStatus = bagStatusText(meta.bagLevel, usedSlots(), bagCap(), blocked ? run.currentItem : null);
+      // 같은 문구를 매 프레임 다시 넣으면 aria-live가 이동/렌더마다 반복될 수 있다.
+      if (el['bag-status'].textContent !== nextBagStatus) el['bag-status'].textContent = nextBagStatus;
       el['bag-status'].classList.toggle('blocked', blocked || usedSlots() >= bagCap());
     }
 

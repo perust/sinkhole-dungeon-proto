@@ -151,5 +151,7 @@ assert.ok(sourceText.includes('d.setAttribute(\'aria-label\', `${c.item.name} ë²
 assert.ok(indexText.includes('id="bag-status"') && indexText.includes('aria-live="polite"'), 'inline bag status live region should exist');
 assert.match(cssText, /\.slot\s*\{[^}]*height:\s*44px/s, 'bag slot touch target height should be 44px');
 assert.ok(cssText.includes('.bag-status.blocked'), 'blocked bag status styling should exist');
+assert.ok(sourceText.includes('suppressDungeonClickUntil = 0;'), 'dialogue pointer suppression should consume only the matching synthetic click');
+assert.ok(sourceText.includes("el['bag-status'].textContent !== nextBagStatus"), 'bag live region should update only when its copy changes');
 
 console.log(`bag drop reclaim smoke passed: cap ${state.cap}, used ${smokeUsedSlots(state)}, dropped ${state.droppedLoot.length}, choices ${choices.length}`);
