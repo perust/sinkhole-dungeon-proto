@@ -4160,16 +4160,20 @@
       renderStageObjects(node, pct);
       renderPresenceFx();
     }
-    const setDoor = (sel, target, fallback) => {
+    const setDoor = (sel, target, fallback, navLabel) => {
       const d = document.querySelector(sel);
       if (!d) return;
-      d.classList.toggle('open', !!target && pct > 0);
-      d.classList.toggle('structure', !!target && target.kind !== 'corridor');
-      d.dataset.label = target && pct > 0 ? (target.kind === 'stairs' ? '계단' : target.label) : fallback;
+      const visible = !!target && pct > 0;
+      d.classList.toggle('open', visible);
+      d.classList.toggle('structure', visible && target.kind !== 'corridor');
+      d.classList.toggle('stairs', visible && target.kind === 'stairs');
+      d.dataset.nav = navLabel;
+      d.dataset.kind = visible ? target.kind : 'blocked';
+      d.dataset.label = visible ? (target.kind === 'stairs' ? '계단' : target.label) : fallback;
     };
-    setDoor('.fp-door.fp-left', left, '왼쪽 어둠');
-    setDoor('.fp-door.fp-center', front, pct <= 0 ? '조명 꺼짐' : '정면 벽');
-    setDoor('.fp-door.fp-right', right, '오른쪽 어둠');
+    setDoor('.fp-door.fp-left', left, '왼쪽 어둠', '왼');
+    setDoor('.fp-door.fp-center', front, pct <= 0 ? '조명 꺼짐' : '정면 벽', '앞');
+    setDoor('.fp-door.fp-right', right, '오른쪽 어둠', '오');
     if (run.moving) {
       rpEl.className = 'recovery-point empty';
       rpEl.style.borderColor = '';
