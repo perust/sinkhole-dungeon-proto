@@ -2187,6 +2187,50 @@
     return droppedLoots().filter((loot) => loot.nodeId === node.id).length;
   }
 
+  function prioritizeDroppedLoot(loots, focusId) {
+    const ordered = Array.isArray(loots) ? [...loots] : [];
+    if (!focusId) return ordered;
+    const index = ordered.findIndex((loot) => loot && loot.id === focusId);
+    if (index <= 0) return ordered;
+    const [focused] = ordered.splice(index, 1);
+    ordered.unshift(focused);
+    return ordered;
+  }
+
+  // 가방 슬롯에서 방금 내려놓은 짐을 현재 물건 선택지에 즉시 반영한다.
+  function refreshPendingInventoryChoices(focusLootId) {
+    if (!run || !run.pendingEvent) return;
+    const ev = run.pendingEvent;
+    if (ev.type !== 'item-encounter' && ev.type !== 'dropped-loot') return;
+    const node = nodeById(ev.node) || currentNode();
+    if (!node) return;
+    const loots = prioritizeDroppedLoot(
+      droppedLoots().filter((entry) => entry.nodeId === node.id),
+      focusLootId,
+    );
+    if (ev.type === 'dropped-loot') {
+      const visible = loots.slice(0, 4).map((entry) => eventChoice(
+        `take-back:${entry.id}`,
+        `${entry.item.name} 챙기기`,
+        `${entry.item.slots}칸${entry.broken ? ' · 깨짐' : ''}`,
+        'good',
+      ));
+      if (loots.length > 4) visible.push(eventChoice('list-more', '나머지는 둔다', `남은 짐 ${loots.length - 4}개는 다음에 정리한다`));
+      ev.choices = [...visible, eventChoice('leave', '그냥 둔다', '두고 물러난다')];
+      return;
+    }
+    const item = run.currentItem;
+    if (!item) return;
+    const carefulSub = itemFragile(item) ? '조용히, 깨지지 않게 다룬다' : '조용하지만 시간이 걸린다';
+    const grabSub = itemNoise(item) === 'high' ? '빠르지만 크게 울린다' : '빠르지만 소리가 난다';
+    ev.choices = [
+      eventChoice('careful', '조심히 집는다', carefulSub, 'good'),
+      eventChoice('grab', '재빨리 챙긴다', grabSub, 'danger'),
+      ...loots.slice(0, 2).map((entry) => eventChoice(`take-back:${entry.id}`, `${entry.item.name} 되챙기기`, `내려놓은 짐 · ${entry.item.slots}칸${entry.broken ? ' · 깨짐' : ''}`, 'good')),
+      eventChoice('skip', '그냥 지나간다', '건드리지 않는다'),
+    ];
+  }
+
   // 생존자 조우: 아직 구출 안 한 사람이 남아 있을 때만, 드물게 이 방에서 열린다.
   // 물건이 없는 방에서만 호출되므로 회수물 이벤트를 밀어내지 않는다. 열면 true.
   function maybeStartSurvivorEvent(node) {
@@ -3322,7 +3366,8 @@
     const dropped = run.bag.splice(itemIndex, 1)[0];
     if (!dropped) return;
     run.droppedCount += 1;
-    dropLootHere(dropped);
+    const droppedLoot = dropLootHere(dropped);
+    refreshPendingInventoryChoices(droppedLoot && droppedLoot.id);
     if (run.chasing) run.danger = Math.max(0, run.danger - 4);
     run.seenBagAlerts.delete('full');
     run.seenBagAlerts.delete('blocked');
@@ -4712,6 +4757,7 @@
       NO_BAG_LEVEL,
       bagStatusText,
       bagDropAllowedDuringEvent,
+      prioritizeDroppedLoot,
       CABINET_BAG_FIND_RATES,
       MAX_BAG_LEVEL,
       FAMILY_KEEPSAKES,

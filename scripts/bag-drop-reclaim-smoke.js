@@ -9,6 +9,7 @@ const {
   NO_BAG_LEVEL,
   bagStatusText,
   bagDropAllowedDuringEvent,
+  prioritizeDroppedLoot,
   KNOWN_PLAYER_CHOICE_FIXTURES,
   createBagDropReclaimSmokeState,
   smokeUsedSlots,
@@ -21,6 +22,7 @@ const {
 for (const [name, fn] of Object.entries({
   bagStatusText,
   bagDropAllowedDuringEvent,
+  prioritizeDroppedLoot,
   createBagDropReclaimSmokeState,
   smokeUsedSlots,
   smokeRoomFor,
@@ -36,6 +38,18 @@ const pipe = { ...ITEM_TABLE[1][1] };    // 1 slot
 const chip = { ...ITEM_TABLE[2][0] };    // 2 slots, fragile
 const note = { ...ITEM_TABLE[2][1] };    // 1 slot, fragile
 const core = { ...ITEM_TABLE[3][0] };    // 2 slots
+
+const lootOrder = [
+  { id: 'old-a', item: battery },
+  { id: 'old-b', item: pipe },
+  { id: 'just-dropped', item: chip },
+];
+assert.deepEqual(
+  prioritizeDroppedLoot(lootOrder, 'just-dropped').map((loot) => loot.id),
+  ['just-dropped', 'old-a', 'old-b'],
+  'a newly dropped item should be promoted into the visible choices immediately',
+);
+assert.deepEqual(lootOrder.map((loot) => loot.id), ['old-a', 'old-b', 'just-dropped'], 'choice prioritization must not mutate stored loot order');
 
 assert.equal(bagStatusText(1, 0, 3, null), '가방 · 0/3칸', 'bag status should stay visible when empty');
 assert.match(bagStatusText(1, 3, 3, null), /가득 참.*가방 슬롯.*내려놓기/, 'full bag status should explain on-site drop');
@@ -163,5 +177,7 @@ assert.ok(sourceText.includes("el['dialogue-copy'].textContent !== dialogue.text
 assert.ok(sourceText.includes("el['bag-slots'].dataset.bagSig === bagSig"), 'bag DOM should remain stable while inventory and lock state are unchanged');
 assert.match(sourceText, /const bagDropState = run\.returnWalk[\s\S]*?run\.moving[\s\S]*?bagDropAllowedDuringEvent\(bagEventType\)/, 'bag render lock state should cover the same moving/return guards as dropBagItem');
 assert.ok(sourceText.includes("d.setAttribute('aria-disabled', 'true')"), 'locked bag cells should expose disabled state');
+assert.match(sourceText, /const droppedLoot = dropLootHere\(dropped\);\s*refreshPendingInventoryChoices\(droppedLoot && droppedLoot\.id\);/, 'manual drop should refresh the active inventory event with the exact new loot id');
+assert.match(sourceText, /function refreshPendingInventoryChoices\(focusLootId\)[\s\S]*?ev\.type !== 'item-encounter' && ev\.type !== 'dropped-loot'/, 'only inventory-management events should be refreshed after a manual drop');
 
 console.log(`bag drop reclaim smoke passed: cap ${state.cap}, used ${smokeUsedSlots(state)}, dropped ${state.droppedLoot.length}, choices ${choices.length}`);
